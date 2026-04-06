@@ -12,6 +12,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { todayISO } from "@pm/domain";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 interface Activity {
   id: string;
   title: string;
