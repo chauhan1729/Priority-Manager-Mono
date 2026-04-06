@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "./base.json",
+  "compilerOptions": {
+    "lib": ["ES2022"],
+    "jsx": "react-native",
+    "moduleResolution": "Bundler",
+    "allowImportingTsExtensions": false
+  },
+  "exclude": ["node_modules"]
+}

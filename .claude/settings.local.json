@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install:*)",
+      "Bash(npm --version)",
+      "Read(//c/Users/sonum/AppData/Roaming/**)",
+      "Read(//c/Users/sonum/AppData/Local/**)",
+      "Bash(claude mcp:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/sonum/AppData/Roaming/npm:$PATH\")",
+      "Bash(pnpm --filter @pm/web type-check)",
+      "Bash(pnpm --filter @pm/domain test)",
+      "Bash(pnpm --filter @pm/domain test --run)",
+      "Bash(pnpm --filter @pm/mobile add @react-native-async-storage/async-storage @react-native-community/netinfo @gorhom/bottom-sheet react-native-reanimated react-native-gesture-handler expo-notifications expo-auth-session expo-web-browser @react-native-community/datetimepicker expo-haptics @shopify/flash-list)",
+      "Bash(pnpm add:*)",
+      "Bash(node -e ':*)"
+    ]
+  }
+}
