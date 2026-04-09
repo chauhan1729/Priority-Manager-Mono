@@ -1,2 +1,2 @@
-- for bulk editing feature, remove "postpone to tomorrow" option. Applies both for activites page and project planner page.
-- On the activity page, don't show the monthly priority name. Instead just show "Monthly Priority" as a label.
+- for bulk editing feature, archiving must be allowed only if all selected activities are completed or cancelled. Applies both for activites page and project planner page.
+

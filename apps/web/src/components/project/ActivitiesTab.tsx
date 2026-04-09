@@ -388,6 +388,12 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
   const archived = activities.filter((a) => a.archived);
   const visible = activeTab === "active" ? active : activeTab === "delegated" ? delegated : archived;
 
+  const canBulkArchive =
+    selectedIds.size > 0 &&
+    [...selectedIds].every(
+      (id) => { const s = activities.find((a) => a.id === id)?.status; return s === "completed" || s === "cancelled"; },
+    );
+
   function handleStatusChange(activityId: string, status: string) {
     startTransition(async () => {
       await updateActivityStatus(activityId, projectId, status);
@@ -565,7 +571,8 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
               {/* Archive */}
               <button
                 onClick={handleBulkArchive}
-                disabled={selectedIds.size === 0 || isPending}
+                disabled={!canBulkArchive || isPending}
+                title={!canBulkArchive && selectedIds.size > 0 ? "Only completed or cancelled activities can be archived" : undefined}
                 className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
                 Archive Selected

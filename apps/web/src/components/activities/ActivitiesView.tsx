@@ -107,6 +107,12 @@ export function ActivitiesView({
   const activeActivities = activities.filter((a) => !a.archived);
   const archivedActivities = activities.filter((a) => a.archived);
 
+  const canBulkArchive =
+    selectedIds.size > 0 &&
+    [...selectedIds].every(
+      (id) => { const s = activeActivities.find((a) => a.id === id)?.status; return s === "completed" || s === "cancelled"; },
+    );
+
   const canAddA = canAddAPriority(activeActivities);
   const capacityExceeded = exceedsDailyCapacity(
     activeActivities.filter((a) => a.priority === "A"),
@@ -380,7 +386,8 @@ export function ActivitiesView({
               {/* Archive */}
               <button
                 onClick={handleBulkArchive}
-                disabled={selectedIds.size === 0 || isPending}
+                disabled={!canBulkArchive || isPending}
+                title={!canBulkArchive && selectedIds.size > 0 ? "Only completed or cancelled activities can be archived" : undefined}
                 className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
                 Archive Selected
