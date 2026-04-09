@@ -28,7 +28,6 @@ export default async function ActivitiesPage({ searchParams }: Props) {
   if (!user) return null; // middleware already handles redirect
 
   // Use user's stored timezone so the default date is correct for their local time
-  // (todayISO() is UTC-based and gives yesterday for users east of UTC at midnight)
   const { data: profile } = await supabase
     .from("profiles")
     .select("timezone")
@@ -44,40 +43,64 @@ export default async function ActivitiesPage({ searchParams }: Props) {
   const prevDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) - 1);
   const previousDate = prevDate.toISOString().slice(0, 10);
 
-  const [{ data: activities }, { data: prevActivities }, { data: projects }, { data: contacts }] =
-    await Promise.all([
-      // Activities for selected date
-      supabase
-        .from("activities")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("activity_date", selectedDate)
-        .order("created_at", { ascending: true }),
+  const [
+    { data: activities },
+    { data: prevActivities },
+    { data: projects },
+    { data: contacts },
+    { data: priorities },
+  ] = await Promise.all([
+    // Activities for selected date
+    supabase
+      .from("activities")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("activity_date", selectedDate)
+      .order("created_at", { ascending: true }),
 
-      // Previous day's carry-forward eligible activities
-      supabase
-        .from("activities")
-        .select("*")
-        .eq("user_id", user.id)
-        .eq("activity_date", previousDate)
-        .in("status", ["not_started", "postponed"]),
+    // Previous day's carry-forward eligible activities
+    supabase
+      .from("activities")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("activity_date", previousDate)
+      .in("status", ["not_started", "postponed"]),
 
-      // Active projects for name display + form selects
-      supabase
-        .from("projects")
-        .select("id, name, status")
-        .eq("user_id", user.id)
-        .not("status", "in", "(cancelled,completed)")
-        .order("name", { ascending: true }),
+    // Active projects for name display + form selects
+    supabase
+      .from("projects")
+      .select("id, name, status, linked_monthly_priority_id")
+      .eq("user_id", user.id)
+      .not("status", "in", "(cancelled,completed)")
+      .order("name", { ascending: true }),
 
-      // Non-deleted contacts for delegation picker
-      supabase
-        .from("contacts")
-        .select("id, full_name")
-        .eq("user_id", user.id)
-        .eq("is_deleted", false)
-        .order("full_name", { ascending: true }),
-    ]);
+    // Non-deleted contacts for delegation picker
+    supabase
+      .from("contacts")
+      .select("id, full_name")
+      .eq("user_id", user.id)
+      .eq("is_deleted", false)
+      .order("full_name", { ascending: true }),
+
+    // Monthly priorities for indicator badge
+    supabase
+      .from("monthly_priorities")
+      .select("id, title")
+      .eq("user_id", user.id),
+  ]);
+
+  // Build a map: project_id → monthly priority title (for indicator badge on activity cards)
+  const priorityMap = new Map(
+    (priorities ?? []).map((p: { id: string; title: string }) => [p.id, p.title]),
+  );
+  const projectPriorityMap = new Map(
+    (projects ?? [])
+      .filter((p: { linked_monthly_priority_id: string | null }) => p.linked_monthly_priority_id)
+      .map((p: { id: string; linked_monthly_priority_id: string }) => [
+        p.id,
+        priorityMap.get(p.linked_monthly_priority_id) ?? null,
+      ]),
+  );
 
   return (
     <ActivitiesView
@@ -87,6 +110,7 @@ export default async function ActivitiesPage({ searchParams }: Props) {
       contacts={(contacts ?? []) as Pick<Contact, "id" | "full_name">[]}
       selectedDate={selectedDate}
       previousDate={previousDate}
+      projectPriorityMap={projectPriorityMap}
     />
   );
 }

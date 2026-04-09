@@ -50,7 +50,9 @@ export function checkScheduleOverlap(
 }
 
 /**
- * Spec §10.6: focus_minutes must be ≤ activity's remaining_minutes.
+ * Spec §10.6: focus_minutes must be > 0.
+ * When remaining_minutes is 0 (all estimated time worked), still allow scheduling
+ * extra blocks — this logs additional hours_worked without changing estimated_minutes.
  * Returns an error string or null if valid.
  */
 export function validateFocusMinutes(
@@ -60,7 +62,9 @@ export function validateFocusMinutes(
   if (focusMinutes <= 0) {
     return "Focus duration must be greater than 0 minutes";
   }
-  if (focusMinutes > activityRemainingMinutes) {
+  // Only cap focus_minutes when there is remaining time to consume.
+  // If remaining is 0, the user is scheduling extra overwork time — allowed.
+  if (activityRemainingMinutes > 0 && focusMinutes > activityRemainingMinutes) {
     return `Focus duration (${focusMinutes}m) exceeds remaining activity time (${activityRemainingMinutes}m)`;
   }
   return null;

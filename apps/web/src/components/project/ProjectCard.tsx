@@ -59,7 +59,7 @@ export function ProjectCard({ project }: Props) {
             <p className="mt-0.5 text-xs text-ink-light line-clamp-2">{project.description}</p>
           )}
         </div>
-        <div className="flex flex-shrink-0 items-center gap-2">
+        <div className="flex flex-shrink-0 items-center gap-2 flex-wrap justify-end">
           {atRisk && (
             <span
               title="At risk"
@@ -111,12 +111,22 @@ export function ProjectCard({ project }: Props) {
         </div>
       )}
 
-      {/* Date range */}
-      {(project.start_date ?? project.target_end_date) && (
-        <div className="mt-3 border-t border-blue-50 pt-3 text-xs text-ink-light">
-          {formatDate(project.start_date)} → {formatDate(project.target_end_date)}
+      {/* Date range + linked priority */}
+      <div className="mt-3 border-t border-blue-50 pt-3 text-xs text-ink-light space-y-1">
+        {(project.start_date ?? project.target_end_date) && (
+          <div>{formatDate(project.start_date)} → {formatDate(project.target_end_date)}</div>
+        )}
+        <div className="flex items-center gap-1.5">
+          <span className="text-violet-400">📌</span>
+          {project.linkedPriorityTitle ? (
+            <span className="text-violet-700 max-w-[16rem] truncate">
+              {project.linkedPriorityTitle}
+            </span>
+          ) : (
+            <span className="italic text-ink-light/60">Not a monthly priority</span>
+          )}
         </div>
-      )}
+      </div>
     </Link>
   );
 }

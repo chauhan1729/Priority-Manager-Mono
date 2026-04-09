@@ -101,26 +101,75 @@ export async function createActivity(
     }
   }
 
-  const { error } = await supabase.from("activities").insert({
+  const recurrenceRule = (formData.get("recurrence_rule") as string) || null;
+  const validRecurrence = ["daily", "weekly", "monthly"] as const;
+  type RecurrenceRule = typeof validRecurrence[number];
+  const typedRecurrence: RecurrenceRule | null =
+    recurrenceRule && (validRecurrence as readonly string[]).includes(recurrenceRule)
+      ? (recurrenceRule as RecurrenceRule)
+      : null;
+
+  const base = {
     user_id: user.id,
     title,
     section_type: sectionType,
     priority: priority || null,
-    activity_date: activityDate,
     estimated_minutes: estimatedMinutes,
     remaining_minutes: estimatedMinutes,
-    status: "not_started",
+    status: "not_started" as const,
     linked_project_id: linkedProjectId,
     delegated_contact_id: sectionType === "delegated" ? delegatedContactId : null,
     note: (formData.get("note") as string) || null,
-    origin_type: "manual",
+    origin_type: "manual" as const,
     moved_from_date: null,
+    recurrence_rule: typedRecurrence,
+  };
+
+  const { error } = await supabase.from("activities").insert({
+    ...base,
+    activity_date: activityDate,
   });
 
   if (error) return { error: error.message };
 
+  // Create recurring sibling copies (next 3 occurrences)
+  if (typedRecurrence) {
+    const siblings = buildRecurringDates(activityDate, typedRecurrence, 3);
+    for (const sibDate of siblings) {
+      await supabase.from("activities").insert({
+        ...base,
+        activity_date: sibDate,
+        recurrence_rule: typedRecurrence,
+      });
+    }
+  }
+
   revalidateAll(linkedProjectId);
   return { success: true };
+}
+
+/**
+ * Given a start date (ISO), a recurrence rule, and a count,
+ * returns the next `count` occurrence dates as ISO strings.
+ */
+function buildRecurringDates(
+  startISO: string,
+  rule: "daily" | "weekly" | "monthly",
+  count: number,
+): string[] {
+  const dates: string[] = [];
+  const [y, m, d] = startISO.split("-").map(Number);
+  const base = new Date(y, m - 1, d);
+  for (let i = 1; i <= count; i++) {
+    const next = new Date(base);
+    if (rule === "daily") next.setDate(next.getDate() + i);
+    else if (rule === "weekly") next.setDate(next.getDate() + i * 7);
+    else if (rule === "monthly") next.setMonth(next.getMonth() + i);
+    dates.push(
+      `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`,
+    );
+  }
+  return dates;
 }
 
 // ---------------------------------------------------------------------------
@@ -367,6 +416,72 @@ export async function delegateActivity(
   if (error) return { error: error.message };
 
   revalidateAll(linkedProjectId);
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Bulk update — move or postpone multiple activities to a new date.
+// Cannot change: name, project, priority (per spec).
+// ---------------------------------------------------------------------------
+
+export async function bulkMoveActivities(
+  activityIds: string[],
+  toDate: string,
+  currentDate: string,
+): Promise<{ error?: string }> {
+  if (activityIds.length === 0) return {};
+  if (!canCreateActivityOnDate(toDate)) {
+    return { error: "Cannot move activities to a past date." };
+  }
+
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { data: existing } = await supabase
+    .from("activities")
+    .select("id, moved_from_date")
+    .in("id", activityIds)
+    .eq("user_id", user.id);
+
+  for (const act of existing ?? []) {
+    const movedFromDate = act.moved_from_date ?? currentDate;
+    await supabase
+      .from("activities")
+      .update({
+        activity_date: toDate,
+        status: "postponed",
+        moved_from_date: movedFromDate,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", act.id)
+      .eq("user_id", user.id);
+  }
+
+  revalidateAll();
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Bulk delete
+// ---------------------------------------------------------------------------
+
+export async function bulkDeleteActivities(
+  activityIds: string[],
+): Promise<{ error?: string }> {
+  if (activityIds.length === 0) return {};
+
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("activities")
+    .delete()
+    .in("id", activityIds)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidateAll();
   return {};
 }
 

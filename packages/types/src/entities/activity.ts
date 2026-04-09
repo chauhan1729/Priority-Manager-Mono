@@ -12,6 +12,8 @@ export type ActivityStatus =
 
 export type ActivityOriginType = "manual" | "project" | "carry_forward";
 
+export type ActivityRecurrenceRule = "daily" | "weekly" | "monthly";
+
 export interface Activity {
   id: string;
   user_id: string;
@@ -29,6 +31,7 @@ export interface Activity {
   moved_from_date: string | null; // ISO date, set when carried forward
   hours_worked: number; // cumulative minutes spent in completed schedule blocks
   archived: boolean;
+  recurrence_rule: ActivityRecurrenceRule | null; // optional repeating pattern
   created_at: string;
   updated_at: string;
 }

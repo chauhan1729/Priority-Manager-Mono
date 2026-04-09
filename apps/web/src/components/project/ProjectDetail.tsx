@@ -341,7 +341,7 @@ export function ProjectDetail({
         )}
 
         {activeTab === "activities" && (
-          <ActivitiesTab projectId={project.id} activities={activities} projects={allProjects} contacts={contacts} />
+          <ActivitiesTab projectId={project.id} activities={activities} projects={allProjects} contacts={contacts} linkedPriorityTitle={linkedPriorityTitle} />
         )}
 
         {activeTab === "milestones" && (

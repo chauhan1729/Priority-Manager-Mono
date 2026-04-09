@@ -207,6 +207,21 @@ export function AddActivityForm({ selectedDate, projects, contacts, onSuccess, o
             </div>
           </div>
 
+          {/* Recurrence */}
+          <div>
+            <label className="block text-xs text-ink-light mb-1">Repeat</label>
+            <select
+              name="recurrence_rule"
+              defaultValue=""
+              className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
+            >
+              <option value="">Does not repeat</option>
+              <option value="daily">Daily (next 3 days)</option>
+              <option value="weekly">Weekly (next 3 weeks)</option>
+              <option value="monthly">Monthly (next 3 months)</option>
+            </select>
+          </div>
+
           {/* Note */}
           <input
             name="note"

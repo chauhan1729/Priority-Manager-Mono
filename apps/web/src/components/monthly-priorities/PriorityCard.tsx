@@ -274,6 +274,24 @@ export function PriorityCard({
         </div>
       )}
 
+      {/* Linked project chip */}
+      <div className="border-t border-blue-50 px-4 py-2.5">
+        <p className="text-xs text-ink-light mb-1">Project</p>
+        {linkedProject ? (
+          <Link
+            href={`/project-planner/${linkedProject.id}`}
+            onClick={(e) => e.stopPropagation()}
+            className="inline-flex max-w-full"
+          >
+            <span className="rounded-full bg-violet-50 px-2.5 py-0.5 text-xs text-violet-700 max-w-[14rem] truncate block hover:underline">
+              {linkedProject.name}
+            </span>
+          </Link>
+        ) : (
+          <span className="text-xs text-ink-light/60 italic">No project linked</span>
+        )}
+      </div>
+
       {/* Delete confirmation */}
       <div className="border-t border-blue-50 px-4 py-3">
         {confirmDelete ? (

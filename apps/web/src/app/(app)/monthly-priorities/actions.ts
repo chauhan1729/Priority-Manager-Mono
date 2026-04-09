@@ -29,10 +29,13 @@ async function getAuthenticatedUser() {
   return { supabase, user };
 }
 
-function revalidateAll() {
+function revalidateAll(...projectIds: (string | null | undefined)[]) {
   revalidatePath("/monthly-priorities");
   revalidatePath("/project-planner");
   revalidatePath("/annual-strategies");
+  for (const id of projectIds) {
+    if (id) revalidatePath(`/project-planner/${id}`);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -96,27 +99,40 @@ export async function createMonthlyPriority(
     };
   }
 
-  const { error } = await supabase.from("monthly_priorities").insert({
-    user_id: user.id,
-    section: data.section,
-    title,
-    month_key: data.month_key,
-    category: data.category?.trim() || null,
-    started_date: data.started_date ?? null,
-    assigned_date: data.assigned_date ?? null,
-    target_date: data.target_date ?? null,
-    linked_annual_goal_id: data.linked_annual_goal_id ?? null,
-    linked_project_id: data.linked_project_id ?? null,
-    progress_mode: progressMode,
-    manual_progress_percent: 0,
-    status: "planned",
-    note: data.note?.trim() || null,
-    pinned: data.pinned ?? false,
-  });
+  const { data: newPriority, error } = await supabase
+    .from("monthly_priorities")
+    .insert({
+      user_id: user.id,
+      section: data.section,
+      title,
+      month_key: data.month_key,
+      category: data.category?.trim() || null,
+      started_date: data.started_date ?? null,
+      assigned_date: data.assigned_date ?? null,
+      target_date: data.target_date ?? null,
+      linked_annual_goal_id: data.linked_annual_goal_id ?? null,
+      linked_project_id: data.linked_project_id ?? null,
+      progress_mode: progressMode,
+      manual_progress_percent: 0,
+      status: "planned",
+      note: data.note?.trim() || null,
+      pinned: data.pinned ?? false,
+    })
+    .select("id")
+    .single();
 
   if (error) return { error: error.message };
 
-  revalidateAll();
+  // Sync linked_monthly_priority_id on the project
+  if (data.linked_project_id && newPriority?.id) {
+    await supabase
+      .from("projects")
+      .update({ linked_monthly_priority_id: newPriority.id, updated_at: new Date().toISOString() })
+      .eq("id", data.linked_project_id)
+      .eq("user_id", user.id);
+  }
+
+  revalidateAll(data.linked_project_id);
   return { success: true };
 }
 
@@ -204,7 +220,49 @@ export async function updateMonthlyPriority(
 
   if (error) return { error: error.message };
 
-  revalidateAll();
+  // Sync linked_monthly_priority_id on projects when the linked project changes
+  const oldProjectId = existing.linked_project_id as string | null;
+  const newProjectId = ("linked_project_id" in data ? data.linked_project_id : existing.linked_project_id) as string | null | undefined;
+
+  // Always sync when linked_project_id is explicitly part of this update (handles relink of same project)
+  if ("linked_project_id" in data) {
+    // Clear the old project's link only if switching to a different project
+    if (oldProjectId && oldProjectId !== newProjectId) {
+      await supabase
+        .from("projects")
+        .update({ linked_monthly_priority_id: null, updated_at: new Date().toISOString() })
+        .eq("id", oldProjectId)
+        .eq("linked_monthly_priority_id", id)
+        .eq("user_id", user.id);
+    }
+    // Always ensure the new project points to this priority
+    if (newProjectId) {
+      await supabase
+        .from("projects")
+        .update({ linked_monthly_priority_id: id, updated_at: new Date().toISOString() })
+        .eq("id", newProjectId)
+        .eq("user_id", user.id);
+    }
+  } else if (oldProjectId !== newProjectId) {
+    // Fallback: handle any other case where project link changed
+    if (oldProjectId) {
+      await supabase
+        .from("projects")
+        .update({ linked_monthly_priority_id: null, updated_at: new Date().toISOString() })
+        .eq("id", oldProjectId)
+        .eq("linked_monthly_priority_id", id)
+        .eq("user_id", user.id);
+    }
+    if (newProjectId) {
+      await supabase
+        .from("projects")
+        .update({ linked_monthly_priority_id: id, updated_at: new Date().toISOString() })
+        .eq("id", newProjectId)
+        .eq("user_id", user.id);
+    }
+  }
+
+  revalidateAll(oldProjectId, newProjectId);
   return { success: true };
 }
 
@@ -311,6 +369,16 @@ export async function deleteMonthlyPriority(id: string): Promise<ActionResult> {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) redirect("/login");
 
+  // Fetch linked project before deleting so we can clear its reference
+  const { data: existing } = await supabase
+    .from("monthly_priorities")
+    .select("linked_project_id")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single();
+
+  const linkedProjectId = existing?.linked_project_id as string | null | undefined;
+
   const { error } = await supabase
     .from("monthly_priorities")
     .delete()
@@ -319,7 +387,17 @@ export async function deleteMonthlyPriority(id: string): Promise<ActionResult> {
 
   if (error) return { error: error.message };
 
-  revalidateAll();
+  // Clear the project's link if it was pointing to this priority
+  if (linkedProjectId) {
+    await supabase
+      .from("projects")
+      .update({ linked_monthly_priority_id: null, updated_at: new Date().toISOString() })
+      .eq("id", linkedProjectId)
+      .eq("linked_monthly_priority_id", id)
+      .eq("user_id", user.id);
+  }
+
+  revalidateAll(linkedProjectId);
   return { success: true };
 }
 

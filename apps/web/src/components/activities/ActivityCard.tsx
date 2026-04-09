@@ -36,6 +36,10 @@ interface Props {
   contactMap: Map<string, string>;
   contacts: Pick<Contact, "id" | "full_name">[];
   isPending: boolean;
+  projectPriorityMap?: Map<string, string | null>;
+  bulkMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (id: string) => void;
   onStatusChange: (id: string, status: string, projectId: string | null) => void;
   onDelegate: (id: string, contactId: string, projectId: string | null) => void;
   onDelete: (id: string, projectId: string | null) => void;
@@ -50,6 +54,10 @@ export function ActivityCard({
   contactMap,
   contacts,
   isPending,
+  projectPriorityMap = new Map(),
+  bulkMode = false,
+  isSelected = false,
+  onToggleSelect,
   onStatusChange,
   onDelegate,
   onDelete,
@@ -65,6 +73,9 @@ export function ActivityCard({
   const delegatedContactName = activity.delegated_contact_id
     ? (contactMap.get(activity.delegated_contact_id) ?? null)
     : null;
+  const linkedPriorityTitle = activity.linked_project_id
+    ? (projectPriorityMap.get(activity.linked_project_id) ?? null)
+    : null;
 
   const isDone =
     activity.status === "completed" || activity.status === "cancelled";
@@ -72,9 +83,29 @@ export function ActivityCard({
   return (
     <div
       className={`flex flex-col gap-2 rounded-xl border bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between transition ${
-        isDone ? "border-gray-100 opacity-70" : "border-blue-50 hover:border-blue-100"
+        isDone ? "border-gray-100 opacity-70" : isSelected ? "border-indigo-300 bg-indigo-50/30" : "border-blue-50 hover:border-blue-100"
       }`}
+      onClick={bulkMode && !isDone ? () => onToggleSelect?.(activity.id) : undefined}
+      style={bulkMode && !isDone ? { cursor: "pointer" } : undefined}
     >
+      {/* Bulk checkbox — only for non-completed activities */}
+      {bulkMode && (
+        <div className="flex-shrink-0 self-start sm:self-auto">
+          {!isDone ? (
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect?.(activity.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+              aria-label={`Select ${activity.title}`}
+            />
+          ) : (
+            <div className="h-4 w-4" aria-hidden />
+          )}
+        </div>
+      )}
+
       {/* Left: priority + title + meta */}
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
@@ -117,6 +148,14 @@ export function ActivityCard({
             >
               {projectName}
             </Link>
+          )}
+          {linkedPriorityTitle && (
+            <span
+              title={`Linked to monthly priority: ${linkedPriorityTitle}`}
+              className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700"
+            >
+              ★ {linkedPriorityTitle}
+            </span>
           )}
           {delegatedContactName && (
             <span className="text-purple-600 truncate">→ {delegatedContactName}</span>

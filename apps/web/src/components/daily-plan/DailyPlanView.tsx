@@ -82,12 +82,15 @@ export function DailyPlanView({
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const isToday = selectedDate === todayStr;
 
-  // Unscheduled = on this date + has remaining time + not done
+  // Unscheduled = on this date + not done.
+  // Bug §11: include activities with remaining_minutes === 0 that are NOT completed —
+  // they can still be scheduled for extra overwork time.
+  // Bug §10: remaining is computed as max(0, estimated - hours_worked) for display.
   const unscheduled = activities.filter(
     (a) =>
-      a.remaining_minutes > 0 &&
       a.status !== "completed" &&
-      a.status !== "cancelled",
+      a.status !== "cancelled" &&
+      a.status !== "archived",
   );
 
   function handleCarryForward(activityId: string, linkedProjectId: string | null) {

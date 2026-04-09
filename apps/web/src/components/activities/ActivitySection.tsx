@@ -19,6 +19,10 @@ interface Props {
   contactMap: Map<string, string>;
   contacts: Pick<Contact, "id" | "full_name">[];
   isPending: boolean;
+  projectPriorityMap?: Map<string, string | null>;
+  bulkMode?: boolean;
+  selectedIds?: Set<string>;
+  onToggleSelect?: (id: string) => void;
   onStatusChange: (id: string, status: string, projectId: string | null) => void;
   onDelegate: (id: string, contactId: string, projectId: string | null) => void;
   onDelete: (id: string, projectId: string | null) => void;
@@ -35,6 +39,10 @@ export function ActivitySection({
   contactMap,
   contacts,
   isPending,
+  projectPriorityMap = new Map(),
+  bulkMode = false,
+  selectedIds = new Set(),
+  onToggleSelect,
   onStatusChange,
   onDelegate,
   onDelete,
@@ -80,6 +88,10 @@ export function ActivitySection({
             contactMap={contactMap}
             contacts={contacts}
             isPending={isPending}
+            projectPriorityMap={projectPriorityMap}
+            bulkMode={bulkMode}
+            isSelected={selectedIds.has(activity.id)}
+            onToggleSelect={onToggleSelect}
             onStatusChange={onStatusChange}
             onDelegate={onDelegate}
             onDelete={onDelete}

@@ -12,6 +12,8 @@ import {
 import type { Activity, ActivitySection, Contact, Project } from "@pm/types";
 import {
   archiveActivity,
+  bulkDeleteActivities,
+  bulkMoveActivities,
   carryForwardActivity,
   delegateActivity,
   deleteActivity,
@@ -66,6 +68,7 @@ interface Props {
   contacts: Pick<Contact, "id" | "full_name">[];
   selectedDate: string;
   previousDate: string;
+  projectPriorityMap?: Map<string, string | null>;
 }
 
 export function ActivitiesView({
@@ -75,12 +78,19 @@ export function ActivitiesView({
   contacts,
   selectedDate,
   previousDate,
+  projectPriorityMap = new Map(),
 }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const [isPending, startTransition] = useTransition();
+
+  // Bulk edit state
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkTargetDate, setBulkTargetDate] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const projectMap = new Map(projects.map((p) => [p.id, p.name]));
   const contactMap = new Map(contacts.map((c) => [c.id, c.full_name]));
@@ -172,6 +182,49 @@ export function ActivitiesView({
     });
   }
 
+  function toggleSelect(id: string) {
+    // Completed/cancelled activities cannot be bulk-edited
+    const activity = activeActivities.find((a) => a.id === id);
+    if (!activity || activity.status === "completed" || activity.status === "cancelled") return;
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function handleBulkMove(toDate?: string) {
+    const targetDate = toDate ?? bulkTargetDate;
+    if (!targetDate || selectedIds.size === 0) return;
+    startTransition(async () => {
+      const result = await bulkMoveActivities([...selectedIds], targetDate, selectedDate);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${selectedIds.size} ${selectedIds.size === 1 ? "activity" : "activities"} moved`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+        setBulkTargetDate("");
+      }
+    });
+  }
+
+  function handleBulkDelete() {
+    const count = selectedIds.size;
+    startTransition(async () => {
+      const result = await bulkDeleteActivities([...selectedIds]);
+      setConfirmDelete(false);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${count} ${count === 1 ? "activity" : "activities"} deleted`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+    });
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -208,12 +261,29 @@ export function ActivitiesView({
             )}
           </div>
 
-          <button
-            onClick={() => setShowAddForm(!showAddForm)}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition"
-          >
-            {showAddForm ? "Cancel" : "+ Add Activity"}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setBulkMode((v) => !v);
+                setSelectedIds(new Set());
+                setBulkTargetDate("");
+                setConfirmDelete(false);
+              }}
+              className={`rounded-lg px-3 py-2 text-sm font-medium transition border ${
+                bulkMode
+                  ? "bg-indigo-50 border-indigo-200 text-indigo-700"
+                  : "border-blue-100 bg-white text-ink-light hover:bg-blue-50 hover:text-blue-700"
+              }`}
+            >
+              {bulkMode ? "✕ Cancel Bulk" : "Bulk Edit"}
+            </button>
+            <button
+              onClick={() => setShowAddForm(!showAddForm)}
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition"
+            >
+              {showAddForm ? "Cancel" : "+ Add Activity"}
+            </button>
+          </div>
         </div>
 
         {/* Capacity / priority warnings */}
@@ -228,6 +298,69 @@ export function ActivitiesView({
           </p>
         )}
       </header>
+
+      {/* Bulk action bar */}
+      {bulkMode && (
+        <div className="border-b border-indigo-100 bg-indigo-50 px-6 py-3 md:px-8">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="text-xs font-medium text-indigo-700">
+              {selectedIds.size} selected — select activities below, then choose an action:
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <label className="text-xs text-indigo-700 font-medium">Move to:</label>
+              <input
+                type="date"
+                value={bulkTargetDate}
+                min={addDays(selectedDate, 1)}
+                onChange={(e) => setBulkTargetDate(e.target.value)}
+                className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
+              />
+              <button
+                onClick={handleBulkMove}
+                disabled={!bulkTargetDate || selectedIds.size === 0 || isPending}
+                className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+              >
+                Move Selected
+              </button>
+              <button
+                onClick={() => handleBulkMove(addDays(selectedDate, 1))}
+                disabled={selectedIds.size === 0 || isPending}
+                className="rounded-lg border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-40"
+              >
+                Postpone to Tomorrow
+              </button>
+              {confirmDelete ? (
+                <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1">
+                  <span className="text-xs text-red-700">
+                    Delete {selectedIds.size} {selectedIds.size === 1 ? "activity" : "activities"}?
+                  </span>
+                  <button
+                    onClick={handleBulkDelete}
+                    disabled={isPending}
+                    className="rounded px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    Yes, delete
+                  </button>
+                  <button
+                    onClick={() => setConfirmDelete(false)}
+                    className="text-xs text-ink-light hover:text-ink"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmDelete(true)}
+                  disabled={selectedIds.size === 0 || isPending}
+                  className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
+                >
+                  Delete Selected
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto px-6 py-5 md:px-8 space-y-5">
@@ -267,6 +400,10 @@ export function ActivitiesView({
               contactMap={contactMap}
               contacts={contacts}
               isPending={isPending}
+              projectPriorityMap={projectPriorityMap}
+              bulkMode={bulkMode}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
               onStatusChange={handleStatusChange}
               onDelegate={handleDelegate}
               onDelete={handleDelete}

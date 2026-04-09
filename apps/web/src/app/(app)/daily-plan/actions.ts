@@ -60,6 +60,10 @@ export async function scheduleActivity(
   const focusErr = validateFocusMinutes(focusMinutes, activity.remaining_minutes);
   if (focusErr) return { error: focusErr };
 
+  // Bug §11: if remaining is 0 but activity is not completed, allow scheduling extra time.
+  // Extra blocks will increase hours_worked without changing estimated_minutes.
+  const isOverwork = activity.remaining_minutes === 0;
+
   // 4. Fetch existing instances for overlap check
   const { data: existing } = await supabase
     .from("schedule_instances")
@@ -97,13 +101,17 @@ export async function scheduleActivity(
 
   if (insertErr) return { error: insertErr.message };
 
-  // 6. Decrement remaining_minutes on activity
-  const newRemaining = Math.max(0, activity.remaining_minutes - focusMinutes);
-  await supabase
-    .from("activities")
-    .update({ remaining_minutes: newRemaining, updated_at: new Date().toISOString() })
-    .eq("id", activityId)
-    .eq("user_id", user.id);
+  // 6. Decrement remaining_minutes on activity.
+  // Bug §11: if this is "overwork" (remaining was 0), don't touch remaining_minutes
+  // — extra scheduled time will be credited to hours_worked on block completion.
+  if (!isOverwork) {
+    const newRemaining = Math.max(0, activity.remaining_minutes - focusMinutes);
+    await supabase
+      .from("activities")
+      .update({ remaining_minutes: newRemaining, updated_at: new Date().toISOString() })
+      .eq("id", activityId)
+      .eq("user_id", user.id);
+  }
 
   revalidateAll(activity.linked_project_id);
   return { success: true };
@@ -183,18 +191,48 @@ export async function updateScheduleBlockStatus(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  // Fetch instance to get source_activity_id
+  // Fetch instance — need start_at, end_at, focus_minutes to handle early completion
   const { data: instance } = await supabase
     .from("schedule_instances")
-    .select("source_activity_id, source_type")
+    .select("source_activity_id, source_type, start_at, end_at, focus_minutes, locked_minutes")
     .eq("id", instanceId)
     .eq("user_id", user.id)
     .single();
 
-  // Update schedule block status
+  const now = new Date();
+
+  // For early completion: compute actual elapsed time
+  let blockUpdate: Record<string, unknown> = {
+    status_snapshot: status,
+    updated_at: now.toISOString(),
+  };
+  let earlyCompletionUnworkedMinutes = 0;
+
+  if (status === "completed" && instance) {
+    const focusMinutes: number = instance.focus_minutes ?? instance.locked_minutes ?? 0;
+    const endMs = new Date(instance.end_at).getTime();
+    const isEarlyCompletion = now.getTime() < endMs;
+
+    if (isEarlyCompletion) {
+      // Block completed before its scheduled end — truncate the block
+      const startMs = new Date(instance.start_at).getTime();
+      const elapsed = Math.max(1, Math.floor((now.getTime() - startMs) / 60_000));
+      const workedNow = Math.min(elapsed, focusMinutes);
+      earlyCompletionUnworkedMinutes = focusMinutes - workedNow;
+
+      blockUpdate = {
+        ...blockUpdate,
+        end_at: now.toISOString(),
+        locked_minutes: workedNow,
+        focus_minutes: workedNow,
+      };
+    }
+  }
+
+  // Update the schedule block
   const { error } = await supabase
     .from("schedule_instances")
-    .update({ status_snapshot: status, updated_at: new Date().toISOString() })
+    .update(blockUpdate)
     .eq("id", instanceId)
     .eq("user_id", user.id);
 
@@ -202,23 +240,17 @@ export async function updateScheduleBlockStatus(
 
   // Sync to activity status — map block status to activity status
   if (instance?.source_type === "activity" && instance.source_activity_id) {
-    const activityStatusMap: Record<string, string | null> = {
-      completed: "completed",
-      working: "working",
-      postponed: "postponed",
-      missed: "not_started", // keep reschedulable
-      upcoming: null, // no change
-    };
-    const activityStatus = activityStatusMap[status];
-    if (activityStatus) {
-      const { data: activity } = await supabase
-        .from("activities")
-        .select("linked_project_id, hours_worked")
-        .eq("id", instance.source_activity_id)
-        .eq("user_id", user.id)
-        .single();
+    const { data: activity } = await supabase
+      .from("activities")
+      .select("linked_project_id, hours_worked, estimated_minutes, remaining_minutes")
+      .eq("id", instance.source_activity_id)
+      .eq("user_id", user.id)
+      .single();
 
-      // When block completes, credit focus_minutes to hours_worked
+    // When a block completes, credit its worked time to hours_worked.
+    // For early completions, credit only elapsed time and restore unworked portion to remaining.
+    // Only mark the ACTIVITY as completed if all estimated time is now worked.
+    if (status === "completed" && activity) {
       const { data: blockData } = await supabase
         .from("schedule_instances")
         .select("focus_minutes, locked_minutes")
@@ -226,14 +258,45 @@ export async function updateScheduleBlockStatus(
         .eq("user_id", user.id)
         .single();
 
+      // focus_minutes on the block is now the actual worked time (updated above for early completions)
       const workedMinutes = blockData?.focus_minutes ?? blockData?.locked_minutes ?? 0;
-      const hoursWorkedUpdate = status === "completed" && activity
-        ? { hours_worked: (activity.hours_worked ?? 0) + workedMinutes }
-        : {};
+      const newHoursWorked = (activity.hours_worked ?? 0) + workedMinutes;
+      // Restore unworked portion to remaining (for early completions earlyCompletionUnworkedMinutes > 0).
+      // Cap at estimated - hours_worked so we never over-restore.
+      const newRemaining = Math.min(
+        Math.max(0, activity.remaining_minutes + earlyCompletionUnworkedMinutes),
+        activity.estimated_minutes - newHoursWorked,
+      );
+      // Only mark activity "completed" if all estimated time has been worked.
+      const newActivityStatus = newRemaining === 0 ? "completed" : "working";
 
       await supabase
         .from("activities")
-        .update({ status: activityStatus, updated_at: new Date().toISOString(), ...hoursWorkedUpdate })
+        .update({
+          status: newActivityStatus,
+          hours_worked: newHoursWorked,
+          remaining_minutes: newRemaining,
+          updated_at: now.toISOString(),
+        })
+        .eq("id", instance.source_activity_id)
+        .eq("user_id", user.id);
+
+      revalidateAll(activity.linked_project_id);
+      return { success: true };
+    }
+
+    // Non-completed statuses: map directly (no hours_worked change)
+    const activityStatusMap: Record<string, string | null> = {
+      working: "working",
+      postponed: "postponed",
+      missed: "not_started", // keep reschedulable
+      upcoming: null, // no change
+    };
+    const activityStatus = activityStatusMap[status];
+    if (activityStatus) {
+      await supabase
+        .from("activities")
+        .update({ status: activityStatus, updated_at: new Date().toISOString() })
         .eq("id", instance.source_activity_id)
         .eq("user_id", user.id);
 

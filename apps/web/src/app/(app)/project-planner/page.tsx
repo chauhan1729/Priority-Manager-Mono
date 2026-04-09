@@ -19,6 +19,7 @@ export type ProjectWithMetrics = Project & {
   atRisk: boolean;
   nextTaskTitle: string | null;
   nextTaskDate: string | null;
+  linkedPriorityTitle: string | null;
 };
 
 export default async function ProjectPlannerPage() {
@@ -29,7 +30,7 @@ export default async function ProjectPlannerPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const [projectsResult, activitiesResult] = await Promise.all([
+  const [projectsResult, activitiesResult, prioritiesResult] = await Promise.all([
     supabase
       .from("projects")
       .select("*")
@@ -40,10 +41,18 @@ export default async function ProjectPlannerPage() {
       .select("id, linked_project_id, status, estimated_minutes, title, activity_date")
       .eq("user_id", user!.id)
       .not("linked_project_id", "is", null),
+    supabase
+      .from("monthly_priorities")
+      .select("id, title, month_key")
+      .eq("user_id", user!.id)
+      .order("month_key", { ascending: false }),
   ]);
 
   const projects = (projectsResult.data ?? []) as Project[];
   const activities = (activitiesResult.data ?? []) as ActivitySummary[];
+  const priorityMap = new Map(
+    (prioritiesResult.data ?? []).map((p: { id: string; title: string }) => [p.id, p.title]),
+  );
 
   // Pre-compute metrics per project (domain layer)
   const projectsWithMetrics: ProjectWithMetrics[] = projects.map((p) => {
@@ -60,6 +69,9 @@ export default async function ProjectPlannerPage() {
       atRisk: isProjectAtRisk(p, linked as Activity[]),
       nextTaskTitle: nextTask?.title ?? null,
       nextTaskDate: nextTask?.activity_date ?? null,
+      linkedPriorityTitle: p.linked_monthly_priority_id
+        ? (priorityMap.get(p.linked_monthly_priority_id) ?? null)
+        : null,
     };
   });
 

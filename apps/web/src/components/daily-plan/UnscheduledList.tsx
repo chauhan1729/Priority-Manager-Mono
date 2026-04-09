@@ -75,7 +75,15 @@ function ActivityRow({
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-light">
             {projectName && <span className="text-blue-600 truncate">{projectName}</span>}
-            <span>{formatMinutes(activity.remaining_minutes)} remaining</span>
+            {/* Bug §10: show remaining as estimated - hours_worked, capped at 0 */}
+            {(() => {
+              const computed = Math.max(0, activity.estimated_minutes - (activity.hours_worked ?? 0));
+              return computed === 0 ? (
+                <span className="text-amber-600 font-medium">Extra time (overwork)</span>
+              ) : (
+                <span>{formatMinutes(computed)} remaining</span>
+              );
+            })()}
             {activity.moved_from_date && <span className="text-amber-600">↷ moved</span>}
           </div>
         </div>

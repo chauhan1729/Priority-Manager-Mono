@@ -460,6 +460,9 @@ export interface Database {
           note: string | null;
           origin_type: ActivityOriginType | null;
           moved_from_date: string | null;
+          hours_worked: number;
+          archived: boolean;
+          recurrence_rule: "daily" | "weekly" | "monthly" | null;
           created_at: string;
           updated_at: string;
         };
@@ -478,6 +481,9 @@ export interface Database {
           note?: string | null;
           origin_type?: ActivityOriginType | null;
           moved_from_date?: string | null;
+          hours_worked?: number;
+          archived?: boolean;
+          recurrence_rule?: "daily" | "weekly" | "monthly" | null;
           created_at?: string;
           updated_at?: string;
         };

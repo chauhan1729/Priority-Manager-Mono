@@ -30,21 +30,35 @@ export async function signUpWithEmail(
   }
 
   const supabase = await createSupabaseServerClient();
-  const siteUrl = env.NEXT_PUBLIC_SITE_URL;
+  // VERCEL_URL is auto-injected by Vercel per deployment (no protocol prefix).
+  // Prefer it so preview and production deploys use the correct domain even
+  // if NEXT_PUBLIC_SITE_URL is still set to localhost in project settings.
+  const siteUrl = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : env.NEXT_PUBLIC_SITE_URL;
 
-  const { error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      // full_name is stored in raw_user_meta_data and picked up by the
-      // handle_new_user() trigger to populate profiles.name
-      data: { full_name: name },
-      emailRedirectTo: `${siteUrl}/auth/callback`,
-    },
-  });
+  let signUpError: string | null = null;
+  try {
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        // full_name is stored in raw_user_meta_data and picked up by the
+        // handle_new_user() trigger to populate profiles.name
+        data: { full_name: name },
+        emailRedirectTo: `${siteUrl}/auth/callback`,
+      },
+    });
+    if (error) signUpError = error.message;
+  } catch (err) {
+    signUpError =
+      err instanceof Error && err.message.toLowerCase().includes("fetch")
+        ? "Could not reach the authentication server. Check your internet connection and try again."
+        : "An unexpected error occurred. Please try again.";
+  }
 
-  if (error) {
-    return { error: error.message };
+  if (signUpError) {
+    return { error: signUpError };
   }
 
   return {
