@@ -158,7 +158,7 @@ function buildRecurringDates(
   count: number,
 ): string[] {
   const dates: string[] = [];
-  const [y, m, d] = startISO.split("-").map(Number);
+  const [y = 0, m = 0, d = 0] = startISO.split("-").map(Number);
   const base = new Date(y, m - 1, d);
   for (let i = 1; i <= count; i++) {
     const next = new Date(base);
