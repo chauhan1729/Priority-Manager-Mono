@@ -89,8 +89,7 @@ export function DailyPlanView({
   const unscheduled = activities.filter(
     (a) =>
       a.status !== "completed" &&
-      a.status !== "cancelled" &&
-      a.status !== "archived",
+      a.status !== "cancelled",
   );
 
   function handleCarryForward(activityId: string, linkedProjectId: string | null) {
