@@ -39,7 +39,7 @@ interface Props {
   projectPriorityMap?: Map<string, string | null>;
   bulkMode?: boolean;
   isSelected?: boolean;
-  onToggleSelect?: (id: string) => void;
+  onToggleSelect?: ((id: string) => void) | undefined;
   onStatusChange: (id: string, status: string, projectId: string | null) => void;
   onDelegate: (id: string, contactId: string, projectId: string | null) => void;
   onDelete: (id: string, projectId: string | null) => void;
