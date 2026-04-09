@@ -316,7 +316,7 @@ export function ActivitiesView({
                 className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
               />
               <button
-                onClick={handleBulkMove}
+                onClick={() => handleBulkMove(bulkTargetDate)}
                 disabled={!bulkTargetDate || selectedIds.size === 0 || isPending}
                 className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
               >
