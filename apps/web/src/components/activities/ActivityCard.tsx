@@ -85,24 +85,20 @@ export function ActivityCard({
       className={`flex flex-col gap-2 rounded-xl border bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between transition ${
         isDone ? "border-gray-100 opacity-70" : isSelected ? "border-indigo-300 bg-indigo-50/30" : "border-blue-50 hover:border-blue-100"
       }`}
-      onClick={bulkMode && !isDone ? () => onToggleSelect?.(activity.id) : undefined}
-      style={bulkMode && !isDone ? { cursor: "pointer" } : undefined}
+      onClick={bulkMode ? () => onToggleSelect?.(activity.id) : undefined}
+      style={bulkMode ? { cursor: "pointer" } : undefined}
     >
-      {/* Bulk checkbox — only for non-completed activities */}
+      {/* Bulk checkbox — all activities selectable */}
       {bulkMode && (
         <div className="flex-shrink-0 self-start sm:self-auto">
-          {!isDone ? (
-            <input
-              type="checkbox"
-              checked={isSelected}
-              onChange={() => onToggleSelect?.(activity.id)}
-              onClick={(e) => e.stopPropagation()}
-              className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
-              aria-label={`Select ${activity.title}`}
-            />
-          ) : (
-            <div className="h-4 w-4" aria-hidden />
-          )}
+          <input
+            type="checkbox"
+            checked={isSelected}
+            onChange={() => onToggleSelect?.(activity.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+            aria-label={`Select ${activity.title}`}
+          />
         </div>
       )}
 
@@ -154,7 +150,7 @@ export function ActivityCard({
               title={`Linked to monthly priority: ${linkedPriorityTitle}`}
               className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700"
             >
-              ★ {linkedPriorityTitle}
+              ★ Monthly Priority
             </span>
           )}
           {delegatedContactName && (

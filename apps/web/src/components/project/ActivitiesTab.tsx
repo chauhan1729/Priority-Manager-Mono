@@ -12,7 +12,7 @@ import {
   updateActivityStatus,
   type ActionResult,
 } from "@/app/(app)/project-planner/actions";
-import { archiveActivity, bulkDeleteActivities, bulkMoveActivities, updateActivity } from "@/app/(app)/activities/actions";
+import { archiveActivity, bulkArchiveActivities, bulkDeleteActivities, bulkMoveActivities, bulkUpdateActivityStatus, updateActivity } from "@/app/(app)/activities/actions";
 import { EditActivityModal } from "@/components/activities/EditActivityModal";
 import { showToast } from "@/components/ui/Toaster";
 
@@ -375,6 +375,7 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkTargetDate, setBulkTargetDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("completed");
 
   const contactMap = new Map(contacts.map((c) => [c.id, c.full_name]));
 
@@ -409,9 +410,8 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
   }
 
   function toggleSelect(id: string) {
-    // Only non-completed/cancelled activities can be bulk-selected
     const activity = activities.find((a) => a.id === id);
-    if (!activity || ARCHIVED_STATUSES.includes(activity.status)) return;
+    if (!activity) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -444,6 +444,36 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
         showToast(result.error, "error");
       } else {
         showToast(`${count} ${count === 1 ? "activity" : "activities"} deleted`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+    });
+  }
+
+  function handleBulkStatusChange() {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    startTransition(async () => {
+      const result = await bulkUpdateActivityStatus([...selectedIds], bulkStatus);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${count} ${count === 1 ? "activity" : "activities"} updated`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+    });
+  }
+
+  function handleBulkArchive() {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    startTransition(async () => {
+      const result = await bulkArchiveActivities([...selectedIds]);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${count} ${count === 1 ? "activity" : "activities"} archived`);
         setSelectedIds(new Set());
         setBulkMode(false);
       }
@@ -509,13 +539,38 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
               >
                 Move Selected
               </button>
+              {/* Set status */}
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-indigo-700 font-medium">Set status:</label>
+                <select
+                  value={bulkStatus}
+                  onChange={(e) => setBulkStatus(e.target.value)}
+                  className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="working">Working</option>
+                  <option value="completed">Completed</option>
+                  <option value="postponed">Postponed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <button
+                  onClick={handleBulkStatusChange}
+                  disabled={selectedIds.size === 0 || isPending}
+                  className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                >
+                  Apply
+                </button>
+              </div>
+
+              {/* Archive */}
               <button
-                onClick={() => handleBulkMove(addDays(todayISO(), 1))}
+                onClick={handleBulkArchive}
                 disabled={selectedIds.size === 0 || isPending}
-                className="rounded-lg border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-40"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
-                Postpone to Tomorrow
+                Archive Selected
               </button>
+
               {confirmDelete ? (
                 <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1">
                   <span className="text-xs text-red-700">
@@ -614,7 +669,6 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
       ) : (
         <div className="space-y-2">
           {visible.map((activity) => {
-            const isSelectable = bulkMode && !ARCHIVED_STATUSES.includes(activity.status);
             const isSelected = selectedIds.has(activity.id);
             return (
             <div
@@ -622,24 +676,20 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
               className={`flex flex-col gap-2 rounded-xl border bg-white p-4 sm:flex-row sm:items-center sm:justify-between transition ${
                 isSelected ? "border-indigo-300 bg-indigo-50/30" : "border-blue-50"
               }`}
-              onClick={isSelectable ? () => toggleSelect(activity.id) : undefined}
-              style={isSelectable ? { cursor: "pointer" } : undefined}
+              onClick={bulkMode ? () => toggleSelect(activity.id) : undefined}
+              style={bulkMode ? { cursor: "pointer" } : undefined}
             >
               {/* Bulk checkbox */}
               {bulkMode && (
                 <div className="flex-shrink-0 self-start sm:self-auto">
-                  {isSelectable ? (
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleSelect(activity.id)}
-                      onClick={(e) => e.stopPropagation()}
-                      className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
-                      aria-label={`Select ${activity.title}`}
-                    />
-                  ) : (
-                    <div className="h-4 w-4" aria-hidden />
-                  )}
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggleSelect(activity.id)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                    aria-label={`Select ${activity.title}`}
+                  />
                 </div>
               )}
 

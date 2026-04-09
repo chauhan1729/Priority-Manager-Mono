@@ -486,6 +486,55 @@ export async function bulkDeleteActivities(
 }
 
 // ---------------------------------------------------------------------------
+// Bulk status update
+// ---------------------------------------------------------------------------
+
+export async function bulkUpdateActivityStatus(
+  activityIds: string[],
+  status: string,
+): Promise<{ error?: string }> {
+  if (activityIds.length === 0) return {};
+
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("activities")
+    .update({ status, updated_at: new Date().toISOString() })
+    .in("id", activityIds)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidateAll();
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Bulk archive
+// ---------------------------------------------------------------------------
+
+export async function bulkArchiveActivities(
+  activityIds: string[],
+): Promise<{ error?: string }> {
+  if (activityIds.length === 0) return {};
+
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("activities")
+    .update({ archived: true, updated_at: new Date().toISOString() })
+    .in("id", activityIds)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidateAll();
+  return {};
+}
+
+// ---------------------------------------------------------------------------
 // Archive (soft-hide completed/cancelled activities)
 // ---------------------------------------------------------------------------
 

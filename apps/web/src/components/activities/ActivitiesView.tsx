@@ -12,8 +12,10 @@ import {
 import type { Activity, ActivitySection, Contact, Project } from "@pm/types";
 import {
   archiveActivity,
+  bulkArchiveActivities,
   bulkDeleteActivities,
   bulkMoveActivities,
+  bulkUpdateActivityStatus,
   carryForwardActivity,
   delegateActivity,
   deleteActivity,
@@ -91,6 +93,7 @@ export function ActivitiesView({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkTargetDate, setBulkTargetDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [bulkStatus, setBulkStatus] = useState("completed");
 
   const projectMap = new Map(projects.map((p) => [p.id, p.name]));
   const contactMap = new Map(contacts.map((c) => [c.id, c.full_name]));
@@ -183,9 +186,8 @@ export function ActivitiesView({
   }
 
   function toggleSelect(id: string) {
-    // Completed/cancelled activities cannot be bulk-edited
     const activity = activeActivities.find((a) => a.id === id);
-    if (!activity || activity.status === "completed" || activity.status === "cancelled") return;
+    if (!activity) return;
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -219,6 +221,36 @@ export function ActivitiesView({
         showToast(result.error, "error");
       } else {
         showToast(`${count} ${count === 1 ? "activity" : "activities"} deleted`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+    });
+  }
+
+  function handleBulkStatusChange() {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    startTransition(async () => {
+      const result = await bulkUpdateActivityStatus([...selectedIds], bulkStatus);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${count} ${count === 1 ? "activity" : "activities"} updated`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+    });
+  }
+
+  function handleBulkArchive() {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    startTransition(async () => {
+      const result = await bulkArchiveActivities([...selectedIds]);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${count} ${count === 1 ? "activity" : "activities"} archived`);
         setSelectedIds(new Set());
         setBulkMode(false);
       }
@@ -322,13 +354,38 @@ export function ActivitiesView({
               >
                 Move Selected
               </button>
+              {/* Set status */}
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-indigo-700 font-medium">Set status:</label>
+                <select
+                  value={bulkStatus}
+                  onChange={(e) => setBulkStatus(e.target.value)}
+                  className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
+                >
+                  <option value="not_started">Not Started</option>
+                  <option value="working">Working</option>
+                  <option value="completed">Completed</option>
+                  <option value="postponed">Postponed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+                <button
+                  onClick={handleBulkStatusChange}
+                  disabled={selectedIds.size === 0 || isPending}
+                  className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                >
+                  Apply
+                </button>
+              </div>
+
+              {/* Archive */}
               <button
-                onClick={() => handleBulkMove(addDays(selectedDate, 1))}
+                onClick={handleBulkArchive}
                 disabled={selectedIds.size === 0 || isPending}
-                className="rounded-lg border border-indigo-200 bg-white px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-40"
+                className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
-                Postpone to Tomorrow
+                Archive Selected
               </button>
+
               {confirmDelete ? (
                 <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1">
                   <span className="text-xs text-red-700">
