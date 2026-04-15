@@ -2,7 +2,13 @@
   "permissions": {
     "allow": [
       "Bash(node -e ':*)",
-      "Bash(xargs node:*)"
+      "Bash(xargs node:*)",
+      "Bash(grep -E \"\\\\.\\(svg|png|jpg|jpeg|webp\\)$\")",
+      "Bash(xargs ls *)",
+      "Bash(grep -c \"sm:\\\\|md:\\\\|lg:\\\\|xl:\" /c/Users/sonum/Documents/\"Antigravity Projects\"/\"Priority Manager App\"/apps/web/src/components/**/*.tsx)",
+      "Bash(npx tsc *)",
+      "Bash(npx expo *)",
+      "Bash(pnpm --filter web tsc --noEmit --skipLibCheck)"
     ]
   }
 }

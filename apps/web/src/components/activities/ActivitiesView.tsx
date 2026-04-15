@@ -266,11 +266,13 @@ export function ActivitiesView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="border-b border-blue-100 px-6 py-4 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-handwriting text-2xl text-ink">Activities</h1>
+      <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
+        {/* Row 1: Page title */}
+        <h1 className="font-handwriting text-2xl text-ink mb-2">Activities</h1>
 
+        {/* Row 2: Date nav + action buttons */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             {/* Date navigation */}
             <div className="flex items-center gap-0.5 rounded-lg border border-blue-100 bg-white px-1 py-0.5">
               <Link
@@ -280,7 +282,7 @@ export function ActivitiesView({
               >
                 ←
               </Link>
-              <span className="min-w-[120px] text-center text-sm font-medium text-ink px-1">
+              <span className="min-w-[110px] text-center text-sm font-medium text-ink px-1">
                 {formatHeaderDate(selectedDate)}
               </span>
               <Link
@@ -307,19 +309,21 @@ export function ActivitiesView({
                 setBulkTargetDate("");
                 setConfirmDelete(false);
               }}
-              className={`rounded-lg px-3 py-2 text-sm font-medium transition border ${
+              className={`rounded-lg px-3 py-1.5 text-sm font-medium transition border ${
                 bulkMode
                   ? "bg-indigo-50 border-indigo-200 text-indigo-700"
                   : "border-blue-100 bg-white text-ink-light hover:bg-blue-50 hover:text-blue-700"
               }`}
             >
-              {bulkMode ? "✕ Cancel Bulk" : "Bulk Edit"}
+              <span className="hidden sm:inline">{bulkMode ? "✕ Cancel" : "Bulk Edit"}</span>
+              <span className="sm:hidden">{bulkMode ? "✕" : "Bulk"}</span>
             </button>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition"
+              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition"
             >
-              {showAddForm ? "Cancel" : "+ Add Activity"}
+              <span className="hidden sm:inline">{showAddForm ? "Cancel" : "+ Activity"}</span>
+              <span className="sm:hidden">{showAddForm ? "✕" : "+"}</span>
             </button>
           </div>
         </div>
@@ -339,12 +343,13 @@ export function ActivitiesView({
 
       {/* Bulk action bar */}
       {bulkMode && (
-        <div className="border-b border-indigo-100 bg-indigo-50 px-6 py-3 md:px-8">
-          <div className="flex flex-wrap items-center gap-3">
+        <div className="border-b border-indigo-100 bg-indigo-50 px-4 py-3 md:px-8">
+          <div className="space-y-2">
             <span className="text-xs font-medium text-indigo-700">
               {selectedIds.size} selected — select activities below, then choose an action:
             </span>
-            <div className="flex items-center gap-2 flex-wrap">
+            {/* Row 1: Move to date */}
+            <div className="flex flex-wrap items-center gap-2">
               <label className="text-xs text-indigo-700 font-medium">Move to:</label>
               <input
                 type="date"
@@ -358,58 +363,57 @@ export function ActivitiesView({
                 disabled={!bulkTargetDate || selectedIds.size === 0 || isPending}
                 className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
               >
-                Move Selected
+                Move
               </button>
-              {/* Set status */}
-              <div className="flex items-center gap-1.5">
-                <label className="text-xs text-indigo-700 font-medium">Set status:</label>
-                <select
-                  value={bulkStatus}
-                  onChange={(e) => setBulkStatus(e.target.value)}
-                  className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
-                >
-                  <option value="not_started">Not Started</option>
-                  <option value="working">Working</option>
-                  <option value="completed">Completed</option>
-                  <option value="postponed">Postponed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-                <button
-                  onClick={handleBulkStatusChange}
-                  disabled={selectedIds.size === 0 || isPending}
-                  className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
-                >
-                  Apply
-                </button>
-              </div>
+            </div>
+            {/* Row 2: Set status + Archive + Delete */}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-indigo-700 font-medium">Set status:</label>
+              <select
+                value={bulkStatus}
+                onChange={(e) => setBulkStatus(e.target.value)}
+                className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
+              >
+                <option value="not_started">Not Started</option>
+                <option value="working">Working</option>
+                <option value="completed">Completed</option>
+                <option value="postponed">Postponed</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+              <button
+                onClick={handleBulkStatusChange}
+                disabled={selectedIds.size === 0 || isPending}
+                className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+              >
+                Apply
+              </button>
 
-              {/* Archive */}
               <button
                 onClick={handleBulkArchive}
                 disabled={!canBulkArchive || isPending}
                 title={!canBulkArchive && selectedIds.size > 0 ? "Only completed or cancelled activities can be archived" : undefined}
                 className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
-                Archive Selected
+                Archive
               </button>
 
               {confirmDelete ? (
                 <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1">
                   <span className="text-xs text-red-700">
-                    Delete {selectedIds.size} {selectedIds.size === 1 ? "activity" : "activities"}?
+                    Delete {selectedIds.size}?
                   </span>
                   <button
                     onClick={handleBulkDelete}
                     disabled={isPending}
                     className="rounded px-2 py-0.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50"
                   >
-                    Yes, delete
+                    Yes
                   </button>
                   <button
                     onClick={() => setConfirmDelete(false)}
                     className="text-xs text-ink-light hover:text-ink"
                   >
-                    Cancel
+                    No
                   </button>
                 </div>
               ) : (
@@ -418,7 +422,7 @@ export function ActivitiesView({
                   disabled={selectedIds.size === 0 || isPending}
                   className="rounded-lg border border-red-200 bg-white px-3 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
                 >
-                  Delete Selected
+                  Delete
                 </button>
               )}
             </div>

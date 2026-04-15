@@ -93,11 +93,13 @@ export function YearAtAGlanceView({ yearEntries, projects, year, currentYear }: 
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="border-b border-blue-100 px-6 py-4 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-handwriting text-2xl text-ink">Year at a Glance</h1>
+      <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
+        {/* Row 1: Page title */}
+        <h1 className="font-handwriting text-2xl text-ink mb-2">Year at a Glance</h1>
 
+        {/* Row 2: Year nav + stats + Add Entry */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             {/* Year navigation */}
             <div className="flex items-center gap-0.5 rounded-lg border border-blue-100 bg-white px-1 py-0.5">
               <Link
@@ -124,20 +126,20 @@ export function YearAtAGlanceView({ yearEntries, projects, year, currentYear }: 
                 This year
               </Link>
             )}
-          </div>
 
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-ink-light">
+            <span className="hidden sm:inline text-xs text-ink-light">
               {birthdays} {birthdays === 1 ? "birthday" : "birthdays"} · {travelAway} travel/away
             </span>
-            <button
-              type="button"
-              onClick={() => { setDefaultFormDate(""); setFormTarget("new"); }}
-              className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition"
-            >
-              + Add Entry
-            </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => { setDefaultFormDate(""); setFormTarget("new"); }}
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition"
+          >
+            <span className="hidden sm:inline">+ Add Entry</span>
+            <span className="sm:hidden">+</span>
+          </button>
         </div>
       </header>
 

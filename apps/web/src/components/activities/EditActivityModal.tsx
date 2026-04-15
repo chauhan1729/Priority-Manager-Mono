@@ -53,10 +53,10 @@ export function EditActivityModal({ activity, projects, onClose }: Props) {
   if (isCompleted) {
     return (
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+        className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
         onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
       >
-        <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+        <div className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
           <h2 className="font-handwriting text-xl text-ink mb-3">Activity</h2>
           <div className="rounded-lg border border-green-100 bg-green-50 px-4 py-3 text-sm text-green-800 mb-4">
             This activity is completed and cannot be edited.
@@ -75,12 +75,12 @@ export function EditActivityModal({ activity, projects, onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+      <div className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-white p-6 shadow-xl max-h-[90vh] overflow-y-auto">
         <h2 className="font-handwriting text-xl text-ink mb-5">Edit Activity</h2>
 
         <form action={formAction} className="space-y-4">

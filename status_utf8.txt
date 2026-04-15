@@ -1,0 +1,40 @@
+﻿ M .claude/settings.json
+ M apps/mobile/metro.config.js
+ M apps/mobile/package.json
+ M apps/web/src/app/(app)/layout.tsx
+ M apps/web/src/app/(app)/monthly-priorities/page.tsx
+ M apps/web/src/app/(app)/project-planner/page.tsx
+ M apps/web/src/app/globals.css
+ M apps/web/src/components/activities/ActivitiesView.tsx
+ M apps/web/src/components/activities/EditActivityModal.tsx
+ M apps/web/src/components/annual-strategies/AnnualStrategiesView.tsx
+ M apps/web/src/components/auth/SignOutButton.tsx
+ M apps/web/src/components/calendar/CalendarEventFormModal.tsx
+ M apps/web/src/components/calendar/CalendarView.tsx
+ M apps/web/src/components/communication/CommunicationPlannerView.tsx
+ M apps/web/src/components/communication/ContactFormModal.tsx
+ M apps/web/src/components/daily-plan/DailyPlanView.tsx
+ M apps/web/src/components/daily-plan/ScheduleBlockModal.tsx
+ M apps/web/src/components/daily-plan/ScheduleModal.tsx
+ M apps/web/src/components/daily-plan/SlotScheduleModal.tsx
+ M apps/web/src/components/daily-plan/UnscheduledList.tsx
+ M apps/web/src/components/expense-record/ExpenseRecordView.tsx
+ M apps/web/src/components/meeting/MeetingDetailModal.tsx
+ M apps/web/src/components/meeting/MeetingFormModal.tsx
+ M apps/web/src/components/meeting/MeetingPlannerView.tsx
+ M apps/web/src/components/monthly-priorities/MonthlyPrioritiesView.tsx
+ M apps/web/src/components/project/ProjectCard.tsx
+ M apps/web/src/components/project/ProjectForm.tsx
+ M apps/web/src/components/project/ProjectList.tsx
+ M apps/web/src/components/year-at-a-glance/YearAtAGlanceView.tsx
+ M apps/web/src/components/year-at-a-glance/YearEntryFormModal.tsx
+ M bugs.md
+ M pnpm-lock.yaml
+ D tasks.md
+?? apps/web/src/components/calendar/CalendarAgendaList.tsx
+?? apps/web/src/components/layout/
+?? apps/web/src/components/ui/MobileDrawer.tsx
+?? apps/web/src/hooks/useMediaQuery.ts
+?? status.txt
+?? status_utf8.txt
+?? ui-responsiveness.md

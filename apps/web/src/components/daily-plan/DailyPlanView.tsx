@@ -175,11 +175,13 @@ export function DailyPlanView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="border-b border-blue-100 px-6 py-4 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="font-handwriting text-2xl text-ink">Daily Plan</h1>
+      <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
+        {/* Row 1: Page title */}
+        <h1 className="font-handwriting text-2xl text-ink mb-2">Daily Plan</h1>
 
+        {/* Row 2: Date nav + actions */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             {/* Date navigation */}
             <div className="flex items-center gap-0.5 rounded-lg border border-blue-100 bg-white px-1 py-0.5">
               <Link
@@ -189,7 +191,7 @@ export function DailyPlanView({
               >
                 ←
               </Link>
-              <span className="min-w-[120px] text-center text-sm font-medium text-ink px-1">
+              <span className="min-w-[110px] text-center text-sm font-medium text-ink px-1">
                 {formatHeaderDate(selectedDate)}
               </span>
               <Link
@@ -209,15 +211,14 @@ export function DailyPlanView({
           </div>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs text-ink-light">
+            <span className="hidden sm:inline text-xs text-ink-light">
               {scheduleInstances.length} scheduled · {unscheduled.length} unscheduled
             </span>
-            {/* PDF export — opens print-optimized page, triggers browser print dialog */}
             <a
               href={`/daily-plan/print?date=${selectedDate}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-1 rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
+              className="hidden sm:flex items-center gap-1 rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
               title="Print / Save as PDF"
             >
               ⎙ PDF
@@ -240,10 +241,23 @@ export function DailyPlanView({
           />
         )}
 
-        {/* Main: timeline + unscheduled */}
-        <div className="flex flex-col xl:flex-row gap-5">
+        {/* Main: timeline + unscheduled — stacked on mobile, side-by-side on lg+ */}
+        <div className="flex flex-col lg:flex-row gap-5">
+          {/* Unscheduled list — collapsible on mobile, always visible on lg+ */}
+          <div className="lg:order-2 lg:w-80 lg:flex-shrink-0">
+            <UnscheduledList
+              activities={unscheduled}
+              projectMap={projectMap}
+              selectedDate={selectedDate}
+              isPending={isPending}
+              onSchedule={(activity) => setScheduleTarget(activity)}
+              onMoveToDate={handlePostpone}
+              collapsibleOnMobile
+            />
+          </div>
+
           {/* Timeline */}
-          <div className="flex-1 min-w-0">
+          <div className="lg:order-1 flex-1 min-w-0">
             <DailyTimeline
               scheduleInstances={scheduleInstances}
               activityMap={activityMap}
@@ -255,18 +269,6 @@ export function DailyPlanView({
               canSchedule={isToday || selectedDate > todayStr}
               onBlockClick={(instance) => setBlockModalTarget(instance)}
               onSlotClick={(startTime) => setSlotStartTime(startTime)}
-            />
-          </div>
-
-          {/* Unscheduled list */}
-          <div className="xl:w-80 xl:flex-shrink-0">
-            <UnscheduledList
-              activities={unscheduled}
-              projectMap={projectMap}
-              selectedDate={selectedDate}
-              isPending={isPending}
-              onSchedule={(activity) => setScheduleTarget(activity)}
-              onMoveToDate={handlePostpone}
             />
           </div>
         </div>

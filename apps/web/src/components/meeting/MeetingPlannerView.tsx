@@ -189,29 +189,33 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="border-b border-blue-100 px-6 py-4 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="font-handwriting text-2xl text-ink">Meeting Planner</h1>
-            {attentionCount > 0 && (
-              <p className="text-xs text-orange-600 mt-0.5">
-                {attentionCount} meeting{attentionCount > 1 ? "s" : ""} need your attention
-              </p>
-            )}
-          </div>
+      <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
+        {/* Row 1: Page title */}
+        <h1 className="font-handwriting text-2xl text-ink mb-2">Meeting Planner</h1>
+
+        {/* Row 2: Attention note + Schedule button */}
+        <div className="flex items-center justify-between gap-2">
+          {attentionCount > 0 ? (
+            <p className="text-xs text-orange-600">
+              {attentionCount} meeting{attentionCount > 1 ? "s" : ""} need your attention
+            </p>
+          ) : (
+            <span />
+          )}
           <button
             onClick={() => setShowCreateForm(true)}
             disabled={isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="flex-shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition"
           >
-            + Schedule Meeting
+            <span className="hidden sm:inline">+ Schedule Meeting</span>
+            <span className="sm:hidden">+</span>
           </button>
         </div>
       </header>
 
       {/* Tabs */}
       {(activeMeetings.length > 0 || archivedMeetings.length > 0) && (
-        <div className="flex items-center gap-1 border-b border-blue-100 px-6 md:px-8">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hide border-b border-blue-100 px-6 md:px-8">
           {(["upcoming", "past", "archived"] as const).map((tab) => {
             const count = tab === "upcoming" ? upcomingMeetings.length : tab === "past" ? pastMeetings.length : archivedMeetings.length;
             return (

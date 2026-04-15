@@ -28,11 +28,14 @@ config.resolver.disableHierarchicalLookup = true;
 // 4. Force semver to v7 — the hoisted .pnpm/node_modules copy is v6 (no
 //    functions/ subdirectory), but react-native-reanimated needs
 //    semver/functions/satisfies which only exists in semver v7+.
+//    Also alias react-native-web to the mobile app's own copy so Metro
+//    finds it even when pnpm hoists it to a deeply-nested virtual store path.
 config.resolver.extraNodeModules = {
   semver: path.resolve(
     workspaceRoot,
     'node_modules/.pnpm/semver@7.7.4/node_modules/semver'
   ),
+  'react-native-web': path.resolve(projectRoot, 'node_modules/react-native-web'),
 };
 
 module.exports = config;

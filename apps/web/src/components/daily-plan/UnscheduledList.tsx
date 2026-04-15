@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useIsDesktop } from "@/hooks/useMediaQuery";
 
 import { groupActivitiesBySection, todayISO } from "@pm/domain";
 import type { Activity, ActivitySection } from "@pm/types";
@@ -145,6 +146,8 @@ interface Props {
   isPending: boolean;
   onSchedule: (activity: Activity) => void;
   onMoveToDate: (activityId: string, toDate: string, linkedProjectId: string | null) => void;
+  /** On smaller screens, render with a collapse toggle (collapsed by default). */
+  collapsibleOnMobile?: boolean;
 }
 
 export function UnscheduledList({
@@ -154,7 +157,14 @@ export function UnscheduledList({
   isPending,
   onSchedule,
   onMoveToDate,
+  collapsibleOnMobile = false,
 }: Props) {
+  const isDesktop = useIsDesktop();
+  // Collapsed by default on mobile when collapsibleOnMobile is true
+  const [expanded, setExpanded] = useState(false);
+  // Once desktop is detected, always show expanded
+  const isCollapsible = collapsibleOnMobile && !isDesktop;
+
   const today = todayISO();
   const canSchedule = selectedDate >= today;
 
@@ -166,15 +176,43 @@ export function UnscheduledList({
 
   return (
     <div className="rounded-xl border border-blue-100 bg-white overflow-hidden">
-      <div className="px-4 py-3 border-b border-blue-50">
-        <h3 className="text-xs font-semibold text-ink-light uppercase tracking-wide">
-          Unscheduled
-        </h3>
-        <p className="text-xs text-ink-light mt-0.5">
-          {activities.length} {activities.length === 1 ? "activity" : "activities"} with remaining time
-        </p>
-      </div>
+      {/* Header — tappable to collapse on mobile */}
+      <button
+        type="button"
+        onClick={() => isCollapsible && setExpanded((v) => !v)}
+        className={[
+          "w-full px-4 py-3 border-b border-blue-50 text-left",
+          isCollapsible ? "cursor-pointer hover:bg-blue-50/40 transition" : "cursor-default",
+        ].join(" ")}
+        aria-expanded={isCollapsible ? expanded : undefined}
+      >
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-ink-light uppercase tracking-wide">
+            Unscheduled
+          </h3>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-ink-light">
+              {activities.length} {activities.length === 1 ? "activity" : "activities"}
+            </span>
+            {isCollapsible && (
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                className={`h-4 w-4 text-ink-light transition-transform ${expanded ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              >
+                <polyline points="5,7 10,13 15,7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            )}
+          </div>
+        </div>
+        {!isCollapsible && (
+          <p className="text-xs text-ink-light mt-0.5">with remaining time</p>
+        )}
+      </button>
 
+      {/* Body — hidden when collapsible and collapsed */}
+      {(!isCollapsible || expanded) && (
       <div className="p-3 space-y-3">
         {/* A-priority gate banner */}
         {canSchedule && hasUnscheduledAPriority && (
@@ -222,6 +260,7 @@ export function UnscheduledList({
           </p>
         )}
       </div>
+      )}
     </div>
   );
 }

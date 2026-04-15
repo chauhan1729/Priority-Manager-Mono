@@ -109,9 +109,6 @@ export default async function MonthlyPrioritiesPage({
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-blue-100 px-8 py-5">
-        <h1 className="font-handwriting text-2xl text-ink">Monthly Priorities</h1>
-      </header>
       <div className="flex-1 overflow-y-auto">
         <MonthlyPrioritiesView
           monthKey={monthKey}

@@ -96,10 +96,10 @@ export function MeetingDetailModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-lg rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh] overflow-hidden">
+      <div className="w-full max-w-lg rounded-t-2xl sm:rounded-2xl bg-white shadow-xl flex flex-col max-h-[90vh] overflow-hidden">
         {/* Header */}
         <div className="px-6 pt-6 pb-4 border-b border-blue-50">
           <div className="flex items-start justify-between gap-3">

@@ -211,7 +211,7 @@ export function AnnualStrategiesView({ goals, projects }: Props) {
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {sectionGoals.map((goal) => {
                     const linkedProjects = projects.filter(
                       (p) => p.linked_annual_goal_id === goal.id,

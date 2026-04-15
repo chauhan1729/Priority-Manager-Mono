@@ -82,10 +82,10 @@ export function SlotScheduleModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl space-y-4">
+      <div className="w-full max-w-sm rounded-t-2xl sm:rounded-2xl bg-white p-6 shadow-xl space-y-4 max-h-[90vh] overflow-y-auto">
         <div>
           <h2 className="font-handwriting text-xl text-ink">Schedule a block</h2>
           <p className="text-xs text-ink-light mt-0.5">Pick an activity to place at this time</p>

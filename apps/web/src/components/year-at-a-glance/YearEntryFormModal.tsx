@@ -124,8 +124,8 @@ export function YearEntryFormModal({ entry, defaultDate, isPending, onSave, onCl
       />
 
       {/* Modal */}
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden">
+      <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
+        <div className="relative w-full max-w-md bg-white rounded-t-2xl sm:rounded-2xl shadow-xl overflow-hidden max-h-[90vh] flex flex-col">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-blue-50">
             <h2 className="font-handwriting text-xl text-ink">

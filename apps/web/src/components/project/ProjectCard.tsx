@@ -47,7 +47,7 @@ export function ProjectCard({ project }: Props) {
   return (
     <Link
       href={`/project-planner/${project.id}`}
-      className="group flex flex-col rounded-xl border border-blue-100 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
+      className="group flex flex-col rounded-xl border border-blue-100 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md overflow-hidden min-w-0"
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-3">

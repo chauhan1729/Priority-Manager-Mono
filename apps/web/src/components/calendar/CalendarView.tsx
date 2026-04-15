@@ -20,6 +20,7 @@ import {
   upsertMonthNote,
 } from "@/app/(app)/calendar/actions";
 
+import { CalendarAgendaList } from "./CalendarAgendaList";
 import { CalendarEventFormModal } from "./CalendarEventFormModal";
 import { EventPopup } from "./EventPopup";
 import { MonthGrid } from "./MonthGrid";
@@ -168,11 +169,13 @@ export function CalendarView({
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="border-b border-blue-100 px-6 py-4 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <h1 className="font-handwriting text-2xl text-ink">Calendar</h1>
+      <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
+        {/* Row 1: Page title */}
+        <h1 className="font-handwriting text-2xl text-ink mb-2">Calendar</h1>
 
+        {/* Row 2: Month nav + Add Event */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
             {/* Month navigation */}
             <div className="flex items-center gap-0.5 rounded-lg border border-blue-100 bg-white px-1 py-0.5">
               <Link
@@ -182,7 +185,7 @@ export function CalendarView({
               >
                 ←
               </Link>
-              <span className="min-w-[160px] text-center text-sm font-medium text-ink px-1">
+              <span className="min-w-[140px] text-center text-sm font-medium text-ink px-1">
                 {formatMonthTitle(selectedMonth)}
               </span>
               <Link
@@ -204,24 +207,39 @@ export function CalendarView({
           <button
             onClick={() => setCreateDate(todayISO)}
             disabled={isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition"
           >
-            + Add Event
+            <span className="hidden sm:inline">+ Add Event</span>
+            <span className="sm:hidden">+</span>
           </button>
         </div>
       </header>
 
-      {/* Content: month grid */}
+      {/* Content: agenda list on mobile, month grid on md+ */}
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 space-y-4">
-        <MonthGrid
-          selectedMonth={selectedMonth}
-          eventsByDate={eventsByDate}
-          awayEntries={awayEntries}
-          contactMap={contactMap}
-          todayISO={todayISO}
-          onDayClick={handleDayClick}
-          onEventClick={handleEventClick}
-        />
+        {/* Mobile agenda list */}
+        <div className="md:hidden">
+          <CalendarAgendaList
+            selectedMonth={selectedMonth}
+            eventsByDate={eventsByDate}
+            todayISO={todayISO}
+            onDayClick={handleDayClick}
+            onEventClick={handleEventClick}
+          />
+        </div>
+
+        {/* Desktop/tablet month grid */}
+        <div className="hidden md:block">
+          <MonthGrid
+            selectedMonth={selectedMonth}
+            eventsByDate={eventsByDate}
+            awayEntries={awayEntries}
+            contactMap={contactMap}
+            todayISO={todayISO}
+            onDayClick={handleDayClick}
+            onEventClick={handleEventClick}
+          />
+        </div>
 
         {/* Monthly notes area — spec §10.2 */}
         <div className="rounded-xl border border-blue-100 bg-white p-4">

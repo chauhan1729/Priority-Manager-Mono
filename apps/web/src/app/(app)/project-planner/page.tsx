@@ -77,10 +77,7 @@ export default async function ProjectPlannerPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-blue-100 px-8 py-5">
-        <h1 className="font-handwriting text-2xl text-ink">Project Planner</h1>
-      </header>
-      <div className="flex-1 overflow-y-auto p-6 md:p-8">
+      <div className="flex-1 overflow-y-auto px-4 py-5 md:px-8">
         <ProjectList projects={projectsWithMetrics} />
       </div>
     </div>

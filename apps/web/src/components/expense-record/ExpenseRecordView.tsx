@@ -152,54 +152,61 @@ export function ExpenseRecordView({
   ].filter(Boolean).length;
 
   return (
-    <div className="relative min-h-full">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="flex items-center justify-between gap-4 px-6 py-4 md:px-8 border-b border-blue-50">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => goToMonth(prevKey)}
-            className="rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
-          >
-            ← {formatMonthLabel(prevKey).split(" ")[0]}
-          </button>
-          <h2 className="font-handwriting text-xl text-ink px-2">{monthLabel}</h2>
-          <button
-            onClick={() => goToMonth(nextKey)}
-            className="rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
-          >
-            {formatMonthLabel(nextKey).split(" ")[0]} →
-          </button>
-        </div>
+      <div className="px-4 py-3 md:px-8 md:py-4 border-b border-blue-50">
+        {/* Row 1: Page title */}
+        <h1 className="font-handwriting text-2xl text-ink mb-2">Expense Record</h1>
 
-        <div className="flex items-center gap-2">
-          {/* Export CSV */}
-          <a
-            href={`/expense-record/export?month=${viewingMonthKey}`}
-            download
-            className="flex items-center gap-1 rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
-          >
-            ↓ CSV
-          </a>
-          <button
-            onClick={() => setShowFilters((v) => !v)}
-            className={`flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition ${
-              showFilters || activeFilterCount > 0
-                ? "border-blue-500 bg-blue-50 text-blue-700"
-                : "border-blue-200 text-ink-light hover:border-blue-400 hover:text-ink"
-            }`}
-          >
-            ⚙ Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
-          </button>
-          <button
-            onClick={() => setFormTarget("new")}
-            className="flex items-center gap-1 rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition"
-          >
-            + Add expense
-          </button>
+        {/* Row 2: Month navigation + controls */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => goToMonth(prevKey)}
+              className="rounded-lg border border-blue-100 px-2 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
+            >
+              ←
+            </button>
+            <span className="font-handwriting text-lg text-ink px-1">{monthLabel}</span>
+            <button
+              onClick={() => goToMonth(nextKey)}
+              className="rounded-lg border border-blue-100 px-2 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
+            >
+              →
+            </button>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {/* Export CSV */}
+            <a
+              href={`/expense-record/export?month=${viewingMonthKey}`}
+              download
+              className="flex items-center gap-1 rounded-lg border border-blue-200 px-2.5 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
+            >
+              ↓ CSV
+            </a>
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition ${
+                showFilters || activeFilterCount > 0
+                  ? "border-blue-500 bg-blue-50 text-blue-700"
+                  : "border-blue-200 text-ink-light hover:border-blue-400 hover:text-ink"
+              }`}
+            >
+              Filters{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
+            </button>
+            <button
+              onClick={() => setFormTarget("new")}
+              className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 transition"
+            >
+              <span className="hidden sm:inline">+ Add Expense</span>
+              <span className="sm:hidden">+</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <div className="px-6 py-6 md:px-8 space-y-6">
+      <div className="flex-1 overflow-y-auto px-4 py-5 md:px-8 space-y-6">
         {/* Summary strip — always shows current day/week/month totals */}
         <SummaryStrip
           todayTotal={todayTotal}
@@ -380,7 +387,7 @@ export function ExpenseRecordView({
                 </div>
 
                 {/* Cards */}
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                   {dayExpenses.map((expense) => {
                     const linkedProject = projects.find(
                       (p) => p.id === expense.linked_project_id,

@@ -153,32 +153,34 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="border-b border-blue-100 px-6 py-4 md:px-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
+        {/* Row 1: Page title + Add Contact */}
+        <div className="flex items-center justify-between gap-2 mb-2">
           <h1 className="font-handwriting text-2xl text-ink">Communication Planner</h1>
           <button
             onClick={() => setShowAddForm(true)}
             disabled={isPending}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+            className="flex-shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50 transition"
           >
-            + Add Contact
+            <span className="hidden sm:inline">+ Add Contact</span>
+            <span className="sm:hidden">+</span>
           </button>
         </div>
 
-        {/* Search + filter + sort */}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+        {/* Row 2: Search + filter + sort */}
+        <div className="flex flex-wrap items-center gap-2">
           <input
             type="search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by name, company, email, or note…"
-            className="flex-1 min-w-48 rounded-lg border border-blue-100 px-3 py-1.5 text-sm text-ink placeholder:text-ink-light/50 focus:border-blue-400 focus:outline-none"
+            placeholder="Search contacts…"
+            className="flex-1 min-w-0 rounded-lg border border-blue-100 px-3 py-1.5 text-sm text-ink placeholder:text-ink-light/50 focus:border-blue-400 focus:outline-none"
           />
 
           <select
             value={categoryFilter}
             onChange={(e) => setCategoryFilter(e.target.value as ContactCategory | "all")}
-            className="rounded-lg border border-blue-100 px-3 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
+            className="rounded-lg border border-blue-100 px-2.5 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
           >
             {CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -190,7 +192,7 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
           <select
             value={sort}
             onChange={(e) => setSort(e.target.value as ContactSortKey)}
-            className="rounded-lg border border-blue-100 px-3 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
+            className="rounded-lg border border-blue-100 px-2.5 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
           >
             {SORT_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -237,7 +239,7 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
           </div>
         ) : (
           // Contact grid
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((contact) => (
               <ContactCard
                 key={contact.id}

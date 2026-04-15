@@ -185,26 +185,32 @@ export function MonthlyPrioritiesView({
 
   return (
     <div className="relative min-h-full">
-      {/* Month navigation toolbar */}
-      <div className="flex items-center justify-between gap-4 px-6 py-4 md:px-8 border-b border-blue-50">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => goToMonth(prevKey)}
-            className="rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
-          >
-            ← {formatMonthLabel(prevKey).split(" ")[0]}
-          </button>
-          <h2 className="font-handwriting text-xl text-ink px-2">{monthLabel}</h2>
-          <button
-            onClick={() => goToMonth(nextKey)}
-            className="rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
-          >
-            {formatMonthLabel(nextKey).split(" ")[0]} →
-          </button>
+      {/* Header */}
+      <div className="px-4 py-3 md:px-8 md:py-4 border-b border-blue-50">
+        {/* Row 1: Page title */}
+        <h1 className="font-handwriting text-2xl text-ink mb-2">Monthly Priorities</h1>
+
+        {/* Row 2: Month nav + stats */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => goToMonth(prevKey)}
+              className="rounded-lg border border-blue-100 px-2 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
+            >
+              ←
+            </button>
+            <span className="font-handwriting text-lg text-ink px-1">{monthLabel}</span>
+            <button
+              onClick={() => goToMonth(nextKey)}
+              className="rounded-lg border border-blue-100 px-2 py-1 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
+            >
+              →
+            </button>
+          </div>
+          <p className="text-xs text-ink-light">
+            {priorities.length} total · {priorities.filter((p) => p.pinned).length} pinned
+          </p>
         </div>
-        <p className="text-xs text-ink-light">
-          {priorities.length} total · {priorities.filter((p) => p.pinned).length} pinned
-        </p>
       </div>
 
       {/* 2 sections */}
@@ -250,7 +256,7 @@ export function MonthlyPrioritiesView({
                   </p>
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                   {sectionPriorities.map((priority) => {
                     const projectProgress = priority.linked_project_id
                       ? (projectProgressMap[priority.linked_project_id] ?? null)

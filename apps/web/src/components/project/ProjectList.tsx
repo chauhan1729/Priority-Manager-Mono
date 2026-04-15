@@ -34,56 +34,57 @@ export function ProjectList({ projects }: Props) {
     );
 
   return (
-    <div className="space-y-6">
-      {/* Header row */}
-      <div className="flex flex-col gap-4">
-        {/* Search + New Project */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative flex-1 max-w-sm">
-            <span className="absolute inset-y-0 left-3 flex items-center text-ink-light pointer-events-none text-sm">
-              ⌕
-            </span>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search projects…"
-              className="w-full rounded-lg border border-blue-100 bg-white pl-8 pr-3 py-2 text-sm text-ink placeholder:text-ink-light/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
-            />
-            {search && (
-              <button
-                onClick={() => setSearch("")}
-                className="absolute inset-y-0 right-2 flex items-center px-1 text-ink-light hover:text-ink text-sm"
-                aria-label="Clear search"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700"
-          >
-            <span className="text-base leading-none">+</span> New Project
-          </button>
-        </div>
+    <div className="space-y-4">
+      {/* Page title + Search + New Project */}
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <h1 className="font-handwriting text-2xl text-ink">Project Planner</h1>
+        <button
+          onClick={() => setShowForm(true)}
+          className="flex-shrink-0 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
+        >
+          <span className="hidden sm:inline">+ New Project</span>
+          <span className="sm:hidden">+</span>
+        </button>
+      </div>
 
-        {/* Status filter chips */}
-        <div className="flex flex-wrap gap-2">
-          {STATUS_FILTERS.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                statusFilter === f.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-blue-50 text-ink-light hover:bg-blue-100 hover:text-blue-700"
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+      {/* Search */}
+      <div className="relative">
+        <span className="absolute inset-y-0 left-3 flex items-center text-ink-light pointer-events-none text-sm">
+          ⌕
+        </span>
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search projects…"
+          className="w-full rounded-lg border border-blue-100 bg-white pl-8 pr-3 py-2 text-sm text-ink placeholder:text-ink-light/50 focus:border-blue-400 focus:outline-none"
+        />
+        {search && (
+          <button
+            onClick={() => setSearch("")}
+            className="absolute inset-y-0 right-2 flex items-center px-1 text-ink-light hover:text-ink text-sm"
+            aria-label="Clear search"
+          >
+            ✕
+          </button>
+        )}
+      </div>
+
+      {/* Status filter chips */}
+      <div className="flex gap-1.5 overflow-x-auto scrollbar-hide pb-0.5">
+        {STATUS_FILTERS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setStatusFilter(f.value)}
+            className={`flex-shrink-0 rounded-full px-3 py-1 text-xs font-medium transition ${
+              statusFilter === f.value
+                ? "bg-blue-600 text-white"
+                : "bg-blue-50 text-ink-light hover:bg-blue-100 hover:text-blue-700"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {/* Project grid */}
@@ -91,7 +92,7 @@ export function ProjectList({ projects }: Props) {
         <div className="rounded-xl border border-dashed border-blue-200 bg-white px-8 py-16 text-center">
           {search ? (
             <>
-              <p className="font-handwriting text-lg text-ink-light">No projects match "{search}"</p>
+              <p className="font-handwriting text-lg text-ink-light">No projects match &ldquo;{search}&rdquo;</p>
               <button onClick={() => setSearch("")} className="mt-2 text-xs text-blue-600 hover:underline">
                 Clear search
               </button>
@@ -112,7 +113,7 @@ export function ProjectList({ projects }: Props) {
           )}
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((project) => (
             <ProjectCard key={project.id} project={project} />
           ))}
