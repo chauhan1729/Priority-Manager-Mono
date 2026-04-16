@@ -33,9 +33,17 @@ interface Props {
   onClose: () => void;
 }
 
+function isoToDate(iso: string): Date {
+  return new Date(`${iso}T12:00:00`);
+}
+
+function dateToIso(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 export function DelegatedActivityFormModal({ visible, contactId, contactName, onClose }: Props) {
   const [title, setTitle] = useState('');
-  const [date, setDate] = useState(todayISO());
+  const [date, setDate] = useState<Date>(() => isoToDate(todayISO()));
   const [durationMinutes, setDurationMinutes] = useState(30);
   const [isCustom, setIsCustom] = useState(false);
   const [customDuration, setCustomDuration] = useState('');
@@ -47,7 +55,7 @@ export function DelegatedActivityFormModal({ visible, contactId, contactName, on
   useEffect(() => {
     if (!visible) return;
     setTitle('');
-    setDate(todayISO());
+    setDate(isoToDate(todayISO()));
     setDurationMinutes(30);
     setIsCustom(false);
     setCustomDuration('');
@@ -59,14 +67,15 @@ export function DelegatedActivityFormModal({ visible, contactId, contactName, on
 
   const handleSave = () => {
     setError(null);
+    const isoDate = dateToIso(date);
     if (!title.trim()) { setError('Title is required.'); return; }
-    if (!canCreateActivityOnDate(date)) { setError('Cannot create activities in the past.'); return; }
+    if (!canCreateActivityOnDate(isoDate)) { setError('Cannot create activities in the past.'); return; }
     if (effectiveDuration <= 0) { setError('Duration must be positive.'); return; }
 
     createMutation.mutate(
       {
         title: title.trim(),
-        activity_date: date,
+        activity_date: isoDate,
         section_type: 'delegated',
         delegated_contact_id: contactId,
         estimated_minutes: effectiveDuration,
@@ -137,7 +146,7 @@ export function DelegatedActivityFormModal({ visible, contactId, contactName, on
               label="Due Date"
               value={date}
               onChange={setDate}
-              minimumDate={todayISO()}
+              minimumDate={isoToDate(todayISO())}
             />
           </View>
 

@@ -17,9 +17,12 @@ import {
   filterContactsByCategory,
   filterContactsBySearch,
   sortContacts,
+  type ContactSortKey,
 } from '@pm/domain';
 import type { Contact, ContactCategory } from '@pm/types';
 import { useContacts, useDeleteContact } from '../src/hooks/useContacts';
+import { supabase } from '../src/lib/supabase/client';
+import { useAuth } from '../src/components/providers/AuthProvider';
 import {
   ContactCard,
   ContactDetailScreen,
@@ -44,20 +47,34 @@ const CATEGORIES: { label: string; value: ContactCategory | 'all' }[] = [
   { label: 'Other',        value: 'other' },
 ];
 
+const SORT_OPTIONS: { label: string; value: ContactSortKey }[] = [
+  { label: 'Name',              value: 'name' },
+  { label: 'Category',          value: 'category' },
+  { label: 'Recently updated',  value: 'updated' },
+];
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
 
 export default function CommunicationPlannerScreen() {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<ContactCategory | 'all'>('all');
-  const [selectedContact, setSelectedContact] = useState<Contact | null>(null);
+  const [sortKey, setSortKey] = useState<ContactSortKey>('name');
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
   const [editContact, setEditContact] = useState<Contact | null>(null);
 
   const { data: allContacts = [], isLoading, refetch } = useContacts();
   const [refreshing, setRefreshing] = useState(false);
+
+  // Look up live contact from the list so edits refresh the detail view
+  const selectedContact = useMemo(
+    () => (selectedContactId ? allContacts.find((c) => c.id === selectedContactId) ?? null : null),
+    [allContacts, selectedContactId],
+  );
 
   const handleRefresh = async () => {
     setRefreshing(true);
@@ -69,19 +86,19 @@ export default function CommunicationPlannerScreen() {
   const filteredContacts = useMemo(() => {
     let list = filterContactsByCategory(allContacts, activeCategory);
     list = filterContactsBySearch(list, search);
-    return sortContacts(list, 'name');
-  }, [allContacts, activeCategory, search]);
+    return sortContacts(list, sortKey);
+  }, [allContacts, activeCategory, search, sortKey]);
 
   // -- handlers ---------------------------------------------------------------
 
   const handleCardPress = (contact: Contact) => {
-    setSelectedContact(contact);
+    setSelectedContactId(contact.id);
     setDetailVisible(true);
   };
 
   const handleDetailClose = () => {
     setDetailVisible(false);
-    setSelectedContact(null);
+    setSelectedContactId(null);
   };
 
   const handleDetailEdit = (contact: Contact) => {
@@ -94,6 +111,33 @@ export default function CommunicationPlannerScreen() {
     setEditContact(null);
     setFormVisible(true);
   };
+
+  const handleSortPress = () => {
+    const labels = SORT_OPTIONS.map((o) => o.label);
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Cancel', ...labels],
+          cancelButtonIndex: 0,
+          title: 'Sort by',
+        },
+        (idx) => {
+          if (idx > 0) setSortKey(SORT_OPTIONS[idx - 1]!.value);
+        },
+      );
+    } else {
+      Alert.alert('Sort by', undefined, [
+        { text: 'Cancel', style: 'cancel' },
+        ...SORT_OPTIONS.map((o) => ({
+          text: o.label,
+          onPress: () => setSortKey(o.value),
+        })),
+      ]);
+    }
+  };
+
+  const activeSortLabel =
+    SORT_OPTIONS.find((o) => o.value === sortKey)?.label ?? 'Name';
 
   const handleFormClose = () => {
     setFormVisible(false);
@@ -139,12 +183,30 @@ export default function CommunicationPlannerScreen() {
     }
   };
 
-  const confirmDelete = (contact: Contact, mode: 'soft' | 'unlink') => {
+  const confirmDelete = async (contact: Contact, mode: 'soft' | 'unlink') => {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-    const message =
-      mode === 'unlink'
-        ? `Delete ${contact.full_name} and unlink all delegated tasks? Tasks will be kept but no longer assigned to this contact.`
-        : `Delete ${contact.full_name}? Their meeting and activity history will be preserved.`;
+
+    // Fetch exact count of active delegated activities for accurate message
+    let count = 0;
+    if (user) {
+      const { count: dbCount } = await supabase
+        .from('activities')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('delegated_contact_id', contact.id)
+        .not('status', 'in', '(completed,cancelled)');
+      count = dbCount ?? 0;
+    }
+
+    const plural = (n: number, s: string, p: string) => (n === 1 ? s : p);
+    let message: string;
+    if (count === 0) {
+      message = `Delete ${contact.full_name}? No linked activities — the contact will be removed safely.`;
+    } else if (mode === 'unlink') {
+      message = `Delete ${contact.full_name} and unlink ${count} delegated ${plural(count, 'activity', 'activities')}? The ${plural(count, 'activity', 'activities')} will be preserved without a contact reference.`;
+    } else {
+      message = `Delete ${contact.full_name}? ${count} linked delegated ${plural(count, 'activity', 'activities')} will remain in history but lose the contact reference.`;
+    }
 
     Alert.alert('Confirm Delete', message, [
       { text: 'Cancel', style: 'cancel' },
@@ -170,6 +232,9 @@ export default function CommunicationPlannerScreen() {
       {/* Action bar */}
       <View style={styles.header}>
         <View style={{ flex: 1 }} />
+        <TouchableOpacity style={styles.sortBtn} onPress={handleSortPress}>
+          <Text style={styles.sortBtnText}>Sort: {activeSortLabel}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.addBtn} onPress={handleAddPress}>
           <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
@@ -215,7 +280,6 @@ export default function CommunicationPlannerScreen() {
       {/* Contact list */}
       <FlashList
         data={filteredContacts}
-        estimatedItemSize={76}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <ContactCard
@@ -286,6 +350,21 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.handwriting,
     fontSize: fontSize['2xl'],
     color: colors.ink.DEFAULT,
+  },
+  sortBtn: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.blue[200],
+    backgroundColor: colors.blue[50],
+    marginRight: spacing.sm,
+  },
+  sortBtnText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: colors.blue[700],
   },
   addBtn: {
     width: 34,

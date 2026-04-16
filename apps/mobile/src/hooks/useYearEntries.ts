@@ -294,6 +294,7 @@ export function useDeleteYearEntry() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: yearEntryKeys.all });
+      qc.invalidateQueries({ queryKey: ['projects'] });
       qc.invalidateQueries({ queryKey: ['calendarEvents'] });
     },
   });

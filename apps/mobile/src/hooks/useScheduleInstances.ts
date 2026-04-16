@@ -27,18 +27,13 @@ export function useScheduleInstancesForDate(date: string) {
   return useQuery({
     queryKey: scheduleKeys.forDate(date),
     queryFn: async () => {
+      // Plain select — matches web's approach. Nested PostgREST joins
+      // (activity:source_activity_id) can fail on relationship inference and
+      // cause the whole query to error. Activity/meeting details are joined
+      // in JS via separate queries (useActivitiesForDate, useMeetingsForDate).
       const { data, error } = await supabase
         .from('schedule_instances')
-        .select(`
-          *,
-          activity:source_activity_id (
-            id, title, priority, status, section_type,
-            estimated_minutes, remaining_minutes, linked_project_id
-          ),
-          meeting:source_meeting_id (
-            id, title, location, agenda
-          )
-        `)
+        .select('*')
         .eq('user_id', user!.id)
         .eq('schedule_date', date)
         .order('start_at', { ascending: true });
@@ -123,23 +118,28 @@ export function useScheduleActivity() {
         );
       }
 
-      // 5. Insert schedule instance
-      const { error: insertErr } = await supabase.from('schedule_instances').insert({
-        user_id: user.id,
-        source_type: 'activity',
-        source_activity_id: activityId,
-        source_meeting_id: null,
-        source_event_id: null,
-        schedule_date: scheduleDate,
-        start_at: startAt,
-        end_at: endAt,
-        locked_minutes: lockedMinutes,
-        focus_minutes: focusMinutes,
-        status_snapshot: 'upcoming',
-        keep_as_history: true,
-      });
+      // 5. Insert schedule instance — use .select() so we can verify a row actually came back
+      const { data: inserted, error: insertErr } = await supabase
+        .from('schedule_instances')
+        .insert({
+          user_id: user.id,
+          source_type: 'activity',
+          source_activity_id: activityId,
+          source_meeting_id: null,
+          source_event_id: null,
+          schedule_date: scheduleDate,
+          start_at: startAt,
+          end_at: endAt,
+          locked_minutes: lockedMinutes,
+          focus_minutes: focusMinutes,
+          status_snapshot: 'upcoming',
+          keep_as_history: true,
+        })
+        .select()
+        .single();
 
       if (insertErr) throw new Error(insertErr.message);
+      if (!inserted) throw new Error('Insert returned no row (RLS or constraint issue)');
 
       // 6. Decrement remaining_minutes on activity
       const newRemaining = Math.max(0, activity.remaining_minutes - focusMinutes);
@@ -151,9 +151,13 @@ export function useScheduleActivity() {
 
       return { linkedProjectId: activity.linked_project_id };
     },
-    onSuccess: (data, vars) => {
-      qc.invalidateQueries({ queryKey: scheduleKeys.forDate(vars.scheduleDate) });
+    onSuccess: async (data, vars) => {
+      // Force an immediate refetch (not just invalidate) so the UI sees the new
+      // block before any auto-scroll or modal close animation runs.
+      await qc.refetchQueries({ queryKey: scheduleKeys.forDate(vars.scheduleDate) });
       qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['calendar_events'] });
+      qc.invalidateQueries({ queryKey: ['meetings'] });
       if (data?.linkedProjectId) {
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
@@ -229,6 +233,8 @@ export function useUnscheduleActivity() {
         qc.invalidateQueries({ queryKey: scheduleKeys.forDate(data.scheduleDate) });
       }
       qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['calendar_events'] });
+      qc.invalidateQueries({ queryKey: ['meetings'] });
       if (data?.linkedProjectId) {
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
@@ -338,6 +344,8 @@ export function useUnscheduleRunningBlock() {
         qc.invalidateQueries({ queryKey: scheduleKeys.forDate(data.scheduleDate) });
       }
       qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['calendar_events'] });
+      qc.invalidateQueries({ queryKey: ['meetings'] });
       if (data?.linkedProjectId) {
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
@@ -361,24 +369,66 @@ export function useUpdateScheduleBlockStatus() {
     }) => {
       if (!user) throw new Error('Not authenticated');
 
-      // Fetch instance to get source_activity_id
+      // Fetch instance with ALL timing fields — needed for early-completion truncation
       const { data: instance } = await supabase
         .from('schedule_instances')
-        .select('source_activity_id, source_type')
+        .select('source_activity_id, source_type, start_at, end_at, focus_minutes, locked_minutes')
         .eq('id', instanceId)
         .eq('user_id', user.id)
         .single();
 
-      // Update schedule block status
-      const { error } = await supabase
-        .from('schedule_instances')
-        .update({ status_snapshot: status, updated_at: new Date().toISOString() })
-        .eq('id', instanceId)
-        .eq('user_id', user.id);
+      const now = new Date();
+      const nowISO = now.toISOString();
 
-      if (error) throw new Error(error.message);
+      // Early completion: if marking complete before scheduled end, truncate the block
+      // to elapsed time and restore unworked minutes to the activity.
+      let workedMinutes = 0;
+      let unworkedMinutes = 0;
+      const originalFocus: number = instance?.focus_minutes ?? instance?.locked_minutes ?? 0;
 
-      // Sync to activity status
+      if (status === 'completed' && instance?.start_at && instance?.end_at) {
+        const startMs = new Date(instance.start_at).getTime();
+        const endMs = new Date(instance.end_at).getTime();
+        const isEarly = now.getTime() < endMs;
+        if (isEarly) {
+          const elapsed = Math.max(1, Math.floor((now.getTime() - startMs) / 60_000));
+          workedMinutes = Math.min(elapsed, originalFocus);
+          unworkedMinutes = Math.max(0, originalFocus - workedMinutes);
+          // Truncate the block to elapsed time
+          const { error: truncErr } = await supabase
+            .from('schedule_instances')
+            .update({
+              end_at: nowISO,
+              locked_minutes: workedMinutes,
+              focus_minutes: workedMinutes,
+              status_snapshot: 'completed',
+              updated_at: nowISO,
+            })
+            .eq('id', instanceId)
+            .eq('user_id', user.id);
+          if (truncErr) throw new Error(truncErr.message);
+        } else {
+          // On-time or late completion — credit full focus, don't truncate
+          workedMinutes = originalFocus;
+          unworkedMinutes = 0;
+          const { error } = await supabase
+            .from('schedule_instances')
+            .update({ status_snapshot: status, updated_at: nowISO })
+            .eq('id', instanceId)
+            .eq('user_id', user.id);
+          if (error) throw new Error(error.message);
+        }
+      } else {
+        // Non-completion status change
+        const { error } = await supabase
+          .from('schedule_instances')
+          .update({ status_snapshot: status, updated_at: nowISO })
+          .eq('id', instanceId)
+          .eq('user_id', user.id);
+        if (error) throw new Error(error.message);
+      }
+
+      // Sync to activity status + hours_worked / remaining_minutes
       if (instance?.source_type === 'activity' && instance.source_activity_id) {
         const activityStatusMap: Record<string, string | null> = {
           completed: 'completed',
@@ -392,32 +442,34 @@ export function useUpdateScheduleBlockStatus() {
         if (activityStatus) {
           const { data: activity } = await supabase
             .from('activities')
-            .select('linked_project_id, hours_worked')
+            .select('linked_project_id, hours_worked, remaining_minutes, estimated_minutes')
             .eq('id', instance.source_activity_id)
             .eq('user_id', user.id)
             .single();
 
-          // When block completes, credit focus_minutes to hours_worked
-          const { data: blockData } = await supabase
-            .from('schedule_instances')
-            .select('focus_minutes, locked_minutes')
-            .eq('id', instanceId)
-            .eq('user_id', user.id)
-            .single();
+          const update: Record<string, unknown> = {
+            status: activityStatus,
+            updated_at: nowISO,
+          };
 
-          const workedMinutes = blockData?.focus_minutes ?? blockData?.locked_minutes ?? 0;
-          const hoursWorkedUpdate =
-            status === 'completed' && activity
-              ? { hours_worked: (activity.hours_worked ?? 0) + workedMinutes }
-              : {};
+          if (status === 'completed' && activity) {
+            const newHoursWorked = (activity.hours_worked ?? 0) + workedMinutes;
+            update.hours_worked = newHoursWorked;
+            // Restore unworked portion to remaining_minutes (capped at what's left of estimated)
+            if (unworkedMinutes > 0) {
+              update.remaining_minutes = Math.max(
+                0,
+                Math.min(
+                  activity.remaining_minutes + unworkedMinutes,
+                  activity.estimated_minutes - newHoursWorked,
+                ),
+              );
+            }
+          }
 
           await supabase
             .from('activities')
-            .update({
-              status: activityStatus,
-              updated_at: new Date().toISOString(),
-              ...hoursWorkedUpdate,
-            })
+            .update(update)
             .eq('id', instance.source_activity_id)
             .eq('user_id', user.id);
 
@@ -432,6 +484,8 @@ export function useUpdateScheduleBlockStatus() {
         qc.invalidateQueries({ queryKey: scheduleKeys.forDate(data.scheduleDate) });
       }
       qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['calendar_events'] });
+      qc.invalidateQueries({ queryKey: ['meetings'] });
       if (data?.linkedProjectId) {
         qc.invalidateQueries({ queryKey: ['projects'] });
       }

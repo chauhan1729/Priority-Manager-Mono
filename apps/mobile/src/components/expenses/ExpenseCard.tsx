@@ -33,6 +33,9 @@ const CATEGORY_COLORS: Record<ExpenseCategory, { bg: string; text: string }> = {
 
 interface Props {
   expense: Expense;
+  projectName?: string | null;
+  contactName?: string | null;
+  tripTitle?: string | null;
   onPress: () => void;
   onLongPress: () => void;
 }
@@ -41,8 +44,16 @@ interface Props {
 // Component
 // ---------------------------------------------------------------------------
 
-function ExpenseCardBase({ expense, onPress, onLongPress }: Props) {
+function ExpenseCardBase({
+  expense,
+  projectName,
+  contactName,
+  tripTitle,
+  onPress,
+  onLongPress,
+}: Props) {
   const catStyle = CATEGORY_COLORS[expense.category] ?? CATEGORY_COLORS.other;
+  const hasLinks = !!projectName || !!contactName || !!tripTitle;
 
   return (
     <TouchableOpacity
@@ -83,6 +94,27 @@ function ExpenseCardBase({ expense, onPress, onLongPress }: Props) {
           </View>
         ) : null}
       </View>
+
+      {/* Linked-record chips: project / contact / trip */}
+      {hasLinks ? (
+        <View style={styles.linksRow}>
+          {projectName ? (
+            <View style={[styles.linkChip, styles.linkChipProject]}>
+              <Text style={styles.linkChipText} numberOfLines={1}>📁 {projectName}</Text>
+            </View>
+          ) : null}
+          {contactName ? (
+            <View style={[styles.linkChip, styles.linkChipContact]}>
+              <Text style={styles.linkChipText} numberOfLines={1}>👤 {contactName}</Text>
+            </View>
+          ) : null}
+          {tripTitle ? (
+            <View style={[styles.linkChip, styles.linkChipTrip]}>
+              <Text style={styles.linkChipText} numberOfLines={1}>✈ {tripTitle}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -174,5 +206,25 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: '500',
     color: colors.green[700],
+  },
+  linksRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: 2,
+  },
+  linkChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+    maxWidth: '60%',
+  },
+  linkChipProject: { backgroundColor: colors.blue[50] },
+  linkChipContact: { backgroundColor: colors.emerald[50] },
+  linkChipTrip: { backgroundColor: colors.amber[50] },
+  linkChipText: {
+    fontFamily: fontFamily.sans,
+    fontSize: 10,
+    color: colors.ink.light,
   },
 });

@@ -1,6 +1,14 @@
 import Constants from 'expo-constants';
 import type * as NotificationsType from 'expo-notifications';
-import type { Expense, Meeting, ReminderPreference, YearEntry } from '@pm/types';
+import type {
+  Activity,
+  CalendarEvent,
+  Expense,
+  Meeting,
+  ReminderPreference,
+  ScheduleInstance,
+  YearEntry,
+} from '@pm/types';
 import { computeAllReminders, type ReminderSchedule } from '@pm/domain';
 
 // ---------------------------------------------------------------------------
@@ -75,10 +83,20 @@ export async function scheduleAllReminders(
     | 'birthday_reminder_days_before'
     | 'travel_reminder_days_before'
     | 'renewal_reminder_days_before'
+    | 'activity_starting_enabled'
+    | 'activity_reminder_minutes_before'
+    | 'activity_overdue_enabled'
+    | 'event_reminder_minutes_before'
   >,
   meetings: Pick<Meeting, 'id' | 'title' | 'start_at' | 'end_at' | 'status' | 'key_takeaways'>[],
   yearEntries: Pick<YearEntry, 'id' | 'title' | 'type' | 'start_date'>[],
   expenses: Pick<Expense, 'id' | 'title' | 'amount' | 'expense_date' | 'recurrence_rule'>[],
+  scheduleInstances: Pick<
+    ScheduleInstance,
+    'id' | 'source_type' | 'source_activity_id' | 'start_at' | 'end_at' | 'status_snapshot'
+  >[] = [],
+  activities: Pick<Activity, 'id' | 'title'>[] = [],
+  calendarEvents: Pick<CalendarEvent, 'id' | 'title' | 'event_type' | 'start_at'>[] = [],
 ): Promise<void> {
   const N = getNotifications();
   if (!N) return;
@@ -91,6 +109,9 @@ export async function scheduleAllReminders(
     meetings,
     yearEntries,
     expenses,
+    scheduleInstances,
+    activities,
+    calendarEvents,
     todayISO,
     now,
   });
@@ -165,6 +186,9 @@ export function getNotificationRoute(type: string): string {
       return '/(tabs)/meetings';
     case 'eod_review':
     case 'morning_summary':
+    case 'activity_starting':
+    case 'activity_overdue':
+    case 'event_upcoming':
       return '/(tabs)/daily-plan';
     case 'birthday':
     case 'travel':

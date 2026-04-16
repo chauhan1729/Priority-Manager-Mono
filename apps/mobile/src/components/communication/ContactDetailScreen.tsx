@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Linking,
   Modal,
@@ -9,6 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { router } from 'expo-router';
+import { isMeetingPast } from '@pm/domain';
 import type { Contact, ContactCategory } from '@pm/types';
 import { useUpdateContactNote } from '../../hooks/useContacts';
 import { useMeetingsForContact } from '../../hooks/useMeetings';
@@ -83,10 +85,33 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
     };
   }, []);
 
+  // Derive next upcoming meeting and recent past meetings
+  const nextMeeting = useMemo(() => {
+    return meetings
+      .filter((m) => !isMeetingPast(m) && m.status === 'upcoming')
+      .sort((a, b) => a.start_at.localeCompare(b.start_at))[0];
+  }, [meetings]);
+
+  const recentMeetings = useMemo(() => {
+    return meetings
+      .filter((m) => isMeetingPast(m))
+      .sort((a, b) => b.start_at.localeCompare(a.start_at))
+      .slice(0, 3);
+  }, [meetings]);
+
   if (!contact) return null;
 
   const cat = CATEGORY_STYLE[contact.category] ?? CATEGORY_STYLE.other;
-  const recentMeetings = meetings.slice(0, 3);
+
+  const navigateToMeetings = () => {
+    onClose();
+    router.push('/meeting-planner');
+  };
+
+  const navigateToActivities = () => {
+    onClose();
+    router.push('/(tabs)/activities');
+  };
 
   const handleCallPress = () => {
     if (contact.phone) Linking.openURL(`tel:${contact.phone}`);
@@ -195,7 +220,32 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
             </TouchableOpacity>
           </View>
 
-          {/* Meeting history */}
+          {/* Next meeting */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Next Meeting</Text>
+          </View>
+          {nextMeeting ? (
+            <TouchableOpacity
+              style={[styles.card, styles.nextMeetingCard]}
+              onPress={navigateToMeetings}
+              activeOpacity={0.75}
+            >
+              <Text style={styles.meetingTitle} numberOfLines={1}>{nextMeeting.title}</Text>
+              <Text style={styles.meetingMeta}>
+                {new Date(nextMeeting.start_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                {' · '}
+                {new Date(nextMeeting.start_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}
+                {' · '}
+                {nextMeeting.duration_minutes} min
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={[styles.card, styles.emptyCard]}>
+              <Text style={styles.emptyCardText}>No upcoming meetings with this contact.</Text>
+            </View>
+          )}
+
+          {/* Recent past meetings */}
           {recentMeetings.length > 0 && (
             <>
               <View style={styles.sectionHeader}>
@@ -207,7 +257,12 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
                   { weekday: 'short', month: 'short', day: 'numeric' },
                 );
                 return (
-                  <View key={meeting.id} style={[styles.card, styles.meetingCard]}>
+                  <TouchableOpacity
+                    key={meeting.id}
+                    style={[styles.card, styles.meetingCard]}
+                    onPress={navigateToMeetings}
+                    activeOpacity={0.75}
+                  >
                     <Text style={styles.meetingTitle} numberOfLines={1}>
                       {meeting.title}
                     </Text>
@@ -219,7 +274,7 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
                         {meeting.key_takeaways}
                       </Text>
                     ) : null}
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </>
@@ -229,7 +284,9 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
           {delegatedActivities.length > 0 && (
             <>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Delegated Tasks</Text>
+                <Text style={styles.sectionTitle}>
+                  Delegated Tasks · {delegatedActivities.length}
+                </Text>
               </View>
               {delegatedActivities.map((activity) => {
                 const dateLabel = new Date(activity.activity_date + 'T00:00:00').toLocaleDateString(
@@ -237,14 +294,19 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
                   { month: 'short', day: 'numeric' },
                 );
                 return (
-                  <View key={activity.id} style={[styles.card, styles.activityCard]}>
+                  <TouchableOpacity
+                    key={activity.id}
+                    style={[styles.card, styles.activityCard]}
+                    onPress={navigateToActivities}
+                    activeOpacity={0.75}
+                  >
                     <Text style={styles.activityTitle} numberOfLines={2}>
                       {activity.title}
                     </Text>
                     <Text style={styles.activityMeta}>
                       Due {dateLabel} · {activity.estimated_minutes} min · {activity.status.replace('_', ' ')}
                     </Text>
-                  </View>
+                  </TouchableOpacity>
                 );
               })}
             </>
@@ -252,9 +314,11 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
         </ScrollView>
       </Modal>
 
-      {/* Schedule meeting — opens in a nested modal */}
+      {/* Schedule meeting — pre-selects current contact */}
       <MeetingFormModal
         visible={meetingFormVisible}
+        initialContactId={contact.id}
+        initialContactName={contact.full_name}
         onClose={() => setMeetingFormVisible(false)}
       />
 
@@ -324,6 +388,19 @@ const styles = StyleSheet.create({
   },
   meetingCard: { gap: 4 },
   activityCard: { gap: 4 },
+  nextMeetingCard: {
+    gap: 4,
+    borderColor: colors.blue[300],
+    backgroundColor: colors.blue[50],
+  },
+  emptyCard: {
+    alignItems: 'center',
+  },
+  emptyCardText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.gray[400],
+  },
 
   // Section headers
   sectionHeader: {

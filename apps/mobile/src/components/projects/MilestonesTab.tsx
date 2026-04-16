@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
+  ActionSheetIOS,
   Alert,
   FlatList,
   Modal,
+  Platform,
   StyleSheet,
   Text,
   TextInput as RNTextInput,
@@ -13,6 +15,7 @@ import type { MilestoneStatus, ProjectMilestone } from '@pm/types';
 import {
   useCreateMilestone,
   useDeleteMilestone,
+  useUpdateMilestone,
   useUpdateMilestoneStatus,
 } from '../../hooks/useProjects';
 import { DatePickerField } from '../ui';
@@ -26,37 +29,80 @@ const STATUS_STYLE: Record<MilestoneStatus, { bg: string; text: string; label: s
   missed:    { bg: colors.red[100],   text: colors.red[600],   label: 'Missed' },
 };
 
-const STATUS_CYCLE: MilestoneStatus[] = ['pending', 'completed', 'missed'];
+const STATUS_OPTIONS: { label: string; value: MilestoneStatus }[] = [
+  { label: 'Pending',   value: 'pending' },
+  { label: 'Completed', value: 'completed' },
+  { label: 'Missed',    value: 'missed' },
+];
 
-function nextStatus(current: MilestoneStatus): MilestoneStatus {
-  const idx = STATUS_CYCLE.indexOf(current);
-  return STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length]!;
+// ISO ↔ Date adapters
+function isoToDate(iso: string): Date | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  return new Date(`${iso}T12:00:00`);
+}
+function dateToIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
-// ---- Add milestone modal ---------------------------------------------------
+// ---- Form modal (create + edit) --------------------------------------------
 
-interface AddModalProps {
+interface FormModalProps {
   visible: boolean;
   projectId: string;
+  editMilestone?: ProjectMilestone | null;
   onClose: () => void;
 }
 
-function AddMilestoneModal({ visible, projectId, onClose }: AddModalProps) {
+function MilestoneFormModal({ visible, projectId, editMilestone, onClose }: FormModalProps) {
+  const isEdit = !!editMilestone;
+
   const [title, setTitle] = useState('');
   const [targetDate, setTargetDate] = useState('');
+  const [status, setStatus] = useState<MilestoneStatus>('pending');
   const [error, setError] = useState<string | null>(null);
+
   const createMutation = useCreateMilestone();
+  const updateMutation = useUpdateMilestone();
+  const isPending = isEdit ? updateMutation.isPending : createMutation.isPending;
+
+  useEffect(() => {
+    if (!visible) return;
+    if (editMilestone) {
+      setTitle(editMilestone.title);
+      setTargetDate(editMilestone.target_date ?? '');
+      setStatus(editMilestone.status);
+    } else {
+      setTitle('');
+      setTargetDate('');
+      setStatus('pending');
+    }
+    setError(null);
+  }, [visible, editMilestone]);
 
   const handleSave = () => {
     setError(null);
     if (!title.trim()) { setError('Title is required.'); return; }
-    createMutation.mutate(
-      { projectId, title: title.trim(), target_date: targetDate || null },
-      {
-        onSuccess: () => { setTitle(''); setTargetDate(''); onClose(); },
-        onError: (e: Error) => setError(e.message),
-      },
-    );
+
+    if (isEdit && editMilestone) {
+      updateMutation.mutate(
+        {
+          milestoneId: editMilestone.id,
+          projectId,
+          title: title.trim(),
+          target_date: targetDate || null,
+          status,
+        },
+        { onSuccess: onClose, onError: (e: Error) => setError(e.message) },
+      );
+    } else {
+      createMutation.mutate(
+        { projectId, title: title.trim(), target_date: targetDate || null },
+        { onSuccess: onClose, onError: (e: Error) => setError(e.message) },
+      );
+    }
   };
 
   return (
@@ -64,10 +110,10 @@ function AddMilestoneModal({ visible, projectId, onClose }: AddModalProps) {
       <View style={modal.container}>
         <View style={modal.header}>
           <TouchableOpacity onPress={onClose}><Text style={modal.cancel}>Cancel</Text></TouchableOpacity>
-          <Text style={modal.title}>New Milestone</Text>
-          <TouchableOpacity onPress={handleSave} disabled={createMutation.isPending}>
-            <Text style={[modal.save, createMutation.isPending && modal.disabled]}>
-              {createMutation.isPending ? 'Saving…' : 'Save'}
+          <Text style={modal.title}>{isEdit ? 'Edit Milestone' : 'New Milestone'}</Text>
+          <TouchableOpacity onPress={handleSave} disabled={isPending}>
+            <Text style={[modal.save, isPending && modal.disabled]}>
+              {isPending ? 'Saving…' : 'Save'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -82,12 +128,34 @@ function AddMilestoneModal({ visible, projectId, onClose }: AddModalProps) {
             onChangeText={setTitle}
             placeholder="e.g. MVP shipped"
             placeholderTextColor={colors.gray[400]}
-            autoFocus
+            autoFocus={!isEdit}
           />
         </View>
         <View style={modal.field}>
-          <DatePickerField label="Target Date (optional)" value={targetDate} onChange={setTargetDate} />
+          <DatePickerField
+            label="Target Date (optional)"
+            value={isoToDate(targetDate)}
+            onChange={(d) => setTargetDate(dateToIso(d))}
+          />
         </View>
+        {isEdit && (
+          <View style={modal.field}>
+            <Text style={modal.label}>Status</Text>
+            <View style={modal.chipRow}>
+              {STATUS_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[modal.chip, status === opt.value && modal.chipActive]}
+                  onPress={() => setStatus(opt.value)}
+                >
+                  <Text style={[modal.chipText, status === opt.value && modal.chipTextActive]}>
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
       </View>
     </Modal>
   );
@@ -101,16 +169,51 @@ interface Props {
 }
 
 export function MilestonesTab({ projectId, milestones }: Props) {
-  const [addVisible, setAddVisible] = useState(false);
+  const [formVisible, setFormVisible] = useState(false);
+  const [editMilestone, setEditMilestone] = useState<ProjectMilestone | null>(null);
   const updateStatus = useUpdateMilestoneStatus();
   const deleteMilestone = useDeleteMilestone();
 
-  const handleToggle = (milestone: ProjectMilestone) => {
-    updateStatus.mutate({
-      milestoneId: milestone.id,
-      projectId,
-      status: nextStatus(milestone.status),
-    });
+  const handleStatusPress = (milestone: ProjectMilestone) => {
+    const options = STATUS_OPTIONS;
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: `Status: ${STATUS_STYLE[milestone.status].label}`,
+          options: ['Cancel', ...options.map((o) => o.label)],
+          cancelButtonIndex: 0,
+        },
+        (idx) => {
+          if (idx > 0) {
+            const picked = options[idx - 1];
+            if (picked && picked.value !== milestone.status) {
+              updateStatus.mutate(
+                { milestoneId: milestone.id, projectId, status: picked.value },
+                { onError: (e: Error) => Alert.alert('Error', e.message) },
+              );
+            }
+          }
+        },
+      );
+    } else {
+      Alert.alert(
+        'Change Status',
+        `Currently: ${STATUS_STYLE[milestone.status].label}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          ...options
+            .filter((o) => o.value !== milestone.status)
+            .map((o) => ({
+              text: o.label,
+              onPress: () =>
+                updateStatus.mutate(
+                  { milestoneId: milestone.id, projectId, status: o.value },
+                  { onError: (e: Error) => Alert.alert('Error', e.message) },
+                ),
+            })),
+        ],
+      );
+    }
   };
 
   const handleDelete = (milestone: ProjectMilestone) => {
@@ -122,6 +225,11 @@ export function MilestonesTab({ projectId, milestones }: Props) {
         onPress: () => deleteMilestone.mutate({ milestoneId: milestone.id, projectId }),
       },
     ]);
+  };
+
+  const handleCloseForm = () => {
+    setFormVisible(false);
+    setEditMilestone(null);
   };
 
   const renderItem = ({ item }: { item: ProjectMilestone }) => {
@@ -137,14 +245,28 @@ export function MilestonesTab({ projectId, milestones }: Props) {
           {dateLabel && <Text style={styles.milestoneMeta}>Due {dateLabel}</Text>}
         </View>
         <View style={styles.cardActions}>
+          {/* Tappable status chip — opens picker */}
           <TouchableOpacity
             style={[styles.statusBadge, { backgroundColor: sc.bg }]}
-            onPress={() => handleToggle(item)}
+            onPress={() => handleStatusPress(item)}
+            activeOpacity={0.7}
           >
             <Text style={[styles.statusText, { color: sc.text }]}>{sc.label}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
-            <Text style={styles.deleteText}>✕</Text>
+          {/* Icon buttons */}
+          <TouchableOpacity
+            style={styles.iconBtn}
+            onPress={() => setEditMilestone(item)}
+            accessibilityLabel="Edit"
+          >
+            <Text style={styles.iconBtnText}>✎</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.iconBtn, styles.iconBtnDanger]}
+            onPress={() => handleDelete(item)}
+            accessibilityLabel="Delete"
+          >
+            <Text style={styles.iconBtnTextDanger}>✕</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -155,8 +277,8 @@ export function MilestonesTab({ projectId, milestones }: Props) {
     <View style={styles.container}>
       <View style={styles.tabHeader}>
         <Text style={styles.tabTitle}>{milestones.length} milestone{milestones.length !== 1 ? 's' : ''}</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setAddVisible(true)}>
-          <Text style={styles.addBtnText}>+ Add</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={() => setFormVisible(true)}>
+          <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
       </View>
 
@@ -173,10 +295,11 @@ export function MilestonesTab({ projectId, milestones }: Props) {
         }
       />
 
-      <AddMilestoneModal
-        visible={addVisible}
+      <MilestoneFormModal
+        visible={formVisible || !!editMilestone}
         projectId={projectId}
-        onClose={() => setAddVisible(false)}
+        editMilestone={editMilestone}
+        onClose={handleCloseForm}
       />
     </View>
   );
@@ -208,6 +331,14 @@ const modal = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
     fontFamily: fontFamily.sans, fontSize: fontSize.base, color: colors.ink.DEFAULT, backgroundColor: '#FFFFFF',
   },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full, borderWidth: 1, borderColor: colors.gray[300], backgroundColor: '#FFFFFF',
+  },
+  chipActive: { backgroundColor: colors.blue[600], borderColor: colors.blue[600] },
+  chipText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.ink.light },
+  chipTextActive: { color: '#FFFFFF', fontWeight: '600' },
 });
 
 const styles = StyleSheet.create({
@@ -218,8 +349,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.gray[100], backgroundColor: '#FFFFFF',
   },
   tabTitle: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.ink.light },
-  addBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.full, backgroundColor: colors.blue[600] },
-  addBtnText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, fontWeight: '600', color: '#FFFFFF' },
+  addBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.blue[600],
+  },
+  addBtnText: {
+    fontFamily: fontFamily.sans, fontSize: 20, fontWeight: '400', color: '#FFFFFF', lineHeight: 22,
+  },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.md },
   card: {
     flexDirection: 'row', alignItems: 'center',
@@ -230,11 +367,25 @@ const styles = StyleSheet.create({
   cardBody: { flex: 1, gap: 3 },
   milestoneTitle: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, fontWeight: '500', color: colors.ink.DEFAULT },
   milestoneMeta: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.ink.light },
-  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  cardActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 4, borderRadius: borderRadius.full },
   statusText: { fontFamily: fontFamily.sans, fontSize: 10, fontWeight: '600' },
-  deleteBtn: { padding: spacing.xs },
-  deleteText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.red[400] },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.gray[50],
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+  },
+  iconBtnDanger: {
+    backgroundColor: colors.red[50],
+    borderColor: colors.red[200],
+  },
+  iconBtnText: { fontSize: 14 },
+  iconBtnTextDanger: { fontSize: 14 },
   empty: { paddingVertical: spacing['3xl'], alignItems: 'center', paddingHorizontal: spacing.xl },
   emptyText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.gray[400], textAlign: 'center' },
 });

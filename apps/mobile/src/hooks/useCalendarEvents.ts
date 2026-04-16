@@ -24,6 +24,7 @@ import { useAuth } from '../components/providers/AuthProvider';
 export const calendarEventKeys = {
   all: ['calendarEvents'] as const,
   forMonth: (monthKey: string) => ['calendarEvents', 'month', monthKey] as const,
+  forDate: (date: string) => ['calendarEvents', 'date', date] as const,
   monthNote: (monthKey: string) => ['calendarMonthNote', monthKey] as const,
 };
 
@@ -51,7 +52,7 @@ async function getUserTimezone(userId: string): Promise<string> {
   return profile?.timezone ?? 'UTC';
 }
 
-function extractLocalHHMM(utcIso: string, timezone: string): string {
+export function extractLocalHHMM(utcIso: string, timezone: string): string {
   const d = new Date(utcIso);
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
@@ -96,6 +97,27 @@ export function useCalendarEventsForMonth(monthKey: string) {
       return expandRecurringCalendarEvents(events, startDate, endDate);
     },
     enabled: !!user && !!monthKey,
+  });
+}
+
+export function useCalendarEventsForDate(date: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: calendarEventKeys.forDate(date),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('calendar_events')
+        .select('*')
+        .eq('user_id', user!.id)
+        .eq('date', date)
+        .neq('status', 'cancelled')
+        .order('start_at', { ascending: true });
+      if (error) throw error;
+      const events = (data ?? []) as CalendarEvent[];
+      // Expand recurring events that may produce an occurrence on this date
+      return expandRecurringCalendarEvents(events, date, date);
+    },
+    enabled: !!user && !!date,
   });
 }
 

@@ -11,7 +11,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { Meeting, MeetingRecurrenceRule } from '@pm/types';
+import { isMeetingPast } from '@pm/domain';
+import type { Meeting, MeetingRecurrenceRule, MeetingStatus } from '@pm/types';
 import {
   type CreateMeetingInput,
   type UpdateMeetingInput,
@@ -42,6 +43,32 @@ const RECURRENCE_OPTIONS: { label: string; value: MeetingRecurrenceRule }[] = [
   { label: 'Weekly', value: 'weekly' },
   { label: 'Monthly', value: 'monthly' },
 ];
+
+// ---------------------------------------------------------------------------
+// ISO ↔ Date adapters (DB stores "YYYY-MM-DD" and "HH:MM"; pickers use Date)
+// ---------------------------------------------------------------------------
+
+function isoDateToDate(iso: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date();
+  return new Date(`${iso}T12:00:00`);
+}
+function dateToIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function hhmmToDate(hhmm: string): Date {
+  const d = new Date();
+  const [h, m] = (hhmm && /^\d{2}:\d{2}/.test(hhmm) ? hhmm : '09:00').split(':').map(Number);
+  d.setHours(h ?? 9, m ?? 0, 0, 0);
+  return d;
+}
+function dateToHhmm(d: Date): string {
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
 
 // ---- Contact picker (inline search modal) ----------------------------------
 
@@ -184,11 +211,21 @@ interface Props {
   visible: boolean;
   editMeeting?: Meeting | null;
   initialDate?: string;
+  initialContactId?: string;
+  initialContactName?: string;
   onClose: () => void;
 }
 
-export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }: Props) {
+export function MeetingFormModal({
+  visible,
+  editMeeting,
+  initialDate,
+  initialContactId,
+  initialContactName,
+  onClose,
+}: Props) {
   const isEdit = !!editMeeting;
+  const isPastEdit = !!editMeeting && isMeetingPast(editMeeting);
 
   const [title, setTitle] = useState('');
   const [contactId, setContactId] = useState<string | null>(null);
@@ -200,6 +237,8 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
   const [isCustom, setIsCustom] = useState(false);
   const [agenda, setAgenda] = useState('');
   const [recurrence, setRecurrence] = useState<MeetingRecurrenceRule>(null);
+  const [takeaways, setTakeaways] = useState('');
+  const [status, setStatus] = useState<MeetingStatus>('upcoming');
   const [error, setError] = useState<string | null>(null);
   const [contactPickerVisible, setContactPickerVisible] = useState(false);
 
@@ -237,10 +276,12 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
       }
       setAgenda(editMeeting.agenda ?? '');
       setRecurrence(editMeeting.recurrence_rule);
+      setTakeaways(editMeeting.key_takeaways ?? '');
+      setStatus(editMeeting.status);
     } else {
       setTitle('');
-      setContactId(null);
-      setContactName('');
+      setContactId(initialContactId ?? null);
+      setContactName(initialContactName ?? '');
       setDate(initialDate ?? todayISO());
       setStartTime('09:00');
       setDurationMinutes(60);
@@ -248,9 +289,11 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
       setCustomDuration('');
       setAgenda('');
       setRecurrence(null);
+      setTakeaways('');
+      setStatus('upcoming');
     }
     setError(null);
-  }, [visible, editMeeting, initialDate]);
+  }, [visible, editMeeting, initialDate, initialContactId, initialContactName]);
 
   // Resolve contact name from contacts list
   useEffect(() => {
@@ -264,6 +307,22 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
 
   const handleSave = () => {
     setError(null);
+
+    // Past meeting edit: only takeaways + status allowed (CLAUDE.md rule)
+    if (isPastEdit && editMeeting) {
+      const input: UpdateMeetingInput = {
+        id: editMeeting.id,
+        key_takeaways: takeaways.trim() || null,
+        status,
+      };
+      (updateMutation.mutate as (i: UpdateMeetingInput, opts: any) => void)(input, {
+        onSuccess: onClose,
+        onError: (e: Error) => setError(e.message),
+      });
+      return;
+    }
+
+    // Full-field validation for create + future edit
     if (!title.trim()) { setError('Title is required.'); return; }
     if (!contactId) { setError('A contact is required.'); return; }
     if (effectiveDuration <= 0) { setError('Duration must be positive.'); return; }
@@ -277,7 +336,7 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
         start_time: startTime,
         duration_minutes: effectiveDuration,
         agenda: agenda.trim() || null,
-        recurrence_rule: recurrence ?? undefined,
+        recurrence_rule: recurrence,
       };
       (updateMutation.mutate as (i: UpdateMeetingInput, opts: any) => void)(input, {
         onSuccess: onClose,
@@ -291,7 +350,7 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
         start_time: startTime,
         duration_minutes: effectiveDuration,
         agenda: agenda.trim() || null,
-        recurrence_rule: recurrence ?? undefined,
+        recurrence_rule: recurrence,
       };
       (createMutation.mutate as (i: CreateMeetingInput, opts: any) => void)(input, {
         onSuccess: onClose,
@@ -319,7 +378,9 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
             <TouchableOpacity onPress={onClose} disabled={isPending}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>{isEdit ? 'Edit Meeting' : 'New Meeting'}</Text>
+            <Text style={styles.headerTitle}>
+              {isPastEdit ? 'Edit meeting notes' : isEdit ? 'Edit Meeting' : 'New Meeting'}
+            </Text>
             <TouchableOpacity onPress={handleSave} disabled={isPending}>
               <Text style={[styles.saveText, isPending && styles.textDisabled]}>
                 {isPending ? 'Saving…' : 'Save'}
@@ -334,125 +395,192 @@ export function MeetingFormModal({ visible, editMeeting, initialDate, onClose }:
               </View>
             )}
 
-            {/* Title */}
-            <View style={styles.section}>
-              <Text style={styles.fieldLabel}>Title</Text>
-              <RNTextInput
-                style={styles.input}
-                value={title}
-                onChangeText={setTitle}
-                placeholder="e.g. Quarterly review"
-                placeholderTextColor={colors.gray[400]}
-              />
-            </View>
-
-            {/* Contact picker */}
-            <View style={styles.section}>
-              <Text style={styles.fieldLabel}>Contact</Text>
-              <TouchableOpacity
-                style={styles.contactPicker}
-                onPress={() => setContactPickerVisible(true)}
-              >
-                <Text
-                  style={[styles.contactPickerText, !contactName && styles.contactPickerPlaceholder]}
-                >
-                  {contactName || 'Select a contact…'}
-                </Text>
-                <Text style={styles.chevron}>›</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Date */}
-            <View style={styles.section}>
-              <DatePickerField
-                label="Date"
-                value={date}
-                onChange={setDate}
-                minimumDate={isEdit ? undefined : todayISO()}
-              />
-            </View>
-
-            {/* Start time */}
-            <View style={styles.section}>
-              <TimePickerField label="Start Time" value={startTime} onChange={setStartTime} />
-            </View>
-
-            {/* Duration chips */}
-            <View style={styles.section}>
-              <Text style={styles.fieldLabel}>Duration</Text>
-              <View style={styles.chipRow}>
-                {DURATION_CHIPS.map((chip) => {
-                  const isSelected =
-                    chip.value === 0 ? isCustom : !isCustom && durationMinutes === chip.value;
-                  return (
-                    <TouchableOpacity
-                      key={chip.value}
-                      style={[styles.chip, isSelected && styles.chipActive]}
-                      onPress={() => {
-                        if (chip.value === 0) {
-                          setIsCustom(true);
-                        } else {
-                          setIsCustom(false);
-                          setDurationMinutes(chip.value);
-                        }
-                      }}
-                    >
-                      <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                        {chip.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-              {isCustom && (
-                <View style={styles.customDurationRow}>
-                  <RNTextInput
-                    style={styles.customDurationInput}
-                    value={customDuration}
-                    onChangeText={setCustomDuration}
-                    placeholder="Minutes"
-                    placeholderTextColor={colors.gray[400]}
-                    keyboardType="number-pad"
-                  />
-                  <Text style={styles.customDurationUnit}>min</Text>
+            {isPastEdit && editMeeting ? (
+              <>
+                {/* Past-edit: read-only context */}
+                <View style={styles.pastContext}>
+                  <Text style={styles.pastContextTitle}>{editMeeting.title}</Text>
+                  {contactName ? (
+                    <Text style={styles.pastContextMeta}>{contactName}</Text>
+                  ) : null}
+                  <Text style={styles.pastContextMeta}>
+                    {new Date(editMeeting.start_at).toLocaleString(undefined, {
+                      weekday: 'short',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                    {' · '}
+                    {editMeeting.duration_minutes} min
+                  </Text>
+                  <Text style={styles.pastContextHint}>
+                    Past meetings: only key takeaways and status can be edited.
+                  </Text>
                 </View>
-              )}
-            </View>
 
-            {/* Agenda */}
-            <View style={styles.section}>
-              <Text style={styles.fieldLabel}>Agenda (optional)</Text>
-              <RNTextInput
-                style={[styles.input, styles.multilineInput]}
-                value={agenda}
-                onChangeText={setAgenda}
-                placeholder="Topics to cover, goals for the meeting…"
-                placeholderTextColor={colors.gray[400]}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
+                {/* Status */}
+                <View style={styles.section}>
+                  <Text style={styles.fieldLabel}>Status</Text>
+                  <View style={styles.chipRow}>
+                    {(['upcoming', 'completed', 'missed', 'cancelled'] as MeetingStatus[]).map((s) => {
+                      const isSelected = status === s;
+                      return (
+                        <TouchableOpacity
+                          key={s}
+                          style={[styles.chip, isSelected && styles.chipActive]}
+                          onPress={() => setStatus(s)}
+                        >
+                          <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                            {s}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
 
-            {/* Recurrence */}
-            <View style={styles.section}>
-              <Text style={styles.fieldLabel}>Recurrence</Text>
-              <View style={styles.chipRow}>
-                {RECURRENCE_OPTIONS.map((opt) => {
-                  const isSelected = recurrence === opt.value;
-                  return (
-                    <TouchableOpacity
-                      key={String(opt.value)}
-                      style={[styles.chip, isSelected && styles.chipActive]}
-                      onPress={() => setRecurrence(opt.value)}
+                {/* Key takeaways */}
+                <View style={styles.section}>
+                  <Text style={styles.fieldLabel}>Key Takeaways</Text>
+                  <RNTextInput
+                    style={[styles.input, styles.multilineInput, styles.takeawaysTall]}
+                    value={takeaways}
+                    onChangeText={setTakeaways}
+                    placeholder="Decisions made, action items, outcomes…"
+                    placeholderTextColor={colors.gray[400]}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                {/* Title */}
+                <View style={styles.section}>
+                  <Text style={styles.fieldLabel}>Title</Text>
+                  <RNTextInput
+                    style={styles.input}
+                    value={title}
+                    onChangeText={setTitle}
+                    placeholder="e.g. Quarterly review"
+                    placeholderTextColor={colors.gray[400]}
+                  />
+                </View>
+
+                {/* Contact picker */}
+                <View style={styles.section}>
+                  <Text style={styles.fieldLabel}>Contact</Text>
+                  <TouchableOpacity
+                    style={styles.contactPicker}
+                    onPress={() => setContactPickerVisible(true)}
+                  >
+                    <Text
+                      style={[styles.contactPickerText, !contactName && styles.contactPickerPlaceholder]}
                     >
-                      <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            </View>
+                      {contactName || 'Select a contact…'}
+                    </Text>
+                    <Text style={styles.chevron}>›</Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Date */}
+                <View style={styles.section}>
+                  <DatePickerField
+                    label="Date"
+                    value={isoDateToDate(date)}
+                    onChange={(d) => setDate(dateToIsoDate(d))}
+                    {...(isEdit ? {} : { minimumDate: isoDateToDate(todayISO()) })}
+                  />
+                </View>
+
+                {/* Start time */}
+                <View style={styles.section}>
+                  <TimePickerField
+                    label="Start Time"
+                    value={hhmmToDate(startTime)}
+                    onChange={(d) => setStartTime(dateToHhmm(d))}
+                  />
+                </View>
+
+                {/* Duration chips */}
+                <View style={styles.section}>
+                  <Text style={styles.fieldLabel}>Duration</Text>
+                  <View style={styles.chipRow}>
+                    {DURATION_CHIPS.map((chip) => {
+                      const isSelected =
+                        chip.value === 0 ? isCustom : !isCustom && durationMinutes === chip.value;
+                      return (
+                        <TouchableOpacity
+                          key={chip.value}
+                          style={[styles.chip, isSelected && styles.chipActive]}
+                          onPress={() => {
+                            if (chip.value === 0) {
+                              setIsCustom(true);
+                            } else {
+                              setIsCustom(false);
+                              setDurationMinutes(chip.value);
+                            }
+                          }}
+                        >
+                          <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                            {chip.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {isCustom && (
+                    <View style={styles.customDurationRow}>
+                      <RNTextInput
+                        style={styles.customDurationInput}
+                        value={customDuration}
+                        onChangeText={setCustomDuration}
+                        placeholder="Minutes"
+                        placeholderTextColor={colors.gray[400]}
+                        keyboardType="number-pad"
+                      />
+                      <Text style={styles.customDurationUnit}>min</Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Agenda */}
+                <View style={styles.section}>
+                  <Text style={styles.fieldLabel}>Agenda (optional)</Text>
+                  <RNTextInput
+                    style={[styles.input, styles.multilineInput]}
+                    value={agenda}
+                    onChangeText={setAgenda}
+                    placeholder="Topics to cover, goals for the meeting…"
+                    placeholderTextColor={colors.gray[400]}
+                    multiline
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                {/* Recurrence */}
+                <View style={styles.section}>
+                  <Text style={styles.fieldLabel}>Recurrence</Text>
+                  <View style={styles.chipRow}>
+                    {RECURRENCE_OPTIONS.map((opt) => {
+                      const isSelected = recurrence === opt.value;
+                      return (
+                        <TouchableOpacity
+                          key={String(opt.value)}
+                          style={[styles.chip, isSelected && styles.chipActive]}
+                          onPress={() => setRecurrence(opt.value)}
+                        >
+                          <Text style={[styles.chipText, isSelected && styles.chipTextActive]}>
+                            {opt.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              </>
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
@@ -612,5 +740,37 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.sans,
     fontSize: fontSize.base,
     color: colors.gray[400],
+  },
+
+  // Past-edit context block
+  pastContext: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.amber[50],
+    borderWidth: 1,
+    borderColor: colors.amber[200],
+    gap: 4,
+  },
+  pastContextTitle: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    fontWeight: '600',
+    color: colors.ink.DEFAULT,
+  },
+  pastContextMeta: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.ink.light,
+  },
+  pastContextHint: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.amber[700],
+    marginTop: spacing.xs,
+  },
+  takeawaysTall: {
+    minHeight: 140,
   },
 });

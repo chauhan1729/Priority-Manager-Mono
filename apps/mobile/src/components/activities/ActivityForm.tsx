@@ -11,6 +11,7 @@ import { colors } from '../../theme/colors';
 import { spacing, borderRadius } from '../../theme/spacing';
 import { fontSize, fontFamily, fontWeight } from '../../theme/typography';
 import { MAX_A_PRIORITY_PER_DAY } from '@pm/domain';
+import type { ActivityRecurrenceRule } from '@pm/types';
 
 export type SectionType = 'work' | 'outside' | 'unplanned' | 'delegated';
 export type PriorityValue = 'A' | 'B' | null;
@@ -24,6 +25,7 @@ export interface ActivityFormValues {
   linked_project_id: string | null;
   delegated_contact_id: string | null;
   note: string;
+  recurrence_rule: ActivityRecurrenceRule | null;
 }
 
 interface Props {
@@ -46,6 +48,13 @@ const PRIORITY_OPTIONS: { label: string; value: string }[] = [
   { label: 'None', value: 'none' },
   { label: 'A', value: 'A' },
   { label: 'B', value: 'B' },
+];
+
+const RECURRENCE_OPTIONS: { label: string; value: string }[] = [
+  { label: 'Does not repeat', value: 'none' },
+  { label: 'Daily', value: 'daily' },
+  { label: 'Weekly', value: 'weekly' },
+  { label: 'Monthly', value: 'monthly' },
 ];
 
 export function ActivityForm({ values, onChange, projectOptions, contactOptions, aPriorityCount, error }: Props) {
@@ -72,7 +81,17 @@ export function ActivityForm({ values, onChange, projectOptions, contactOptions,
             <TouchableOpacity
               key={opt.value}
               style={[styles.seg, values.section_type === opt.value && styles.segActive]}
-              onPress={() => onChange({ section_type: opt.value, linked_project_id: null, delegated_contact_id: null })}
+              onPress={() => {
+                const patch: Partial<ActivityFormValues> = { section_type: opt.value };
+                // Only clear fields when leaving a section that requires them
+                if (values.section_type === 'work' && opt.value !== 'work') {
+                  patch.linked_project_id = null;
+                }
+                if (values.section_type === 'delegated' && opt.value !== 'delegated') {
+                  patch.delegated_contact_id = null;
+                }
+                onChange(patch);
+              }}
             >
               <Text style={[styles.segText, values.section_type === opt.value && styles.segTextActive]}>
                 {opt.label}
@@ -162,6 +181,35 @@ export function ActivityForm({ values, onChange, projectOptions, contactOptions,
         </View>
       )}
 
+      {/* Recurrence */}
+      <View style={styles.fieldGroup}>
+        <Text style={styles.label}>Recurrence</Text>
+        <View style={styles.segmented}>
+          {RECURRENCE_OPTIONS.map((opt) => {
+            const currentVal = values.recurrence_rule ?? 'none';
+            return (
+              <TouchableOpacity
+                key={opt.value}
+                style={[styles.seg, currentVal === opt.value && styles.segActive]}
+                onPress={() =>
+                  onChange({
+                    recurrence_rule:
+                      opt.value === 'none' ? null : (opt.value as ActivityRecurrenceRule),
+                  })
+                }
+              >
+                <Text style={[styles.segText, currentVal === opt.value && styles.segTextActive]}>
+                  {opt.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+        {values.recurrence_rule && (
+          <Text style={styles.hint}>Creates 3 future copies automatically.</Text>
+        )}
+      </View>
+
       {/* Note */}
       <View style={styles.fieldGroup}>
         <TextInput
@@ -196,6 +244,12 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.sans,
     fontSize: fontSize.xs,
     color: colors.amber[600],
+  },
+  hint: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.ink.light,
+    fontStyle: 'italic',
   },
   segmented: {
     flexDirection: 'row',

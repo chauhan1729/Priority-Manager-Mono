@@ -11,7 +11,10 @@
       "Bash(pnpm --filter web tsc --noEmit --skipLibCheck)",
       "Bash(xargs grep *)",
       "Bash(pnpm --filter web exec tsc --noEmit)",
-      "Bash(pnpm --filter mobile exec tsc --noEmit)"
+      "Bash(pnpm --filter mobile exec tsc --noEmit)",
+      "Bash(ls node_modules/.pnpm/expo-file-system@55*/node_modules/expo-file-system/build/)",
+      "Bash(npm run *)",
+      "Bash(grep -l \"ReminderSettingsView\\\\|useReminderPreferences\" /c/Users/sonum/Documents/\"Antigravity Projects\"/\"Priority Manager App\"/apps/web/src/components/settings/*.tsx)"
     ]
   }
 }

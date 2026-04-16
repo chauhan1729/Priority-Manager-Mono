@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   ScrollView,
@@ -11,7 +12,13 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { isMeetingPast, needsTakeawayPrompt, needsStatusUpdatePrompt } from '@pm/domain';
+import { router } from 'expo-router';
+import {
+  isMeetingPast,
+  isMeetingRunning,
+  needsStatusUpdatePrompt,
+  needsTakeawayPrompt,
+} from '@pm/domain';
 import type { Meeting, MeetingStatus } from '@pm/types';
 import {
   useArchiveMeeting,
@@ -26,7 +33,10 @@ import { fontSize, fontFamily } from '../../theme/typography';
 
 interface Props {
   meeting: Meeting | null;
-  contactName?: string;
+  contactName?: string | undefined;
+  contactSubtitle?: string | undefined;
+  contactEmail?: string | null;
+  contactPhone?: string | null;
   visible: boolean;
   onClose: () => void;
   onEdit: (meeting: Meeting) => void; // open MeetingFormModal for full edit
@@ -55,7 +65,16 @@ function formatDateTime(isoDatetime: string): string {
 
 // ---- component -------------------------------------------------------------
 
-export function MeetingDetailScreen({ meeting, contactName, visible, onClose, onEdit }: Props) {
+export function MeetingDetailScreen({
+  meeting,
+  contactName,
+  contactSubtitle,
+  contactEmail,
+  contactPhone,
+  visible,
+  onClose,
+  onEdit,
+}: Props) {
   const [takeaways, setTakeaways] = useState('');
   const [selectedStatus, setSelectedStatus] = useState<MeetingStatus>('upcoming');
   const [error, setError] = useState<string | null>(null);
@@ -76,8 +95,22 @@ export function MeetingDetailScreen({ meeting, contactName, visible, onClose, on
   }, [meeting]);
 
   const isPast = meeting ? isMeetingPast(meeting) : false;
+  const running = meeting ? isMeetingRunning(meeting) : false;
   const needsTakeaway = meeting ? needsTakeawayPrompt(meeting) : false;
   const needsStatusUpdate = meeting ? needsStatusUpdatePrompt(meeting) : false;
+
+  const handleContactPress = () => {
+    onClose();
+    router.push('/communication-planner');
+  };
+
+  const handleEmailPress = () => {
+    if (contactEmail) Linking.openURL(`mailto:${contactEmail}`);
+  };
+
+  const handlePhonePress = () => {
+    if (contactPhone) Linking.openURL(`tel:${contactPhone}`);
+  };
 
   // -- actions ----------------------------------------------------------------
 
@@ -192,9 +225,42 @@ export function MeetingDetailScreen({ meeting, contactName, visible, onClose, on
 
           {/* Title */}
           <View style={styles.section}>
-            <Text style={styles.meetingTitle}>{meeting.title}</Text>
-            {contactName && <Text style={styles.contactName}>{contactName}</Text>}
+            <View style={styles.titleRow}>
+              <Text style={styles.meetingTitle}>{meeting.title}</Text>
+              {running && (
+                <View style={styles.inProgressBadge}>
+                  <Text style={styles.inProgressBadgeText}>In progress</Text>
+                </View>
+              )}
+            </View>
+            {contactName && (
+              <TouchableOpacity onPress={handleContactPress} activeOpacity={0.7}>
+                <Text style={styles.contactName}>
+                  {contactName}
+                  {contactSubtitle ? ` · ${contactSubtitle}` : ''}
+                  {'  ›'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
+
+          {/* Contact info (email / phone) — tappable */}
+          {(contactEmail || contactPhone) && (
+            <View style={styles.contactInfoBlock}>
+              {contactEmail && (
+                <TouchableOpacity style={styles.contactInfoRow} onPress={handleEmailPress}>
+                  <Text style={styles.contactInfoLabel}>Email</Text>
+                  <Text style={styles.contactInfoValueLink} numberOfLines={1}>{contactEmail}</Text>
+                </TouchableOpacity>
+              )}
+              {contactPhone && (
+                <TouchableOpacity style={styles.contactInfoRow} onPress={handlePhonePress}>
+                  <Text style={styles.contactInfoLabel}>Phone</Text>
+                  <Text style={styles.contactInfoValueLink} numberOfLines={1}>{contactPhone}</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           {/* Meta */}
           <View style={styles.metaBlock}>
@@ -382,16 +448,61 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
   meetingTitle: {
+    flex: 1,
     fontFamily: fontFamily.sans,
     fontSize: fontSize.xl,
     fontWeight: '600',
     color: colors.ink.DEFAULT,
-    marginBottom: spacing.xs,
+  },
+  inProgressBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.amber[500],
+  },
+  inProgressBadgeText: {
+    fontFamily: fontFamily.sans,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
   },
   contactName: {
     fontFamily: fontFamily.sans,
     fontSize: fontSize.base,
+    color: colors.blue[600],
+  },
+  contactInfoBlock: {
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    padding: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[100],
+  },
+  contactInfoRow: {
+    flexDirection: 'row',
+    paddingVertical: spacing.xs,
+    gap: spacing.md,
+  },
+  contactInfoLabel: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.gray[400],
+    width: 56,
+  },
+  contactInfoValueLink: {
+    flex: 1,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
     color: colors.blue[600],
   },
   metaBlock: {

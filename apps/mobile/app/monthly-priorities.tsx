@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   ActionSheetIOS,
@@ -12,8 +12,9 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { MonthlyPriority, MonthlyPrioritySection, MonthlyPriorityStatus } from '@pm/types';
+import type { Activity, MonthlyPriority, MonthlyPrioritySection, MonthlyPriorityStatus } from '@pm/types';
 import {
+  calcProjectProgress,
   formatMonthLabel,
   getCurrentMonthKey,
   getNextMonthKey,
@@ -21,6 +22,9 @@ import {
   groupBySection,
   MAX_PRIORITIES_PER_SECTION,
 } from '@pm/domain';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '../src/lib/supabase/client';
+import { useAuth } from '../src/components/providers/AuthProvider';
 import {
   useMonthlyPriorities,
   useDeleteMonthlyPriority,
@@ -28,6 +32,7 @@ import {
 } from '../src/hooks/useMonthlyPriorities';
 import { useAnnualGoals } from '../src/hooks/useAnnualGoals';
 import { useProjects } from '../src/hooks/useProjects';
+import { router } from 'expo-router';
 import {
   MonthEndReviewModal,
   PriorityCard,
@@ -59,9 +64,12 @@ const QUICK_STATUSES: { label: string; value: MonthlyPriorityStatus }[] = [
 // ---------------------------------------------------------------------------
 
 export default function MonthlyPrioritiesScreen() {
+  const { user } = useAuth();
   const [monthKey, setMonthKey] = useState(getCurrentMonthKey());
   const [formVisible, setFormVisible] = useState(false);
   const [editPriority, setEditPriority] = useState<MonthlyPriority | null>(null);
+  const [rewriteFromPriority, setRewriteFromPriority] = useState<MonthlyPriority | null>(null);
+  const [rewriteTargetMonth, setRewriteTargetMonth] = useState<string | null>(null);
   const [initialSection, setInitialSection] = useState<MonthlyPrioritySection>('business_career');
   const [reviewVisible, setReviewVisible] = useState(false);
   const [pendingNavDirection, setPendingNavDirection] = useState<'prev' | 'next' | null>(null);
@@ -82,6 +90,44 @@ export default function MonthlyPrioritiesScreen() {
     () => Object.fromEntries(allProjects.map((p) => [p.id, p])),
     [allProjects],
   );
+
+  // Auto-progress calculation — fetch activities for all linked projects with auto_project mode
+  // and compute per-project progress using the shared domain helper.
+  const autoProjectIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          priorities
+            .filter((p) => p.progress_mode === 'auto_project' && p.linked_project_id)
+            .map((p) => p.linked_project_id as string),
+        ),
+      ),
+    [priorities],
+  );
+
+  const { data: autoActivities = [] } = useQuery({
+    queryKey: ['activities', 'forProjects', autoProjectIds],
+    queryFn: async () => {
+      if (!user || autoProjectIds.length === 0) return [];
+      const { data, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('user_id', user.id)
+        .in('linked_project_id', autoProjectIds);
+      if (error) throw error;
+      return data as Activity[];
+    },
+    enabled: !!user && autoProjectIds.length > 0,
+  });
+
+  const projectProgressMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const projectId of autoProjectIds) {
+      const projectActivities = autoActivities.filter((a) => a.linked_project_id === projectId);
+      map[projectId] = calcProjectProgress(projectActivities);
+    }
+    return map;
+  }, [autoProjectIds, autoActivities]);
 
   const grouped = useMemo(() => groupBySection(priorities), [priorities]);
 
@@ -233,11 +279,30 @@ export default function MonthlyPrioritiesScreen() {
               priority={p}
               linkedGoalTitle={p.linked_annual_goal_id ? goalMap[p.linked_annual_goal_id]?.title ?? null : null}
               linkedProjectName={p.linked_project_id ? projectMap[p.linked_project_id]?.name ?? null : null}
-              projectProgressPercent={null}
+              projectProgressPercent={
+                p.linked_project_id && projectProgressMap[p.linked_project_id] !== undefined
+                  ? projectProgressMap[p.linked_project_id] ?? null
+                  : null
+              }
               onPress={() => { setEditPriority(p); setFormVisible(true); }}
               onLongPress={() => handleLongPress(p)}
+              onOpenProject={
+                p.linked_project_id
+                  ? () => router.push(`/project-planner/${p.linked_project_id}`)
+                  : undefined
+              }
+              onOpenGoal={
+                p.linked_annual_goal_id
+                  ? () => router.push('/annual-strategies')
+                  : undefined
+              }
             />
           ))
+        )}
+        {count >= MAX_PRIORITIES_PER_SECTION && (
+          <Text style={styles.capacityWarning}>
+            Section at capacity. Complete or drop a priority first.
+          </Text>
         )}
       </View>
     );
@@ -267,7 +332,14 @@ export default function MonthlyPrioritiesScreen() {
         <TouchableOpacity onPress={() => navigateMonth('prev')} style={styles.navArrow}>
           <Text style={styles.navArrowText}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.monthLabel}>{formatMonthLabel(monthKey)}</Text>
+        <View style={styles.monthLabelCol}>
+          <Text style={styles.monthLabel}>{formatMonthLabel(monthKey)}</Text>
+          {monthKey !== getCurrentMonthKey() && (
+            <TouchableOpacity onPress={() => setMonthKey(getCurrentMonthKey())}>
+              <Text style={styles.todayLink}>This month</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <TouchableOpacity onPress={() => navigateMonth('next')} style={styles.navArrow}>
           <Text style={styles.navArrowText}>›</Text>
         </TouchableOpacity>
@@ -298,11 +370,17 @@ export default function MonthlyPrioritiesScreen() {
       <PriorityFormModal
         visible={formVisible}
         editPriority={editPriority}
+        rewriteFromPriority={rewriteFromPriority}
         initialSection={initialSection}
-        monthKey={monthKey}
+        monthKey={rewriteTargetMonth ?? monthKey}
         annualGoals={allGoals}
         projects={allProjects}
-        onClose={() => { setFormVisible(false); setEditPriority(null); }}
+        onClose={() => {
+          setFormVisible(false);
+          setEditPriority(null);
+          setRewriteFromPriority(null);
+          setRewriteTargetMonth(null);
+        }}
       />
 
       {/* Month-end review modal */}
@@ -311,6 +389,12 @@ export default function MonthlyPrioritiesScreen() {
         monthLabel={formatMonthLabel(monthKey)}
         priorities={priorities}
         onClose={handleReviewClose}
+        onRewrite={(priority) => {
+          // Open form pre-filled with priority, targeted at next month
+          setRewriteFromPriority(priority);
+          setRewriteTargetMonth(getNextMonthKey(monthKey));
+          setFormVisible(true);
+        }}
       />
     </SafeAreaView>
   );
@@ -372,12 +456,30 @@ const styles = StyleSheet.create({
     color: colors.blue[600],
     lineHeight: 28,
   },
+  monthLabelCol: {
+    alignItems: 'center',
+    minWidth: 160,
+  },
   monthLabel: {
     fontFamily: fontFamily.handwriting,
     fontSize: fontSize['2xl'],
     color: colors.ink.DEFAULT,
-    minWidth: 160,
     textAlign: 'center',
+  },
+  todayLink: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.blue[600],
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  capacityWarning: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.amber[700],
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+    fontStyle: 'italic',
   },
 
   // Content

@@ -10,6 +10,7 @@ import { useAuth } from '../components/providers/AuthProvider';
 
 export const meetingKeys = {
   all: ['meetings'] as const,
+  archived: ['meetings', 'archived'] as const,
   forDate: (date: string) => ['meetings', 'date', date] as const,
   forContact: (contactId: string) => ['meetings', 'contact', contactId] as const,
 };
@@ -90,6 +91,24 @@ export function useMeetingsForDate(date: string) {
       return data as Meeting[];
     },
     enabled: !!user && !!date,
+  });
+}
+
+export function useArchivedMeetings() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: meetingKeys.archived,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('*')
+        .eq('user_id', user!.id)
+        .eq('archived', true)
+        .order('date', { ascending: false });
+      if (error) throw error;
+      return data as Meeting[];
+    },
+    enabled: !!user,
   });
 }
 
@@ -439,6 +458,28 @@ export function useArchiveMeeting() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: meetingKeys.all });
+      qc.invalidateQueries({ queryKey: meetingKeys.archived });
+    },
+  });
+}
+
+export function useUnarchiveMeeting() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ meetingId }: { meetingId: string }) => {
+      if (!user) throw new Error('Not authenticated.');
+      const { error } = await supabase
+        .from('meetings')
+        .update({ archived: false, updated_at: new Date().toISOString() })
+        .eq('id', meetingId)
+        .eq('user_id', user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: meetingKeys.all });
+      qc.invalidateQueries({ queryKey: meetingKeys.archived });
     },
   });
 }

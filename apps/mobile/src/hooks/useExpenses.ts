@@ -177,6 +177,59 @@ export function useUpdateExpense() {
 }
 
 // ---------------------------------------------------------------------------
+// Create one-time occurrence from a recurring expense (does NOT mutate the template)
+// ---------------------------------------------------------------------------
+
+export function useCreateOccurrence() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({
+      sourceExpenseId,
+      overrides,
+    }: {
+      sourceExpenseId: string;
+      overrides: CreateExpenseData;
+    }) => {
+      // Verify source exists and belongs to user (and is recurring)
+      const { data: source, error: fetchErr } = await supabase
+        .from('expenses')
+        .select('*')
+        .eq('id', sourceExpenseId)
+        .eq('user_id', user!.id)
+        .single();
+      if (fetchErr || !source) throw new Error('Source recurring expense not found.');
+
+      // Insert one-time copy with forced recurrence_rule: null
+      const { data: inserted, error } = await supabase
+        .from('expenses')
+        .insert({
+          user_id: user!.id,
+          title: overrides.title.trim(),
+          merchant_payee: overrides.merchant_payee?.trim() || null,
+          amount: overrides.amount,
+          expense_date: overrides.expense_date,
+          category: overrides.category,
+          payment_method: overrides.payment_method?.trim() || null,
+          note: overrides.note?.trim() || null,
+          linked_project_id: overrides.linked_project_id ?? null,
+          linked_contact_id: overrides.linked_contact_id ?? null,
+          linked_year_entry_id: overrides.linked_year_entry_id ?? null,
+          recurrence_rule: null, // HARD-SET: one-time only
+        })
+        .select()
+        .single();
+      if (error || !inserted) throw new Error(error?.message ?? 'Failed to create occurrence.');
+      // No calendar sync — this is a one-time expense, not recurring
+      return inserted as Expense;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: expenseKeys.all });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Delete
 // ---------------------------------------------------------------------------
 

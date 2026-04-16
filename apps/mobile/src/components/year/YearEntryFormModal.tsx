@@ -34,10 +34,27 @@ const ENTRY_TYPES: { label: string; value: YearEntryType; icon: string }[] = [
 ];
 
 const AVAILABILITY_OPTIONS: { label: string; value: AvailabilityStatus }[] = [
-  { label: 'Available', value: 'available' },
-  { label: 'Partial',   value: 'partial' },
-  { label: 'Away',      value: 'away' },
+  { label: 'Away (fully unavailable)',     value: 'away' },
+  { label: 'Partial (limited availability)', value: 'partial' },
+  { label: 'Available (just noting trip)', value: 'available' },
 ];
+
+// ---------------------------------------------------------------------------
+// Date adapters — DatePickerField uses Date; DB stores ISO "YYYY-MM-DD"
+// ---------------------------------------------------------------------------
+
+function isoToDate(iso: string | null | undefined): Date | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  // Use midday UTC to avoid timezone rollover on .toLocaleDateString
+  return new Date(`${iso}T12:00:00`);
+}
+
+function dateToIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
 
 // ---------------------------------------------------------------------------
 // Component
@@ -46,7 +63,7 @@ const AVAILABILITY_OPTIONS: { label: string; value: AvailabilityStatus }[] = [
 interface Props {
   visible: boolean;
   editEntry?: YearEntry | null;
-  initialDate?: string;
+  initialDate?: string | undefined;
   onClose: () => void;
 }
 
@@ -58,7 +75,7 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
   const [startDate, setStartDate] = useState(initialDate ?? '');
   const [endDate, setEndDate] = useState('');
   const [location, setLocation] = useState('');
-  const [availability, setAvailability] = useState<AvailabilityStatus>('available');
+  const [availability, setAvailability] = useState<AvailabilityStatus>('away');
   const [createTripPlan, setCreateTripPlan] = useState(false);
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +87,7 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
   const isBirthday = type === 'birthday';
 
   useEffect(() => {
+    setError(null);
     if (!visible) return;
     if (editEntry) {
       setType(editEntry.type);
@@ -77,7 +95,7 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
       setStartDate(editEntry.start_date);
       setEndDate(editEntry.end_date ?? '');
       setLocation(editEntry.location ?? '');
-      setAvailability(editEntry.availability_status ?? 'available');
+      setAvailability(editEntry.availability_status ?? 'away');
       setCreateTripPlan(editEntry.create_linked_trip_plan);
       setNote(editEntry.note ?? '');
     } else {
@@ -86,11 +104,10 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
       setStartDate(initialDate ?? '');
       setEndDate('');
       setLocation('');
-      setAvailability('available');
+      setAvailability('away');
       setCreateTripPlan(false);
       setNote('');
     }
-    setError(null);
   }, [visible, editEntry, initialDate]);
 
   // Reset birthday-incompatible fields when switching to birthday
@@ -168,10 +185,20 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
             </View>
           )}
 
-          {/* Type picker (read-only on edit — type is immutable) */}
-          {!isEdit && (
-            <View style={styles.section}>
-              <Text style={styles.fieldLabel}>Type</Text>
+          {/* Type: picker on create, read-only badge on edit (type is immutable) */}
+          <View style={styles.section}>
+            <Text style={styles.fieldLabel}>Type</Text>
+            {isEdit ? (
+              <View style={styles.typeBadge}>
+                <Text style={styles.typeBadgeIcon}>
+                  {ENTRY_TYPES.find((t) => t.value === type)?.icon}
+                </Text>
+                <Text style={styles.typeBadgeLabel}>
+                  {ENTRY_TYPES.find((t) => t.value === type)?.label}
+                </Text>
+                <Text style={styles.typeBadgeNote}>(can't be changed)</Text>
+              </View>
+            ) : (
               <View style={styles.chipRow}>
                 {ENTRY_TYPES.map((t) => {
                   const isSelected = type === t.value;
@@ -189,8 +216,8 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
                   );
                 })}
               </View>
-            </View>
-          )}
+            )}
+          </View>
 
           {/* Title */}
           <View style={styles.section}>
@@ -211,9 +238,14 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
           <View style={styles.section}>
             <DatePickerField
               label={isBirthday ? 'Birthday' : 'Start Date'}
-              value={startDate}
-              onChange={setStartDate}
+              value={isoToDate(startDate)}
+              onChange={(d) => setStartDate(dateToIso(d))}
             />
+            {isBirthday && (
+              <Text style={styles.helperText}>
+                The year doesn't matter — birthdays repeat annually.
+              </Text>
+            )}
           </View>
 
           {/* End date (hidden for birthday) */}
@@ -221,9 +253,13 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
             <View style={styles.section}>
               <DatePickerField
                 label="End Date (optional)"
-                value={endDate}
-                onChange={setEndDate}
+                value={isoToDate(endDate)}
+                onChange={(d) => setEndDate(dateToIso(d))}
+                {...(isoToDate(startDate) ? { minimumDate: isoToDate(startDate)! } : {})}
               />
+              <Text style={styles.helperText}>
+                Leave blank for a single-day entry.
+              </Text>
             </View>
           )}
 
@@ -264,13 +300,13 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
             </View>
           )}
 
-          {/* Create linked trip plan toggle (hidden for birthday and when already has project) */}
-          {!isBirthday && !(isEdit && editEntry?.linked_project_id) && (
+          {/* Create linked trip plan (create-mode only, travel/away only — matches web) */}
+          {!isBirthday && !isEdit && (
             <View style={[styles.section, styles.toggleRow]}>
               <View style={styles.toggleLabel}>
                 <Text style={styles.toggleTitle}>Create linked trip plan</Text>
                 <Text style={styles.toggleSub}>
-                  Creates a project in Project Planner for this trip
+                  Auto-creates a project for flights, hotels, activities, and errands.
                 </Text>
               </View>
               <Switch
@@ -279,6 +315,17 @@ export function YearEntryFormModal({ visible, editEntry, initialDate, onClose }:
                 trackColor={{ false: colors.gray[200], true: colors.blue[400] }}
                 thumbColor={createTripPlan ? colors.blue[600] : colors.gray[400]}
               />
+            </View>
+          )}
+
+          {/* Existing linked project notice (edit mode) */}
+          {isEdit && editEntry?.linked_project_id && (
+            <View style={styles.section}>
+              <View style={styles.linkedNotice}>
+                <Text style={styles.linkedNoticeText}>
+                  This entry has a linked trip project. Manage it in Project Planner.
+                </Text>
+              </View>
             </View>
           )}
 
@@ -427,5 +474,51 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.gray[400],
     marginTop: 2,
+  },
+
+  helperText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.gray[400],
+    marginTop: spacing.xs,
+  },
+
+  linkedNotice: {
+    padding: spacing.md,
+    backgroundColor: colors.amber[50],
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.amber[200],
+  },
+  linkedNoticeText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.amber[700],
+  },
+
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.blue[50],
+    borderWidth: 1,
+    borderColor: colors.blue[100],
+  },
+  typeBadgeIcon: { fontSize: 14 },
+  typeBadgeLabel: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.blue[700],
+  },
+  typeBadgeNote: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.gray[400],
+    marginLeft: spacing.xs,
   },
 });

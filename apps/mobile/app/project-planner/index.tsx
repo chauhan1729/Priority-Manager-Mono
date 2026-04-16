@@ -5,6 +5,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput as RNTextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -13,6 +14,7 @@ import { router } from 'expo-router';
 import type { Activity, Project, ProjectStatus } from '@pm/types';
 import { useProjects, useDeleteProject } from '../../src/hooks/useProjects';
 import { useActivitiesForProject } from '../../src/hooks/useActivities';
+import { useAllMonthlyPriorities } from '../../src/hooks/useMonthlyPriorities';
 import { ProjectCard, ProjectFormModal } from '../../src/components/projects';
 import { colors } from '../../src/theme/colors';
 import { borderRadius, spacing } from '../../src/theme/spacing';
@@ -37,10 +39,12 @@ const STATUS_FILTERS: { label: string; value: ProjectStatus | 'all' }[] = [
 
 function ProjectCardWithActivities({
   project,
+  linkedPriorityTitle,
   onPress,
   onLongPress,
 }: {
   project: Project;
+  linkedPriorityTitle?: string | null | undefined;
   onPress: () => void;
   onLongPress: () => void;
 }) {
@@ -49,6 +53,7 @@ function ProjectCardWithActivities({
     <ProjectCard
       project={project}
       activities={rawActivities as Activity[]}
+      linkedPriorityTitle={linkedPriorityTitle}
       onPress={onPress}
     />
   );
@@ -60,16 +65,32 @@ function ProjectCardWithActivities({
 
 export default function ProjectListScreen() {
   const [activeFilter, setActiveFilter] = useState<ProjectStatus | 'all'>('all');
+  const [search, setSearch] = useState('');
   const [formVisible, setFormVisible] = useState(false);
   const [editProject, setEditProject] = useState<Project | null>(null);
 
   const { data: allProjects = [], isLoading } = useProjects();
+  const { data: allPriorities = [] } = useAllMonthlyPriorities();
   const deleteMutation = useDeleteProject();
 
+  const priorityMap = useMemo(
+    () => new Map(allPriorities.map((p) => [p.id, p.title])),
+    [allPriorities],
+  );
+
   const filteredProjects = useMemo(() => {
-    if (activeFilter === 'all') return allProjects;
-    return allProjects.filter((p) => p.status === activeFilter);
-  }, [allProjects, activeFilter]);
+    let list = allProjects;
+    if (activeFilter !== 'all') list = list.filter((p) => p.status === activeFilter);
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.description ?? '').toLowerCase().includes(q),
+      );
+    }
+    return list;
+  }, [allProjects, activeFilter, search]);
 
   const handleLongPress = (project: Project) => {
     Alert.alert(project.name, 'What would you like to do?', [
@@ -113,6 +134,19 @@ export default function ProjectListScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Search bar */}
+      <View style={styles.searchBar}>
+        <RNTextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search projects…"
+          placeholderTextColor={colors.gray[400]}
+          clearButtonMode="while-editing"
+          returnKeyType="search"
+        />
+      </View>
+
       {/* Status filter chips */}
       <View style={styles.filterRow}>
         <ScrollView
@@ -144,6 +178,11 @@ export default function ProjectListScreen() {
         renderItem={({ item }) => (
           <ProjectCardWithActivities
             project={item}
+            linkedPriorityTitle={
+              item.linked_monthly_priority_id
+                ? priorityMap.get(item.linked_monthly_priority_id) ?? null
+                : null
+            }
             onPress={() => router.push(`/project-planner/${item.id}`)}
             onLongPress={() => handleLongPress(item)}
           />
@@ -195,6 +234,22 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   addBtnText: { color: '#FFFFFF', fontSize: 22, lineHeight: 26, fontWeight: '300' },
+  searchBar: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.gray[100],
+  },
+  searchInput: {
+    backgroundColor: colors.gray[50],
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    color: colors.ink.DEFAULT,
+  },
   filterRow: {
     backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: colors.blue[100],
   },

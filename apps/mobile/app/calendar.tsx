@@ -10,16 +10,18 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import type { CalendarEvent } from '@pm/types';
+import type { CalendarEvent, Meeting, YearEntry } from '@pm/types';
+import { expandRecurringMeetings } from '@pm/domain';
 import {
   useCalendarEventsForMonth,
   useMonthNote,
   useUpsertMonthNote,
 } from '../src/hooks/useCalendarEvents';
 import { useContacts } from '../src/hooks/useContacts';
+import { useMeetings } from '../src/hooks/useMeetings';
 import { useYearEntries } from '../src/hooks/useYearEntries';
 import { MonthGrid } from '../src/components/calendar/MonthGrid';
-import { EventDetailSheet } from '../src/components/calendar/EventDetailSheet';
+import { EventDetailSheet, type DetailItem } from '../src/components/calendar/EventDetailSheet';
 import { CalendarEventFormModal } from '../src/components/calendar/CalendarEventFormModal';
 import { colors } from '../src/theme/colors';
 import { borderRadius, spacing } from '../src/theme/spacing';
@@ -45,6 +47,8 @@ const TYPE_LABEL: Record<string, string> = {
   birthday: 'Birthday',
   renewal: 'Renewal',
   other: 'Other',
+  away: 'Away',
+  travel: 'Travel',
 };
 
 const TYPE_COLOR: Record<string, { bg: string; text: string }> = {
@@ -53,34 +57,102 @@ const TYPE_COLOR: Record<string, { bg: string; text: string }> = {
   birthday: { bg: '#FCE7F3', text: '#9D174D' },
   renewal: { bg: colors.amber[50], text: colors.amber[700] },
   other: { bg: colors.gray[100], text: colors.gray[600] },
+  away: { bg: colors.purple[50], text: colors.purple[700] },
+  travel: { bg: colors.purple[50], text: colors.purple[700] },
 };
+
+// Unified day event ---------------------------------------------------------
+
+type DayEvent =
+  | { kind: 'calendar_event'; data: CalendarEvent }
+  | { kind: 'orphan_meeting'; data: Meeting }
+  | { kind: 'birthday'; data: YearEntry }
+  | { kind: 'away'; data: YearEntry; spansFrom: string; spansTo: string };
 
 // ---- Day event row ---------------------------------------------------------
 
 interface EventRowProps {
-  event: CalendarEvent;
+  event: DayEvent;
   contactMap: Map<string, string>;
   onPress: () => void;
 }
 
 function EventRow({ event, contactMap, onPress }: EventRowProps) {
-  const typeStyle = TYPE_COLOR[event.event_type] ?? TYPE_COLOR.other;
-  const contactName = event.linked_contact_id ? contactMap.get(event.linked_contact_id) : null;
+  if (event.kind === 'calendar_event') {
+    const ev = event.data;
+    const typeStyle = TYPE_COLOR[ev.event_type] ?? TYPE_COLOR.other;
+    const contactName = ev.linked_contact_id ? contactMap.get(ev.linked_contact_id) : null;
+    const timeLabel = ev.start_at
+      ? new Date(ev.start_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      : 'All day';
+    return (
+      <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
+        <Text style={styles.eventTime}>{timeLabel}</Text>
+        <View style={styles.eventBody}>
+          <Text style={styles.eventTitle} numberOfLines={1}>{ev.title}</Text>
+          {contactName && <Text style={styles.eventMeta} numberOfLines={1}>{contactName}</Text>}
+        </View>
+        <View style={[styles.typeBadge, { backgroundColor: typeStyle!.bg }]}>
+          <Text style={[styles.typeBadgeText, { color: typeStyle!.text }]}>
+            {TYPE_LABEL[ev.event_type] ?? ev.event_type}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
-  const timeLabel = event.start_at
-    ? new Date(event.start_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-    : 'All day';
+  if (event.kind === 'orphan_meeting') {
+    const meeting = event.data;
+    const style = TYPE_COLOR.meeting!;
+    const contactName = contactMap.get(meeting.linked_contact_id) ?? null;
+    const timeLabel = new Date(meeting.start_at).toLocaleTimeString(undefined, {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+    return (
+      <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
+        <Text style={styles.eventTime}>{timeLabel}</Text>
+        <View style={styles.eventBody}>
+          <Text style={styles.eventTitle} numberOfLines={1}>{meeting.title}</Text>
+          {contactName && <Text style={styles.eventMeta} numberOfLines={1}>{contactName}</Text>}
+        </View>
+        <View style={[styles.typeBadge, { backgroundColor: style.bg }]}>
+          <Text style={[styles.typeBadgeText, { color: style.text }]}>Meeting</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
 
+  if (event.kind === 'birthday') {
+    const entry = event.data;
+    const style = TYPE_COLOR.birthday!;
+    return (
+      <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
+        <Text style={styles.eventTime}>All day</Text>
+        <View style={styles.eventBody}>
+          <Text style={styles.eventTitle} numberOfLines={1}>🎂 {entry.title}</Text>
+        </View>
+        <View style={[styles.typeBadge, { backgroundColor: style.bg }]}>
+          <Text style={[styles.typeBadgeText, { color: style.text }]}>Birthday</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }
+
+  // away
+  const entry = event.data;
+  const style = TYPE_COLOR[entry.type] ?? TYPE_COLOR.away!;
+  const spanLabel = event.spansFrom === event.spansTo ? '' : ` (through ${event.spansTo.slice(5)})`;
   return (
     <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
-      <Text style={styles.eventTime}>{timeLabel}</Text>
+      <Text style={styles.eventTime}>All day</Text>
       <View style={styles.eventBody}>
-        <Text style={styles.eventTitle} numberOfLines={1}>{event.title}</Text>
-        {contactName && <Text style={styles.eventMeta} numberOfLines={1}>{contactName}</Text>}
+        <Text style={styles.eventTitle} numberOfLines={1}>✈ {entry.title}{spanLabel}</Text>
+        {entry.location ? <Text style={styles.eventMeta} numberOfLines={1}>{entry.location}</Text> : null}
       </View>
-      <View style={[styles.typeBadge, { backgroundColor: typeStyle.bg }]}>
-        <Text style={[styles.typeBadgeText, { color: typeStyle.text }]}>
-          {TYPE_LABEL[event.event_type] ?? event.event_type}
+      <View style={[styles.typeBadge, { backgroundColor: style.bg }]}>
+        <Text style={[styles.typeBadgeText, { color: style.text }]}>
+          {TYPE_LABEL[entry.type] ?? entry.type}
         </Text>
       </View>
     </TouchableOpacity>
@@ -140,27 +212,89 @@ export default function CalendarScreen() {
   const [year, setYear] = useState(() => new Date().getFullYear());
   const [month, setMonth] = useState(() => new Date().getMonth());
   const [selectedDate, setSelectedDate] = useState<string>(today);
-  const [detailEvent, setDetailEvent] = useState<CalendarEvent | null>(null);
+  const [detailItem, setDetailItem] = useState<DetailItem | null>(null);
   const [formVisible, setFormVisible] = useState(false);
   const [editEvent, setEditEvent] = useState<CalendarEvent | null>(null);
+
+  const currentYear = new Date().getFullYear();
+  const currentMonth = new Date().getMonth();
+  const isViewingCurrentMonth = year === currentYear && month === currentMonth;
+
+  const handleJumpToToday = useCallback(() => {
+    setYear(currentYear);
+    setMonth(currentMonth);
+    setSelectedDate(today);
+    setDetailItem(null);
+  }, [currentYear, currentMonth, today]);
 
   const monthKey = toMonthKey(year, month);
 
   const { data: events = [] } = useCalendarEventsForMonth(monthKey);
   const { data: contacts = [] } = useContacts();
   const { data: yearEntries = [] } = useYearEntries(year);
+  const { data: allMeetings = [] } = useMeetings();
 
   const contactMap = new Map(contacts.map((c) => [c.id, c.full_name]));
 
-  // Events for the selected day
-  const dayEvents = events
-    .filter((e) => e.date === selectedDate)
-    .sort((a, b) => {
-      if (!a.start_at && !b.start_at) return 0;
-      if (!a.start_at) return 1;
-      if (!b.start_at) return -1;
-      return a.start_at.localeCompare(b.start_at);
+  // Orphan meetings: meetings without a linked calendar_event. Expand recurring for this month.
+  const orphanMeetingsForMonth: Meeting[] = (() => {
+    const orphans = allMeetings.filter((m) => m.linked_calendar_event_id === null);
+    if (orphans.length === 0) return [];
+    const mm = String(month + 1).padStart(2, '0');
+    const lastDay = new Date(year, month + 1, 0).getDate();
+    const monthStart = `${year}-${mm}-01`;
+    const monthEnd = `${year}-${mm}-${String(lastDay).padStart(2, '0')}`;
+    return expandRecurringMeetings(orphans, monthStart, monthEnd);
+  })();
+
+  // Events for the selected day — unified across calendar_events, birthdays, away spans
+  const selectedYear = selectedDate.slice(0, 4);
+  const dayEvents: DayEvent[] = (() => {
+    const list: DayEvent[] = [];
+
+    // Calendar events on this date
+    for (const ev of events) {
+      if (ev.date === selectedDate) list.push({ kind: 'calendar_event', data: ev });
+    }
+
+    // Orphan meetings on this date
+    for (const m of orphanMeetingsForMonth) {
+      if (m.date === selectedDate) list.push({ kind: 'orphan_meeting', data: m });
+    }
+
+    // Birthdays whose MM-DD matches selectedDate
+    for (const entry of yearEntries) {
+      if (entry.type !== 'birthday') continue;
+      const monthDay = entry.start_date.slice(5);
+      if (`${selectedYear}-${monthDay}` === selectedDate) {
+        list.push({ kind: 'birthday', data: entry });
+      }
+    }
+
+    // Away/travel entries that include selectedDate
+    for (const entry of yearEntries) {
+      if (entry.type !== 'travel' && entry.type !== 'away') continue;
+      const start = entry.start_date;
+      const end = entry.end_date ?? entry.start_date;
+      if (selectedDate >= start && selectedDate <= end) {
+        list.push({ kind: 'away', data: entry, spansFrom: start, spansTo: end });
+      }
+    }
+
+    const timeOf = (e: DayEvent): string => {
+      if (e.kind === 'calendar_event') return e.data.start_at ?? '';
+      if (e.kind === 'orphan_meeting') return e.data.start_at;
+      return '';
+    };
+    return list.sort((a, b) => {
+      const aTime = timeOf(a);
+      const bTime = timeOf(b);
+      if (!aTime && !bTime) return 0;
+      if (!aTime) return 1;
+      if (!bTime) return -1;
+      return aTime.localeCompare(bTime);
     });
+  })();
 
   // -- Month navigation -------------------------------------------------------
   const goToPrevMonth = useCallback(() => {
@@ -190,17 +324,55 @@ export default function CalendarScreen() {
   ).current;
 
   // -- Event handlers ---------------------------------------------------------
-  const handleDayPress = useCallback((dateISO: string) => {
-    setSelectedDate(dateISO);
-    setDetailEvent(null);
-  }, []);
 
-  const handleEventPress = useCallback((event: CalendarEvent) => {
-    setDetailEvent(event);
+  // Check if a given day has any events (calendar_event, orphan_meeting, birthday, or away overlap)
+  const dayHasEvents = useCallback(
+    (dateISO: string): boolean => {
+      if (events.some((ev) => ev.date === dateISO)) return true;
+      if (orphanMeetingsForMonth.some((m) => m.date === dateISO)) return true;
+      const selYear = dateISO.slice(0, 4);
+      for (const entry of yearEntries) {
+        if (entry.type === 'birthday') {
+          const monthDay = entry.start_date.slice(5);
+          if (`${selYear}-${monthDay}` === dateISO) return true;
+        } else if (entry.type === 'travel' || entry.type === 'away') {
+          const start = entry.start_date;
+          const end = entry.end_date ?? entry.start_date;
+          if (dateISO >= start && dateISO <= end) return true;
+        }
+      }
+      return false;
+    },
+    [events, orphanMeetingsForMonth, yearEntries],
+  );
+
+  const handleDayPress = useCallback(
+    (dateISO: string) => {
+      setSelectedDate(dateISO);
+      setDetailItem(null);
+      // Web parity: tapping an empty future/today day opens the form pre-filled
+      if (!dayHasEvents(dateISO) && dateISO >= today) {
+        setEditEvent(null);
+        setFormVisible(true);
+      }
+    },
+    [dayHasEvents, today],
+  );
+
+  const handleDayEventPress = useCallback((item: DayEvent) => {
+    if (item.kind === 'calendar_event') {
+      setDetailItem({ kind: 'calendar_event', data: item.data });
+    } else if (item.kind === 'orphan_meeting') {
+      setDetailItem({ kind: 'orphan_meeting', data: item.data });
+    } else if (item.kind === 'birthday') {
+      setDetailItem({ kind: 'birthday', data: item.data });
+    } else {
+      setDetailItem({ kind: 'away', data: item.data, spansFrom: item.spansFrom, spansTo: item.spansTo });
+    }
   }, []);
 
   const handleEdit = useCallback((event: CalendarEvent) => {
-    setDetailEvent(null);
+    setDetailItem(null);
     setEditEvent(event);
     setFormVisible(true);
   }, []);
@@ -216,7 +388,7 @@ export default function CalendarScreen() {
   };
 
   const handleSheetClose = () => {
-    setDetailEvent(null);
+    setDetailItem(null);
   };
 
   return (
@@ -226,7 +398,14 @@ export default function CalendarScreen() {
         <TouchableOpacity style={styles.navBtn} onPress={goToPrevMonth}>
           <Text style={styles.navArrow}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.monthLabel}>{formatMonthLabel(year, month)}</Text>
+        <View style={styles.monthLabelWrap}>
+          <Text style={styles.monthLabel}>{formatMonthLabel(year, month)}</Text>
+          {!isViewingCurrentMonth && (
+            <TouchableOpacity onPress={handleJumpToToday}>
+              <Text style={styles.todayLink}>Today</Text>
+            </TouchableOpacity>
+          )}
+        </View>
         <TouchableOpacity style={styles.navBtn} onPress={goToNextMonth}>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
@@ -268,12 +447,16 @@ export default function CalendarScreen() {
       {/* Day events list */}
       <FlatList
         data={dayEvents}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item, idx) =>
+          item.kind === 'calendar_event'
+            ? `ce-${item.data.id}`
+            : `${item.kind}-${item.data.id}-${idx}`
+        }
         renderItem={({ item }) => (
           <EventRow
             event={item}
             contactMap={contactMap}
-            onPress={() => handleEventPress(item)}
+            onPress={() => handleDayEventPress(item)}
           />
         )}
         ListEmptyComponent={
@@ -291,7 +474,7 @@ export default function CalendarScreen() {
 
       {/* Event detail sheet */}
       <EventDetailSheet
-        event={detailEvent}
+        item={detailItem}
         contactMap={contactMap}
         onClose={handleSheetClose}
         onEdit={handleEdit}
@@ -331,12 +514,21 @@ const styles = StyleSheet.create({
     color: colors.blue[600],
     lineHeight: 28,
   },
-  monthLabel: {
+  monthLabelWrap: {
     flex: 1,
-    textAlign: 'center',
+    alignItems: 'center',
+  },
+  monthLabel: {
     fontFamily: fontFamily.handwriting,
     fontSize: fontSize['2xl'],
     color: colors.ink.DEFAULT,
+  },
+  todayLink: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.blue[600],
+    fontWeight: '500',
+    marginTop: 2,
   },
   addBtn: {
     width: 34,

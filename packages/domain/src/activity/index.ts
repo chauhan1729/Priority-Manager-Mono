@@ -1,4 +1,4 @@
-import { type Activity, type ActivitySection } from "@pm/types";
+import { type Activity, type ActivityRecurrenceRule, type ActivitySection } from "@pm/types";
 
 /** Spec §10.5: Hard block — no more than 3 A-priority activities per day. */
 export const MAX_A_PRIORITY_PER_DAY = 3;
@@ -39,4 +39,29 @@ export function groupActivitiesBySection(
     delegated: activities.filter((a) => a.section_type === "delegated"),
     unplanned: activities.filter((a) => a.section_type === "unplanned"),
   };
+}
+
+/**
+ * Given a start date (ISO YYYY-MM-DD), a recurrence rule, and a count,
+ * returns the next `count` occurrence dates as ISO strings.
+ * Mirrors the helper in apps/web/src/app/(app)/activities/actions.ts.
+ */
+export function buildRecurringDates(
+  startISO: string,
+  rule: ActivityRecurrenceRule,
+  count: number,
+): string[] {
+  const dates: string[] = [];
+  const [y = 0, m = 0, d = 0] = startISO.split("-").map(Number);
+  const base = new Date(y, m - 1, d);
+  for (let i = 1; i <= count; i++) {
+    const next = new Date(base);
+    if (rule === "daily") next.setDate(next.getDate() + i);
+    else if (rule === "weekly") next.setDate(next.getDate() + i * 7);
+    else if (rule === "monthly") next.setMonth(next.getMonth() + i);
+    dates.push(
+      `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`,
+    );
+  }
+  return dates;
 }

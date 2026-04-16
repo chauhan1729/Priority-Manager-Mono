@@ -352,6 +352,37 @@ export function useUpdateMilestoneStatus() {
   });
 }
 
+export interface UpdateMilestoneInput {
+  milestoneId: string;
+  projectId: string;
+  title: string;
+  target_date?: string | null;
+  status: MilestoneStatus;
+}
+
+export function useUpdateMilestone() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateMilestoneInput) => {
+      if (!input.title.trim()) throw new Error('Milestone title is required.');
+      const { error } = await supabase
+        .from('project_milestones')
+        .update({
+          title: input.title.trim(),
+          target_date: input.target_date || null,
+          status: input.status,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.milestoneId);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: projectKeys.milestones(input.projectId) });
+    },
+  });
+}
+
 export function useDeleteMilestone() {
   const qc = useQueryClient();
 
@@ -406,6 +437,43 @@ export function useCreateResource() {
         assigned_contact_id: null,
         needed_by_date: input.needed_by_date || null,
       });
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: (_data, input) => {
+      qc.invalidateQueries({ queryKey: projectKeys.resources(input.projectId) });
+    },
+  });
+}
+
+export interface UpdateResourceInput {
+  resourceId: string;
+  projectId: string;
+  resource_type: ResourceType;
+  title: string;
+  note?: string | null;
+  estimated_cost?: number | null;
+  status: ResourceStatus;
+  needed_by_date?: string | null;
+}
+
+export function useUpdateResource() {
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateResourceInput) => {
+      if (!input.title.trim()) throw new Error('Resource title is required.');
+      const { error } = await supabase
+        .from('project_resources')
+        .update({
+          resource_type: input.resource_type,
+          title: input.title.trim(),
+          note: input.note?.trim() || null,
+          estimated_cost: input.estimated_cost ?? null,
+          status: input.status,
+          needed_by_date: input.needed_by_date || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', input.resourceId);
       if (error) throw new Error(error.message);
     },
     onSuccess: (_data, input) => {

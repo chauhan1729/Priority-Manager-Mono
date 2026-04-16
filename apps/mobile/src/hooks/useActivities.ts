@@ -1,5 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { canCreateActivityOnDate, MAX_A_PRIORITY_PER_DAY } from '@pm/domain';
+import {
+  buildRecurringDates,
+  canCreateActivityOnDate,
+  MAX_A_PRIORITY_PER_DAY,
+} from '@pm/domain';
+import type { ActivityRecurrenceRule } from '@pm/types';
 import { supabase } from '../lib/supabase/client';
 import { useAuth } from '../components/providers/AuthProvider';
 
@@ -10,6 +15,7 @@ import { useAuth } from '../components/providers/AuthProvider';
 export const activityKeys = {
   all: ['activities'] as const,
   forDate: (date: string) => ['activities', 'date', date] as const,
+  archivedForDate: (date: string) => ['activities', 'archived', date] as const,
   forProject: (projectId: string) => ['activities', 'project', projectId] as const,
   forContact: (contactId: string) => ['activities', 'contact', contactId] as const,
   previousDayIncomplete: (date: string) => ['activities', 'carry-forward', date] as const,
@@ -78,6 +84,25 @@ export function useActivitiesForContact(contactId: string) {
   });
 }
 
+export function useArchivedActivitiesForDate(date: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: activityKeys.archivedForDate(date),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('activities')
+        .select('*')
+        .eq('user_id', user!.id)
+        .eq('activity_date', date)
+        .eq('archived', true)
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!date,
+  });
+}
+
 export function usePreviousDayIncomplete(previousDate: string) {
   const { user } = useAuth();
   return useQuery({
@@ -111,6 +136,7 @@ export interface CreateActivityInput {
   delegated_contact_id?: string | null;
   estimated_minutes: number;
   note?: string | null;
+  recurrence_rule?: ActivityRecurrenceRule | null;
 }
 
 export interface UpdateActivityInput {
@@ -120,6 +146,7 @@ export interface UpdateActivityInput {
   section_type: string;
   priority?: string | null;
   linked_project_id?: string | null;
+  delegated_contact_id?: string | null;
   estimated_minutes: number;
   note?: string | null;
 }
@@ -171,29 +198,44 @@ export function useCreateActivity() {
         }
       }
 
-      const { error } = await supabase.from('activities').insert({
+      const base = {
         user_id: user.id,
         title: input.title.trim(),
         section_type: input.section_type,
         priority: input.priority ?? null,
-        activity_date: input.activity_date,
         estimated_minutes: input.estimated_minutes,
         remaining_minutes: input.estimated_minutes,
-        status: 'not_started',
+        status: 'not_started' as const,
         linked_project_id: input.linked_project_id ?? null,
         delegated_contact_id:
           input.section_type === 'delegated' ? (input.delegated_contact_id ?? null) : null,
         note: input.note ?? null,
-        origin_type: 'manual',
+        origin_type: 'manual' as const,
         moved_from_date: null,
-      });
+        recurrence_rule: input.recurrence_rule ?? null,
+      };
+
+      const { error } = await supabase
+        .from('activities')
+        .insert({ ...base, activity_date: input.activity_date });
       if (error) throw new Error(error.message);
+
+      // Recurring siblings: 3 future copies (daily +3d, weekly +3w, monthly +3mo)
+      if (input.recurrence_rule) {
+        const siblings = buildRecurringDates(input.activity_date, input.recurrence_rule, 3);
+        for (const sibDate of siblings) {
+          await supabase
+            .from('activities')
+            .insert({ ...base, activity_date: sibDate });
+        }
+      }
     },
     onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: activityKeys.all });
       if (input.linked_project_id) {
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
+      qc.invalidateQueries({ queryKey: ['monthly_priorities'] });
     },
   });
 }
@@ -212,6 +254,21 @@ export function useUpdateActivity() {
       if (input.section_type === 'work' && !input.linked_project_id) {
         throw new Error('Work activities must be linked to a project.');
       }
+      if (input.section_type === 'delegated' && !input.delegated_contact_id) {
+        throw new Error('Delegated activities require a contact.');
+      }
+
+      // Verify delegated contact belongs to this user
+      if (input.section_type === 'delegated' && input.delegated_contact_id) {
+        const { data: contact } = await supabase
+          .from('contacts')
+          .select('id')
+          .eq('id', input.delegated_contact_id)
+          .eq('user_id', user.id)
+          .eq('is_deleted', false)
+          .single();
+        if (!contact) throw new Error('Contact not found.');
+      }
 
       // A-priority cap (exclude self)
       if (input.priority === 'A') {
@@ -227,6 +284,20 @@ export function useUpdateActivity() {
         }
       }
 
+      // Preserve remaining_minutes when estimate unchanged (don't stomp logged time)
+      const { data: existing } = await supabase
+        .from('activities')
+        .select('estimated_minutes, remaining_minutes')
+        .eq('id', input.id)
+        .eq('user_id', user.id)
+        .single();
+
+      const estimateChanged =
+        !existing || existing.estimated_minutes !== input.estimated_minutes;
+      const newRemaining = estimateChanged
+        ? input.estimated_minutes
+        : (existing?.remaining_minutes ?? input.estimated_minutes);
+
       const { error } = await supabase
         .from('activities')
         .update({
@@ -235,8 +306,10 @@ export function useUpdateActivity() {
           priority: input.priority ?? null,
           activity_date: input.activity_date,
           estimated_minutes: input.estimated_minutes,
-          remaining_minutes: input.estimated_minutes,
+          remaining_minutes: newRemaining,
           linked_project_id: input.linked_project_id ?? null,
+          delegated_contact_id:
+            input.section_type === 'delegated' ? (input.delegated_contact_id ?? null) : null,
           note: input.note ?? null,
           updated_at: new Date().toISOString(),
         })
@@ -249,6 +322,8 @@ export function useUpdateActivity() {
       if (input.linked_project_id) {
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
+      qc.invalidateQueries({ queryKey: ['monthly_priorities'] });
+      qc.invalidateQueries({ queryKey: ['schedule_instances'] });
     },
   });
 }
@@ -339,6 +414,7 @@ export function useCarryForwardActivity() {
       activityId: string;
       fromDate: string;
       toDate: string;
+      linkedProjectId?: string | null;
     }) => {
       if (!user) throw new Error('Not authenticated.');
 
@@ -364,8 +440,12 @@ export function useCarryForwardActivity() {
         .eq('user_id', user.id);
       if (error) throw new Error(error.message);
     },
-    onSuccess: () => {
+    onSuccess: (_data, input) => {
       qc.invalidateQueries({ queryKey: activityKeys.all });
+      if (input.linkedProjectId) {
+        qc.invalidateQueries({ queryKey: ['projects'] });
+      }
+      qc.invalidateQueries({ queryKey: ['schedule_instances'] });
     },
   });
 }
@@ -460,6 +540,137 @@ export function useDeleteActivity() {
       if (_data?.linkedProjectId) {
         qc.invalidateQueries({ queryKey: ['projects'] });
       }
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Bulk mutation hooks
+// ---------------------------------------------------------------------------
+
+export function useBulkMoveActivities() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      activityIds,
+      toDate,
+      fromDate,
+    }: {
+      activityIds: string[];
+      toDate: string;
+      fromDate: string;
+    }) => {
+      if (!user) throw new Error('Not authenticated.');
+      const { error } = await supabase
+        .from('activities')
+        .update({
+          activity_date: toDate,
+          status: 'postponed',
+          moved_from_date: fromDate,
+          updated_at: new Date().toISOString(),
+        })
+        .in('id', activityIds)
+        .eq('user_id', user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['schedule_instances'] });
+    },
+  });
+}
+
+export function useBulkUpdateStatus() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({
+      activityIds,
+      status,
+    }: {
+      activityIds: string[];
+      status: string;
+    }) => {
+      if (!user) throw new Error('Not authenticated.');
+      const { error } = await supabase
+        .from('activities')
+        .update({ status, updated_at: new Date().toISOString() })
+        .in('id', activityIds)
+        .eq('user_id', user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['schedule_instances'] });
+    },
+  });
+}
+
+export function useBulkArchiveActivities() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ activityIds }: { activityIds: string[] }) => {
+      if (!user) throw new Error('Not authenticated.');
+      const { error } = await supabase
+        .from('activities')
+        .update({ archived: true, updated_at: new Date().toISOString() })
+        .in('id', activityIds)
+        .eq('user_id', user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['schedule_instances'] });
+    },
+  });
+}
+
+export function useBulkDeleteActivities() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ activityIds }: { activityIds: string[] }) => {
+      if (!user) throw new Error('Not authenticated.');
+      const { error } = await supabase
+        .from('activities')
+        .delete()
+        .in('id', activityIds)
+        .eq('user_id', user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: activityKeys.all });
+      qc.invalidateQueries({ queryKey: ['projects'] });
+      qc.invalidateQueries({ queryKey: ['schedule_instances'] });
+    },
+  });
+}
+
+export function useUnarchiveActivity() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ activityId }: { activityId: string }) => {
+      if (!user) throw new Error('Not authenticated.');
+      const { error } = await supabase
+        .from('activities')
+        .update({ archived: false, updated_at: new Date().toISOString() })
+        .eq('id', activityId)
+        .eq('user_id', user.id);
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: activityKeys.all });
     },
   });
 }

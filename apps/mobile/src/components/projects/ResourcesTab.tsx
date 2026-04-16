@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Alert,
   FlatList,
@@ -14,6 +14,7 @@ import type { ProjectResource, ResourceStatus, ResourceType } from '@pm/types';
 import {
   useCreateResource,
   useDeleteResource,
+  useUpdateResource,
   useUpdateResourceStatus,
 } from '../../hooks/useProjects';
 import { DatePickerField } from '../ui';
@@ -54,16 +55,19 @@ const STATUS_STYLE: Record<ResourceStatus, { bg: string; text: string }> = {
 };
 
 // ---------------------------------------------------------------------------
-// Add resource modal
+// Form modal (create + edit)
 // ---------------------------------------------------------------------------
 
-interface AddModalProps {
+interface FormModalProps {
   visible: boolean;
   projectId: string;
+  editResource?: ProjectResource | null;
   onClose: () => void;
 }
 
-function AddResourceModal({ visible, projectId, onClose }: AddModalProps) {
+function ResourceFormModal({ visible, projectId, editResource, onClose }: FormModalProps) {
+  const isEdit = !!editResource;
+
   const [title, setTitle] = useState('');
   const [resourceType, setResourceType] = useState<ResourceType>('budget');
   const [status, setStatus] = useState<ResourceStatus>('needed');
@@ -72,10 +76,50 @@ function AddResourceModal({ visible, projectId, onClose }: AddModalProps) {
   const [neededByDate, setNeededByDate] = useState('');
   const [error, setError] = useState<string | null>(null);
   const createMutation = useCreateResource();
+  const updateMutation = useUpdateResource();
+  const isPending = isEdit ? updateMutation.isPending : createMutation.isPending;
+
+  useEffect(() => {
+    if (!visible) return;
+    if (editResource) {
+      setTitle(editResource.title);
+      setResourceType(editResource.resource_type);
+      setStatus(editResource.status);
+      setCost(editResource.estimated_cost != null ? String(editResource.estimated_cost) : '');
+      setNote(editResource.note ?? '');
+      setNeededByDate(editResource.needed_by_date ?? '');
+    } else {
+      setTitle('');
+      setResourceType('budget');
+      setStatus('needed');
+      setCost('');
+      setNote('');
+      setNeededByDate('');
+    }
+    setError(null);
+  }, [visible, editResource]);
 
   const handleSave = () => {
     setError(null);
     if (!title.trim()) { setError('Title is required.'); return; }
+
+    if (isEdit && editResource) {
+      updateMutation.mutate(
+        {
+          resourceId: editResource.id,
+          projectId,
+          resource_type: resourceType,
+          title: title.trim(),
+          note: note.trim() || null,
+          estimated_cost: cost ? parseFloat(cost) : null,
+          status,
+          needed_by_date: neededByDate || null,
+        },
+        { onSuccess: onClose, onError: (e: Error) => setError(e.message) },
+      );
+      return;
+    }
+
     createMutation.mutate(
       {
         projectId,
@@ -87,11 +131,7 @@ function AddResourceModal({ visible, projectId, onClose }: AddModalProps) {
         needed_by_date: neededByDate || null,
       },
       {
-        onSuccess: () => {
-          setTitle(''); setResourceType('budget'); setStatus('needed');
-          setCost(''); setNote(''); setNeededByDate('');
-          onClose();
-        },
+        onSuccess: onClose,
         onError: (e: Error) => setError(e.message),
       },
     );
@@ -102,10 +142,10 @@ function AddResourceModal({ visible, projectId, onClose }: AddModalProps) {
       <View style={modal.container}>
         <View style={modal.header}>
           <TouchableOpacity onPress={onClose}><Text style={modal.cancel}>Cancel</Text></TouchableOpacity>
-          <Text style={modal.title}>New Resource</Text>
-          <TouchableOpacity onPress={handleSave} disabled={createMutation.isPending}>
-            <Text style={[modal.save, createMutation.isPending && modal.disabled]}>
-              {createMutation.isPending ? 'Saving…' : 'Save'}
+          <Text style={modal.title}>{isEdit ? 'Edit Resource' : 'New Resource'}</Text>
+          <TouchableOpacity onPress={handleSave} disabled={isPending}>
+            <Text style={[modal.save, isPending && modal.disabled]}>
+              {isPending ? 'Saving…' : 'Save'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -121,7 +161,7 @@ function AddResourceModal({ visible, projectId, onClose }: AddModalProps) {
               onChangeText={setTitle}
               placeholder="e.g. Cloud storage license"
               placeholderTextColor={colors.gray[400]}
-              autoFocus
+              autoFocus={!isEdit}
             />
           </View>
           <View style={modal.field}>
@@ -168,7 +208,18 @@ function AddResourceModal({ visible, projectId, onClose }: AddModalProps) {
             />
           </View>
           <View style={modal.field}>
-            <DatePickerField label="Needed By (optional)" value={neededByDate} onChange={setNeededByDate} />
+            <DatePickerField
+              label="Needed By (optional)"
+              value={neededByDate && /^\d{4}-\d{2}-\d{2}$/.test(neededByDate)
+                ? new Date(`${neededByDate}T12:00:00`)
+                : null}
+              onChange={(d) => {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                setNeededByDate(`${y}-${m}-${day}`);
+              }}
+            />
           </View>
           <View style={modal.field}>
             <Text style={modal.label}>Note (optional)</Text>
@@ -198,10 +249,25 @@ interface Props {
 }
 
 export function ResourcesTab({ projectId, resources }: Props) {
-  const [addVisible, setAddVisible] = useState(false);
+  const [formVisible, setFormVisible] = useState(false);
+  const [editResource, setEditResource] = useState<ProjectResource | null>(null);
   const [statusPickerFor, setStatusPickerFor] = useState<string | null>(null);
   const updateStatus = useUpdateResourceStatus();
   const deleteResource = useDeleteResource();
+
+  const budgetTotal = resources.reduce(
+    (sum, r) => (r.estimated_cost != null ? sum + r.estimated_cost : sum),
+    0,
+  );
+  const budgetLabel =
+    budgetTotal > 0
+      ? ` · Budget: ${budgetTotal.toLocaleString('en-US', {
+          style: 'currency',
+          currency: 'USD',
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 0,
+        })}`
+      : '';
 
   const handleStatusSelect = (resource: ProjectResource, status: ResourceStatus) => {
     updateStatus.mutate({ resourceId: resource.id, projectId, status });
@@ -239,17 +305,33 @@ export function ResourcesTab({ projectId, resources }: Props) {
             {item.note ? <Text style={styles.resourceNote} numberOfLines={1}>{item.note}</Text> : null}
           </View>
           <View style={styles.cardRight}>
+            {/* Tappable status chip — opens inline picker */}
             <TouchableOpacity
               style={[styles.statusBadge, { backgroundColor: sc.bg }]}
               onPress={() => setStatusPickerFor(statusPickerFor === item.id ? null : item.id)}
+              activeOpacity={0.7}
             >
               <Text style={[styles.statusText, { color: sc.text }]}>
                 {RESOURCE_STATUSES.find((s) => s.value === item.status)?.label ?? item.status}
               </Text>
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => handleDelete(item)} style={styles.deleteBtn}>
-              <Text style={styles.deleteText}>✕</Text>
-            </TouchableOpacity>
+            {/* Icon buttons */}
+            <View style={styles.iconRow}>
+              <TouchableOpacity
+                style={styles.iconBtn}
+                onPress={() => setEditResource(item)}
+                accessibilityLabel="Edit"
+              >
+                <Text style={styles.iconBtnText}>✎</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.iconBtn, styles.iconBtnDanger]}
+                onPress={() => handleDelete(item)}
+                accessibilityLabel="Delete"
+              >
+                <Text style={styles.iconBtnTextDanger}>✕</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
         {/* Inline status picker */}
@@ -275,9 +357,12 @@ export function ResourcesTab({ projectId, resources }: Props) {
   return (
     <View style={styles.container}>
       <View style={styles.tabHeader}>
-        <Text style={styles.tabTitle}>{resources.length} resource{resources.length !== 1 ? 's' : ''}</Text>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setAddVisible(true)}>
-          <Text style={styles.addBtnText}>+ Add</Text>
+        <Text style={styles.tabTitle}>
+          {resources.length} resource{resources.length !== 1 ? 's' : ''}
+          {budgetLabel}
+        </Text>
+        <TouchableOpacity style={styles.addBtn} onPress={() => setFormVisible(true)}>
+          <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
       </View>
 
@@ -294,7 +379,15 @@ export function ResourcesTab({ projectId, resources }: Props) {
         }
       />
 
-      <AddResourceModal visible={addVisible} projectId={projectId} onClose={() => setAddVisible(false)} />
+      <ResourceFormModal
+        visible={formVisible || !!editResource}
+        projectId={projectId}
+        editResource={editResource}
+        onClose={() => {
+          setFormVisible(false);
+          setEditResource(null);
+        }}
+      />
     </View>
   );
 }
@@ -344,8 +437,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: colors.gray[100], backgroundColor: '#FFFFFF',
   },
   tabTitle: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.ink.light },
-  addBtn: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: borderRadius.full, backgroundColor: colors.blue[600] },
-  addBtnText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, fontWeight: '600', color: '#FFFFFF' },
+  addBtn: {
+    width: 32, height: 32, borderRadius: 16,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.blue[600],
+  },
+  addBtnText: {
+    fontFamily: fontFamily.sans, fontSize: 20, fontWeight: '400', color: '#FFFFFF', lineHeight: 22,
+  },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.md },
   card: {
     backgroundColor: '#FFFFFF', marginHorizontal: spacing.md, marginBottom: spacing.sm,
@@ -356,7 +455,16 @@ const styles = StyleSheet.create({
   resourceTitle: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, fontWeight: '500', color: colors.ink.DEFAULT },
   resourceMeta: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.ink.light },
   resourceNote: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.gray[400], fontStyle: 'italic' },
-  cardRight: { alignItems: 'flex-end', gap: spacing.sm },
+  cardRight: { alignItems: 'flex-end', gap: spacing.xs },
+  iconRow: { flexDirection: 'row', gap: spacing.xs },
+  iconBtn: {
+    width: 32, height: 32, borderRadius: borderRadius.full,
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.gray[50], borderWidth: 1, borderColor: colors.gray[200],
+  },
+  iconBtnDanger: { backgroundColor: colors.red[50], borderColor: colors.red[200] },
+  iconBtnText: { fontSize: 14 },
+  iconBtnTextDanger: { fontSize: 14 },
   statusBadge: { paddingHorizontal: spacing.sm, paddingVertical: 3, borderRadius: borderRadius.full },
   statusText: { fontFamily: fontFamily.sans, fontSize: 10, fontWeight: '600' },
   deleteBtn: { padding: spacing.xs },

@@ -9,16 +9,18 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { isDateInAwayPeriod } from '@pm/domain';
-import type { CalendarEvent, CalendarEventType, RecurrenceRule } from '@pm/types';
+import { isCalendarEventPast, isDateInAwayPeriod } from '@pm/domain';
+import type { CalendarEvent, CalendarEventStatus, CalendarEventType, RecurrenceRule } from '@pm/types';
 import type { YearEntry } from '@pm/types';
 import {
   type CreateCalendarEventInput,
   type UpdateCalendarEventInput,
+  extractLocalHHMM,
   useCreateCalendarEvent,
   useUpdateCalendarEvent,
 } from '../../hooks/useCalendarEvents';
 import { useContacts } from '../../hooks/useContacts';
+import { useProfile } from '../../hooks/useSettings';
 import {
   DatePickerField,
   SelectPickerField,
@@ -54,6 +56,37 @@ const DURATION_OPTIONS = [
   { value: '120', label: '2 hours' },
 ];
 
+const STATUS_OPTIONS: { value: CalendarEventStatus; label: string }[] = [
+  { value: 'upcoming', label: 'Upcoming' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'missed', label: 'Missed' },
+  { value: 'cancelled', label: 'Cancelled' },
+];
+
+// ---- ISO ↔ Date adapters ---------------------------------------------------
+
+function isoDateToDate(iso: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date();
+  return new Date(`${iso}T12:00:00`);
+}
+function dateToIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+function hhmmToDate(hhmm: string): Date {
+  const d = new Date();
+  const [h, m] = (hhmm && /^\d{2}:\d{2}/.test(hhmm) ? hhmm : '09:00').split(':').map(Number);
+  d.setHours(h ?? 9, m ?? 0, 0, 0);
+  return d;
+}
+function dateToHhmm(d: Date): string {
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
 // ---- component -------------------------------------------------------------
 
 interface Props {
@@ -66,6 +99,10 @@ interface Props {
 
 export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEntries, onClose }: Props) {
   const isEdit = !!editEvent;
+  const isPastEdit = !!editEvent && isCalendarEventPast(editEvent);
+
+  const { data: profile } = useProfile();
+  const timezone = profile?.timezone ?? 'UTC';
 
   const [eventType, setEventType] = useState<CalendarEventType>('meeting');
   const [title, setTitle] = useState('');
@@ -76,6 +113,7 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
   const [recurrence, setRecurrence] = useState<RecurrenceRule>(null);
+  const [status, setStatus] = useState<CalendarEventStatus>('upcoming');
   const [error, setError] = useState<string | null>(null);
 
   const { data: contacts = [] } = useContacts();
@@ -93,11 +131,7 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
       setDate(editEvent.date);
       setStartTime(
         editEvent.start_at
-          ? new Date(editEvent.start_at).toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: false,
-            })
+          ? extractLocalHHMM(editEvent.start_at, timezone)
           : '09:00',
       );
       setDurationStr(String(editEvent.duration_minutes ?? 60));
@@ -105,6 +139,7 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
       setLocation(editEvent.location ?? '');
       setNotes(editEvent.notes ?? '');
       setRecurrence(editEvent.recurrence_rule);
+      setStatus(editEvent.status);
     } else {
       setEventType('meeting');
       setTitle('');
@@ -115,9 +150,10 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
       setLocation('');
       setNotes('');
       setRecurrence(null);
+      setStatus('upcoming');
     }
     setError(null);
-  }, [visible, editEvent, initialDate]);
+  }, [visible, editEvent, initialDate, timezone]);
 
   const hasTiming = eventType === 'meeting' || eventType === 'appointment';
   const isAway = isDateInAwayPeriod(date, yearEntries);
@@ -130,6 +166,19 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
 
   const handleSave = () => {
     setError(null);
+
+    // Past-event edit: only status is editable
+    if (isPastEdit && editEvent) {
+      const input: UpdateCalendarEventInput = {
+        id: editEvent.id,
+        status,
+      };
+      (updateMutation.mutate as (input: UpdateCalendarEventInput, opts: any) => void)(input, {
+        onSuccess: onClose,
+        onError: (e: Error) => setError(e.message),
+      });
+      return;
+    }
 
     if (!title.trim()) {
       setError('Title is required.');
@@ -191,7 +240,9 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
           <TouchableOpacity onPress={onClose} disabled={isPending}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{isEdit ? 'Edit Event' : 'New Event'}</Text>
+          <Text style={styles.headerTitle}>
+            {isPastEdit ? 'Update Status' : isEdit ? 'Edit Event' : 'New Event'}
+          </Text>
           <TouchableOpacity onPress={handleSave} disabled={isPending}>
             <Text style={[styles.saveText, isPending && styles.textDisabled]}>
               {isPending ? 'Saving…' : 'Save'}
@@ -200,15 +251,6 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
         </View>
 
         <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
-          {/* Away warning */}
-          {isAway && (
-            <View style={styles.awayWarning}>
-              <Text style={styles.awayWarningText}>
-                You have a travel/away entry on this date. Consider whether you want to schedule this event.
-              </Text>
-            </View>
-          )}
-
           {/* Error */}
           {error ? (
             <View style={styles.errorBox}>
@@ -216,114 +258,159 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
             </View>
           ) : null}
 
-          {/* Type selector (create only) */}
-          {!isEdit && (
-            <View style={styles.section}>
-              <Text style={styles.sectionLabel}>Event Type</Text>
-              <View style={styles.typeRow}>
-                {EVENT_TYPES.map(({ value, label }) => (
-                  <TouchableOpacity
-                    key={value}
-                    style={[styles.typeBtn, eventType === value && styles.typeBtnActive]}
-                    onPress={() => setEventType(value)}
-                  >
-                    <Text style={[styles.typeBtnText, eventType === value && styles.typeBtnTextActive]}>
-                      {label}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+          {isPastEdit && editEvent ? (
+            <>
+              {/* Past-edit read-only context */}
+              <View style={styles.pastContext}>
+                <Text style={styles.pastContextHint}>
+                  Past events can only have their status updated.
+                </Text>
+                <Text style={styles.pastContextTitle}>{editEvent.title}</Text>
+                <Text style={styles.pastContextMeta}>
+                  {new Date(editEvent.date + 'T00:00:00').toLocaleDateString(undefined, {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                  })}
+                  {editEvent.start_at
+                    ? ` · ${extractLocalHHMM(editEvent.start_at, timezone)}`
+                    : ''}
+                  {editEvent.duration_minutes ? ` · ${editEvent.duration_minutes} min` : ''}
+                </Text>
               </View>
-            </View>
-          )}
 
-          {/* Title */}
-          <View style={styles.section}>
-            <TextInput
-              label="Title"
-              value={title}
-              onChangeText={setTitle}
-              placeholder={eventType === 'meeting' ? 'e.g. Quarterly review' : 'e.g. Doctor appointment'}
-            />
-          </View>
-
-          {/* Date */}
-          <View style={styles.section}>
-            <DatePickerField
-              label="Date"
-              value={date}
-              onChange={setDate}
-              minimumDate={isEdit ? undefined : todayISO()}
-            />
-          </View>
-
-          {/* Start time + Duration (meeting / appointment) */}
-          {hasTiming && (
-            <View style={styles.section}>
-              <View style={styles.row}>
-                <View style={styles.flex}>
-                  <TimePickerField
-                    label="Start Time"
-                    value={startTime}
-                    onChange={setStartTime}
-                  />
+              {/* Status */}
+              <View style={styles.section}>
+                <SelectPickerField
+                  label="Status"
+                  value={status}
+                  options={STATUS_OPTIONS}
+                  onChange={(v) => setStatus(v as CalendarEventStatus)}
+                />
+              </View>
+            </>
+          ) : (
+            <>
+              {/* Away warning */}
+              {isAway && (
+                <View style={styles.awayWarning}>
+                  <Text style={styles.awayWarningText}>
+                    You have a travel/away entry on this date. Consider whether you want to schedule this event.
+                  </Text>
                 </View>
-                <View style={[styles.flex, { marginLeft: spacing.sm }]}>
+              )}
+
+              {/* Type selector (create only) */}
+              {!isEdit && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionLabel}>Event Type</Text>
+                  <View style={styles.typeRow}>
+                    {EVENT_TYPES.map(({ value, label }) => (
+                      <TouchableOpacity
+                        key={value}
+                        style={[styles.typeBtn, eventType === value && styles.typeBtnActive]}
+                        onPress={() => setEventType(value)}
+                      >
+                        <Text style={[styles.typeBtnText, eventType === value && styles.typeBtnTextActive]}>
+                          {label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Title */}
+              <View style={styles.section}>
+                <TextInput
+                  label="Title"
+                  value={title}
+                  onChangeText={setTitle}
+                  placeholder={eventType === 'meeting' ? 'e.g. Quarterly review' : 'e.g. Doctor appointment'}
+                />
+              </View>
+
+              {/* Date */}
+              <View style={styles.section}>
+                <DatePickerField
+                  label="Date"
+                  value={isoDateToDate(date)}
+                  onChange={(d) => setDate(dateToIsoDate(d))}
+                  {...(isEdit ? {} : { minimumDate: isoDateToDate(todayISO()) })}
+                />
+              </View>
+
+              {/* Start time + Duration (meeting / appointment) */}
+              {hasTiming && (
+                <View style={styles.section}>
+                  <View style={styles.row}>
+                    <View style={styles.flex}>
+                      <TimePickerField
+                        label="Start Time"
+                        value={hhmmToDate(startTime)}
+                        onChange={(d) => setStartTime(dateToHhmm(d))}
+                      />
+                    </View>
+                    <View style={[styles.flex, { marginLeft: spacing.sm }]}>
+                      <SelectPickerField
+                        label="Duration"
+                        value={durationStr}
+                        options={DURATION_OPTIONS}
+                        onChange={setDurationStr}
+                      />
+                    </View>
+                  </View>
+                </View>
+              )}
+
+              {/* Contact (meetings) */}
+              {eventType === 'meeting' && (
+                <View style={styles.section}>
                   <SelectPickerField
-                    label="Duration"
-                    value={durationStr}
-                    options={DURATION_OPTIONS}
-                    onSelect={setDurationStr}
+                    label="Contact"
+                    value={contactId ?? ''}
+                    options={[{ value: '', label: 'Select contact…' }, ...contactOptions]}
+                    onChange={(v) => setContactId(v || null)}
                   />
                 </View>
+              )}
+
+              {/* Location (appointment / other) */}
+              {eventType !== 'meeting' && (
+                <View style={styles.section}>
+                  <TextInput
+                    label="Location (optional)"
+                    value={location}
+                    onChangeText={setLocation}
+                    placeholder="e.g. St. Mary's Hospital"
+                  />
+                </View>
+              )}
+
+              {/* Notes / Agenda */}
+              <View style={styles.section}>
+                <TextInput
+                  label={eventType === 'meeting' ? 'Agenda (optional)' : 'Notes (optional)'}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder={eventType === 'meeting' ? 'Topics to cover…' : 'Additional details…'}
+                  multiline
+                  numberOfLines={3}
+                />
               </View>
-            </View>
+
+              {/* Recurrence */}
+              <View style={styles.section}>
+                <SelectPickerField
+                  label="Recurrence"
+                  value={recurrence ?? ''}
+                  options={RECURRENCE_OPTIONS.map((r) => ({ value: r.value ?? '', label: r.label }))}
+                  onChange={(v) => setRecurrence((v || null) as RecurrenceRule)}
+                />
+              </View>
+            </>
           )}
-
-          {/* Contact (meetings) */}
-          {eventType === 'meeting' && (
-            <View style={styles.section}>
-              <SelectPickerField
-                label="Contact"
-                value={contactId ?? ''}
-                options={[{ value: '', label: 'Select contact…' }, ...contactOptions]}
-                onSelect={(v) => setContactId(v || null)}
-              />
-            </View>
-          )}
-
-          {/* Location (appointment / other) */}
-          {eventType !== 'meeting' && (
-            <View style={styles.section}>
-              <TextInput
-                label="Location (optional)"
-                value={location}
-                onChangeText={setLocation}
-                placeholder="e.g. St. Mary's Hospital"
-              />
-            </View>
-          )}
-
-          {/* Notes / Agenda */}
-          <View style={styles.section}>
-            <TextInput
-              label={eventType === 'meeting' ? 'Agenda (optional)' : 'Notes (optional)'}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder={eventType === 'meeting' ? 'Topics to cover…' : 'Additional details…'}
-              multiline
-              numberOfLines={3}
-            />
-          </View>
-
-          {/* Recurrence */}
-          <View style={styles.section}>
-            <SelectPickerField
-              label="Recurrence"
-              value={recurrence ?? ''}
-              options={RECURRENCE_OPTIONS.map((r) => ({ value: r.value ?? '', label: r.label }))}
-              onSelect={(v) => setRecurrence((v || null) as RecurrenceRule)}
-            />
-          </View>
         </ScrollView>
       </KeyboardAvoidingView>
     </Modal>
@@ -429,5 +516,34 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
+  },
+
+  // Past-edit context
+  pastContext: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.amber[50],
+    borderWidth: 1,
+    borderColor: colors.amber[200],
+    gap: 4,
+  },
+  pastContextHint: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.amber[700],
+    marginBottom: spacing.xs,
+  },
+  pastContextTitle: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    fontWeight: '600',
+    color: colors.ink.DEFAULT,
+  },
+  pastContextMeta: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.ink.light,
   },
 });

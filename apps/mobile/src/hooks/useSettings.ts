@@ -17,6 +17,25 @@ const profileKeys = {
 };
 
 // ---------------------------------------------------------------------------
+// Defaults (mirror web: apps/web/src/components/settings/ReminderSettingsView.tsx)
+// ---------------------------------------------------------------------------
+
+const REMINDER_PREF_DEFAULTS = {
+  eod_review_enabled: true,
+  eod_review_time: '21:00',
+  meeting_reminder_minutes_before: 15,
+  morning_summary_enabled: true,
+  morning_summary_time: '08:00',
+  birthday_reminder_days_before: 1,
+  travel_reminder_days_before: 1,
+  renewal_reminder_days_before: 3,
+  activity_starting_enabled: true,
+  activity_reminder_minutes_before: 5,
+  activity_overdue_enabled: true,
+  event_reminder_minutes_before: 15,
+} as const;
+
+// ---------------------------------------------------------------------------
 // Reminder Preferences
 // ---------------------------------------------------------------------------
 
@@ -48,6 +67,10 @@ export type UpdateReminderPreferencesData = Partial<
     | 'birthday_reminder_days_before'
     | 'travel_reminder_days_before'
     | 'renewal_reminder_days_before'
+    | 'activity_starting_enabled'
+    | 'activity_reminder_minutes_before'
+    | 'activity_overdue_enabled'
+    | 'event_reminder_minutes_before'
   >
 >;
 
@@ -56,35 +79,16 @@ export function useUpdateReminderPreferences() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (data: UpdateReminderPreferencesData) => {
-      const payload = { ...data, updated_at: new Date().toISOString() };
-      const { data: existing } = await supabase
-        .from('reminder_preferences')
-        .select('id')
-        .eq('user_id', user!.id)
-        .maybeSingle();
-
-      if (existing) {
-        const { error } = await supabase
-          .from('reminder_preferences')
-          .update(payload)
-          .eq('user_id', user!.id);
-        if (error) throw new Error(error.message);
-      } else {
-        // Create defaults first, then apply update
-        const { error } = await supabase.from('reminder_preferences').insert({
+      const { error } = await supabase.from('reminder_preferences').upsert(
+        {
           user_id: user!.id,
-          eod_review_enabled: true,
-          eod_review_time: '21:00',
-          meeting_reminder_minutes_before: 10,
-          morning_summary_enabled: true,
-          morning_summary_time: '08:00',
-          birthday_reminder_days_before: 1,
-          travel_reminder_days_before: 1,
-          renewal_reminder_days_before: 1,
+          ...REMINDER_PREF_DEFAULTS,
           ...data,
-        });
-        if (error) throw new Error(error.message);
-      }
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' },
+      );
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: reminderPrefKeys.forUser(user!.id) });
@@ -102,7 +106,7 @@ export function useProfile() {
     queryKey: profileKeys.forUser(user?.id ?? ''),
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('users')
+        .from('profiles')
         .select('*')
         .eq('id', user!.id)
         .single();
@@ -113,7 +117,9 @@ export function useProfile() {
   });
 }
 
-export type UpdateProfileData = Partial<Pick<AppUser, 'name' | 'timezone'>>;
+export type UpdateProfileData = Partial<
+  Pick<AppUser, 'name' | 'timezone' | 'eod_review_time'>
+>;
 
 export function useUpdateProfile() {
   const { user } = useAuth();
@@ -121,7 +127,7 @@ export function useUpdateProfile() {
   return useMutation({
     mutationFn: async (data: UpdateProfileData) => {
       const { error } = await supabase
-        .from('users')
+        .from('profiles')
         .update({ ...data, updated_at: new Date().toISOString() })
         .eq('id', user!.id);
       if (error) throw new Error(error.message);

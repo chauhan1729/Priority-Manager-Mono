@@ -23,10 +23,11 @@ const STATUS_STYLE: Record<ProjectStatus, { bg: string; text: string; label: str
 interface Props {
   project: Project;
   activities: Activity[];
+  linkedPriorityTitle?: string | null | undefined;
   onPress: () => void;
 }
 
-function ProjectCardBase({ project, activities, onPress }: Props) {
+function ProjectCardBase({ project, activities, linkedPriorityTitle, onPress }: Props) {
   const status = STATUS_STYLE[project.status] ?? STATUS_STYLE.planned;
   const metrics = getProjectMetrics(activities);
   const atRisk = isProjectAtRisk(project, activities);
@@ -74,6 +75,15 @@ function ProjectCardBase({ project, activities, onPress }: Props) {
           {project.target_end_date ? formatDate(project.target_end_date) : '—'}
         </Text>
       )}
+
+      {/* Linked monthly priority chip */}
+      {linkedPriorityTitle ? (
+        <View style={styles.priorityChip}>
+          <Text style={styles.priorityChipText} numberOfLines={1}>
+            📌 {linkedPriorityTitle}
+          </Text>
+        </View>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -160,5 +170,21 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.sans,
     fontSize: fontSize.xs,
     color: colors.gray[400],
+  },
+  priorityChip: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.violet[50],
+    borderWidth: 1,
+    borderColor: colors.violet[200],
+    maxWidth: '80%',
+  },
+  priorityChipText: {
+    fontFamily: fontFamily.sans,
+    fontSize: 11,
+    color: colors.violet[700],
+    fontWeight: '500',
   },
 });

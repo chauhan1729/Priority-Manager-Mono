@@ -1,4 +1,13 @@
-import type { Expense, Meeting, ReminderPreference, ReminderType, YearEntry } from "@pm/types";
+import type {
+  Activity,
+  CalendarEvent,
+  Expense,
+  Meeting,
+  ReminderPreference,
+  ReminderType,
+  ScheduleInstance,
+  YearEntry,
+} from "@pm/types";
 
 import { getNextOccurrenceDate } from "../expense";
 import { birthdayDateForYear, isBirthdayEntry, isTravelOrAway } from "../year-entry";
@@ -259,6 +268,116 @@ export function computeTravelReminders(
 }
 
 // ---------------------------------------------------------------------------
+// Spec §18.4: Activity (scheduled block) starting reminders
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns reminders for activity blocks whose start_at is within `minutesBefore` of `now`.
+ * Fires reminderTime = start_at - minutesBefore. Skipped if the block is already
+ * completed/cancelled/missed.
+ */
+export function computeActivityStartingReminders(
+  instances: Pick<
+    ScheduleInstance,
+    "id" | "source_type" | "source_activity_id" | "start_at" | "status_snapshot"
+  >[],
+  activities: Pick<Activity, "id" | "title">[],
+  minutesBefore: number,
+  now: Date,
+): ReminderSchedule[] {
+  const activityTitleById = new Map(activities.map((a) => [a.id, a.title]));
+  return instances.flatMap((i) => {
+    if (i.source_type !== "activity" || !i.source_activity_id) return [];
+    if (i.status_snapshot === "completed" || i.status_snapshot === "missed") return [];
+    const startAt = new Date(i.start_at);
+    const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
+    if (reminderTime <= now) return [];
+    const title = activityTitleById.get(i.source_activity_id);
+    if (!title) return [];
+    return [
+      {
+        type: "activity_starting" as ReminderType,
+        source_id: i.id,
+        scheduled_for: reminderTime,
+        title: `Starting soon: ${title}`,
+        body: `Scheduled block starts in ${minutesBefore} minute${minutesBefore === 1 ? "" : "s"}.`,
+      },
+    ];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Spec §18.4: Activity (scheduled block) overdue reminders
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns "time passed" reminders for activity blocks whose end_at has passed but
+ * status_snapshot is still upcoming/working — prompts the user to update status.
+ * Fires at end_at + 1 minute (when the scheduler next picks them up).
+ */
+export function computeActivityOverdueReminders(
+  instances: Pick<
+    ScheduleInstance,
+    "id" | "source_type" | "source_activity_id" | "end_at" | "status_snapshot"
+  >[],
+  activities: Pick<Activity, "id" | "title">[],
+  now: Date,
+): ReminderSchedule[] {
+  const activityTitleById = new Map(activities.map((a) => [a.id, a.title]));
+  return instances.flatMap((i) => {
+    if (i.source_type !== "activity" || !i.source_activity_id) return [];
+    if (i.status_snapshot !== "upcoming" && i.status_snapshot !== "working") return [];
+    const endAt = new Date(i.end_at);
+    // Fire once end has passed. Schedule at end_at itself; the scheduler will
+    // filter out past-only reminders before dispatch.
+    if (endAt > now) return [];
+    const title = activityTitleById.get(i.source_activity_id);
+    if (!title) return [];
+    return [
+      {
+        type: "activity_overdue" as ReminderType,
+        source_id: i.id,
+        scheduled_for: endAt,
+        title: `Block ended: ${title}`,
+        body: "Update the status of this block.",
+      },
+    ];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Spec §13: Calendar event (appointment/other) upcoming reminders
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns reminders for calendar events of type 'appointment' or 'other' whose
+ * start_at is within `minutesBefore` of `now`.
+ * Meeting-type calendar events are handled by computeMeetingUpcomingReminders.
+ */
+export function computeEventUpcomingReminders(
+  events: Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at">[],
+  minutesBefore: number,
+  now: Date,
+): ReminderSchedule[] {
+  return events.flatMap((e) => {
+    if (e.event_type !== "appointment" && e.event_type !== "other") return [];
+    if (!e.start_at) return [];
+    const startAt = new Date(e.start_at);
+    const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
+    if (reminderTime <= now) return [];
+    return [
+      {
+        type: "event_upcoming" as ReminderType,
+        source_id: e.id,
+        scheduled_for: reminderTime,
+        title: `Upcoming: ${e.title}`,
+        body: `Starts in ${minutesBefore} minute${minutesBefore === 1 ? "" : "s"}.`,
+      },
+    ];
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Orchestrator: compute all reminders at once
 // ---------------------------------------------------------------------------
 
@@ -273,10 +392,20 @@ export interface ComputeRemindersParams {
     | "birthday_reminder_days_before"
     | "travel_reminder_days_before"
     | "renewal_reminder_days_before"
+    | "activity_starting_enabled"
+    | "activity_reminder_minutes_before"
+    | "activity_overdue_enabled"
+    | "event_reminder_minutes_before"
   >;
   meetings: Pick<Meeting, "id" | "title" | "start_at" | "end_at" | "status" | "key_takeaways">[];
   expenses: Pick<Expense, "id" | "title" | "amount" | "expense_date" | "recurrence_rule">[];
   yearEntries: Pick<YearEntry, "id" | "title" | "type" | "start_date">[];
+  scheduleInstances?: Pick<
+    ScheduleInstance,
+    "id" | "source_type" | "source_activity_id" | "start_at" | "end_at" | "status_snapshot"
+  >[];
+  activities?: Pick<Activity, "id" | "title">[];
+  calendarEvents?: Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at">[];
   todayISO: string;
   now: Date;
 }
@@ -288,7 +417,17 @@ export interface ComputeRemindersParams {
  * Spec §13: all reminders read from shared records — no duplicate reminder-owned copies.
  */
 export function computeAllReminders(params: ComputeRemindersParams): ReminderSchedule[] {
-  const { prefs, meetings, expenses, yearEntries, todayISO, now } = params;
+  const {
+    prefs,
+    meetings,
+    expenses,
+    yearEntries,
+    scheduleInstances = [],
+    activities = [],
+    calendarEvents = [],
+    todayISO,
+    now,
+  } = params;
 
   const results: ReminderSchedule[] = [
     computeEodReminder(prefs, todayISO),
@@ -298,6 +437,18 @@ export function computeAllReminders(params: ComputeRemindersParams): ReminderSch
     ...computeRenewalReminders(expenses, prefs.renewal_reminder_days_before, todayISO),
     ...computeBirthdayReminders(yearEntries, prefs.birthday_reminder_days_before, todayISO),
     ...computeTravelReminders(yearEntries, prefs.travel_reminder_days_before, todayISO),
+    ...(prefs.activity_starting_enabled
+      ? computeActivityStartingReminders(
+          scheduleInstances,
+          activities,
+          prefs.activity_reminder_minutes_before,
+          now,
+        )
+      : []),
+    ...(prefs.activity_overdue_enabled
+      ? computeActivityOverdueReminders(scheduleInstances, activities, now)
+      : []),
+    ...computeEventUpcomingReminders(calendarEvents, prefs.event_reminder_minutes_before, now),
   ].filter((r): r is ReminderSchedule => r !== null);
 
   return results.sort((a, b) => a.scheduled_for.getTime() - b.scheduled_for.getTime());

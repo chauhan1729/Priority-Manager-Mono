@@ -50,6 +50,26 @@ export function useMonthlyPriorities(monthKey: string) {
   });
 }
 
+/**
+ * Returns all monthly priorities for the user, across all months.
+ * Useful for building an id→title map in cross-module screens (e.g., project list).
+ */
+export function useAllMonthlyPriorities() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: monthlyPriorityKeys.all,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('monthly_priorities')
+        .select('id, title, month_key')
+        .eq('user_id', user!.id);
+      if (error) throw error;
+      return data as { id: string; title: string; month_key: string }[];
+    },
+    enabled: !!user,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Mutation input types
 // ---------------------------------------------------------------------------

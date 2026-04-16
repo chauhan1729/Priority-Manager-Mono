@@ -1,20 +1,18 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  FlatList,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  birthdayDateForYear,
-  entryOverlapsYear,
-} from '@pm/domain';
+import { router } from 'expo-router';
+import { birthdayDateForYear } from '@pm/domain';
 import type { AvailabilityStatus, YearEntry, YearEntryType } from '@pm/types';
-import { useYearEntries, useDeleteYearEntry } from '../src/hooks/useYearEntries';
+import { useDeleteYearEntry, useYearEntries } from '../src/hooks/useYearEntries';
 import { YearEntryFormModal } from '../src/components/year/YearEntryFormModal';
 import { colors } from '../src/theme/colors';
 import { borderRadius, spacing } from '../src/theme/spacing';
@@ -29,52 +27,44 @@ const MONTH_NAMES = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
 
-const TYPE_CONFIG: Record<YearEntryType, { icon: string; dot: string; label: string }> = {
-  travel:   { icon: '✈',  dot: colors.blue[500],   label: 'Travel' },
-  away:     { icon: '🏠', dot: colors.amber[500],  label: 'Away' },
-  birthday: { icon: '🎂', dot: '#F472B6',           label: 'Birthday' }, // pink-400
+const DAY_HEADERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+const TYPE_CONFIG: Record<YearEntryType, { icon: string; dot: string; bg: string; label: string }> = {
+  birthday: { icon: '🎂', dot: '#EC4899',         bg: '#FCE7F3',         label: 'Birthday' },
+  travel:   { icon: '✈',  dot: colors.purple[500], bg: colors.purple[50], label: 'Travel' },
+  away:     { icon: '🏠', dot: colors.amber[500],  bg: colors.amber[50],  label: 'Away' },
+};
+
+const AVAILABILITY_LABEL: Record<AvailabilityStatus, string> = {
+  away: 'Away (fully unavailable)',
+  partial: 'Partial availability',
+  available: 'Available (informational)',
 };
 
 const AVAILABILITY_STYLE: Record<AvailabilityStatus, { bg: string; text: string }> = {
-  available: { bg: colors.green[100],  text: colors.green[700] },
-  partial:   { bg: colors.amber[100],  text: colors.amber[700] },
-  away:      { bg: colors.red[100],    text: colors.red[600] },
+  away:      { bg: colors.red[100],   text: colors.red[700] },
+  partial:   { bg: colors.amber[100], text: colors.amber[700] },
+  available: { bg: colors.green[100], text: colors.green[700] },
 };
+
+// Priority rank when picking a day-cell dominant color
+const TYPE_RANK: Record<YearEntryType, number> = { away: 3, travel: 2, birthday: 1 };
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
 function daysInMonth(year: number, month: number): number {
-  return new Date(year, month, 0).getDate(); // month is 1-indexed here
+  return new Date(year, month + 1, 0).getDate(); // month 0-indexed
 }
 
-/**
- * Returns all entries that have any overlap with the given month (1-indexed).
- */
-function getEntriesForMonth(entries: YearEntry[], year: number, month: number): YearEntry[] {
-  const mm = String(month).padStart(2, '0');
-  const firstDay = `${year}-${mm}-01`;
-  const lastDay = `${year}-${mm}-${String(daysInMonth(year, month)).padStart(2, '0')}`;
-
-  return entries.filter((entry) => {
-    if (entry.type === 'birthday') {
-      // Annual recurrence: match by month only
-      const entryMonth = entry.start_date.slice(5, 7);
-      return entryMonth === mm;
-    }
-    // Travel / away: date range overlap
-    const entryEnd = entry.end_date ?? entry.start_date;
-    return entry.start_date <= lastDay && entryEnd >= firstDay;
-  });
+function firstDayOfWeek(year: number, month: number): number {
+  return new Date(year, month, 1).getDay();
 }
 
-/**
- * Format a date range for display.
- */
-function formatDateRange(entry: YearEntry, year: number): string {
+function formatMonthLabel(entry: YearEntry, viewYear: number): string {
   if (entry.type === 'birthday') {
-    const dateForYear = birthdayDateForYear(entry, year);
+    const dateForYear = birthdayDateForYear(entry, viewYear);
     if (!dateForYear) return 'Every year';
     const [, mm, dd] = dateForYear.split('-');
     return `Every ${MONTH_NAMES[Number(mm) - 1]} ${Number(dd)}`;
@@ -90,382 +80,213 @@ function formatShortDate(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Entry card
-// ---------------------------------------------------------------------------
-
-interface EntryCardProps {
-  entry: YearEntry;
-  year: number;
-  onEdit: () => void;
-  onDelete: () => void;
-}
-
-function EntryCard({ entry, year, onEdit, onDelete }: EntryCardProps) {
-  const cfg = TYPE_CONFIG[entry.type];
-  const avail = entry.availability_status
-    ? AVAILABILITY_STYLE[entry.availability_status]
-    : null;
-
-  return (
-    <View style={cardStyles.card}>
-      <View style={cardStyles.row}>
-        <Text style={cardStyles.icon}>{cfg.icon}</Text>
-        <View style={cardStyles.body}>
-          <Text style={cardStyles.title} numberOfLines={1}>{entry.title}</Text>
-          <Text style={cardStyles.dateRange}>{formatDateRange(entry, year)}</Text>
-          {entry.location ? (
-            <Text style={cardStyles.location} numberOfLines={1}>📍 {entry.location}</Text>
-          ) : null}
-        </View>
-        <View style={cardStyles.badges}>
-          {avail && (
-            <View style={[cardStyles.availBadge, { backgroundColor: avail.bg }]}>
-              <Text style={[cardStyles.availText, { color: avail.text }]}>
-                {entry.availability_status}
-              </Text>
-            </View>
-          )}
-          {entry.linked_project_id && (
-            <Text style={cardStyles.linkedIcon} accessibilityLabel="Linked project">🗂</Text>
-          )}
-        </View>
-      </View>
-
-      <View style={cardStyles.actions}>
-        <TouchableOpacity style={cardStyles.actionBtn} onPress={onEdit}>
-          <Text style={cardStyles.actionText}>Edit</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[cardStyles.actionBtn, cardStyles.actionBtnDanger]} onPress={onDelete}>
-          <Text style={cardStyles.actionTextDanger}>Delete</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-}
-
-const cardStyles = StyleSheet.create({
-  card: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.blue[100],
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  icon: { fontSize: 20, marginTop: 2 },
-  body: { flex: 1, gap: 3 },
-  title: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.sm,
-    fontWeight: '500',
-    color: colors.ink.DEFAULT,
-  },
-  dateRange: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.xs,
-    color: colors.ink.light,
-  },
-  location: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.xs,
-    color: colors.gray[400],
-  },
-  badges: { alignItems: 'flex-end', gap: spacing.xs },
-  availBadge: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 2,
-    borderRadius: borderRadius.full,
-  },
-  availText: {
-    fontFamily: fontFamily.sans,
-    fontSize: 10,
-    fontWeight: '600',
-    textTransform: 'capitalize',
-  },
-  linkedIcon: { fontSize: 14 },
-  actions: {
-    flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
-  },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: colors.gray[100],
-  },
-  actionBtnDanger: {},
-  actionText: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.xs,
-    fontWeight: '500',
-    color: colors.blue[600],
-  },
-  actionTextDanger: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.xs,
-    fontWeight: '500',
-    color: colors.red[600],
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Month cell (in 2-column grid)
-// ---------------------------------------------------------------------------
-
-interface MonthCellProps {
-  year: number;
-  month: number; // 1-indexed
-  entries: YearEntry[];
-  isExpanded: boolean;
-  onToggle: () => void;
-  onEditEntry: (entry: YearEntry) => void;
-  onDeleteEntry: (entry: YearEntry) => void;
-  onAddEntry: () => void;
-}
-
-function MonthCell({
-  year, month, entries, isExpanded,
-  onToggle, onEditEntry, onDeleteEntry, onAddEntry,
-}: MonthCellProps) {
-  const monthEntries = useMemo(
-    () => getEntriesForMonth(entries, year, month),
-    [entries, year, month],
-  );
-
-  // Unique entry types present this month for dot indicators
-  const dotTypes = useMemo(() => {
-    const seen = new Set<YearEntryType>();
-    monthEntries.forEach((e) => seen.add(e.type));
-    return [...seen] as YearEntryType[];
-  }, [monthEntries]);
-
-  return (
-    <View style={monthStyles.wrapper}>
-      <TouchableOpacity
-        style={[monthStyles.cell, isExpanded && monthStyles.cellExpanded]}
-        onPress={onToggle}
-        activeOpacity={0.7}
-      >
-        <Text style={[monthStyles.monthName, isExpanded && monthStyles.monthNameExpanded]}>
-          {MONTH_NAMES[month - 1]}
-        </Text>
-        {/* Dot indicators */}
-        <View style={monthStyles.dotsRow}>
-          {dotTypes.map((t) => (
-            <View
-              key={t}
-              style={[monthStyles.dot, { backgroundColor: TYPE_CONFIG[t].dot }]}
-            />
-          ))}
-          {monthEntries.length === 0 && (
-            <View style={monthStyles.emptyDot} />
-          )}
-        </View>
-        {monthEntries.length > 0 && (
-          <Text style={monthStyles.count}>{monthEntries.length}</Text>
-        )}
-      </TouchableOpacity>
-
-      {/* Expanded entry list */}
-      {isExpanded && (
-        <View style={monthStyles.expanded}>
-          {monthEntries.map((entry) => (
-            <EntryCard
-              key={entry.id}
-              entry={entry}
-              year={year}
-              onEdit={() => onEditEntry(entry)}
-              onDelete={() => onDeleteEntry(entry)}
-            />
-          ))}
-          <TouchableOpacity style={monthStyles.addInMonth} onPress={onAddEntry}>
-            <Text style={monthStyles.addInMonthText}>+ Add entry</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
-}
-
-const monthStyles = StyleSheet.create({
-  wrapper: {
-    flex: 1,
-    margin: spacing.xs,
-  },
-  cell: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: borderRadius.md,
-    borderWidth: 1,
-    borderColor: colors.blue[100],
-    padding: spacing.md,
-    alignItems: 'flex-start',
-    minHeight: 72,
-  },
-  cellExpanded: {
-    borderColor: colors.blue[400],
-    borderBottomLeftRadius: 0,
-    borderBottomRightRadius: 0,
-  },
-  monthName: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.ink.DEFAULT,
-    marginBottom: spacing.xs,
-  },
-  monthNameExpanded: { color: colors.blue[700] },
-  dotsRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    flexWrap: 'wrap',
-  },
-  dot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
-  emptyDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: colors.gray[200],
-  },
-  count: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.xs,
-    color: colors.ink.light,
-    marginTop: 3,
-  },
-  expanded: {
-    backgroundColor: colors.blue[50],
-    borderWidth: 1,
-    borderTopWidth: 0,
-    borderColor: colors.blue[400],
-    borderBottomLeftRadius: borderRadius.md,
-    borderBottomRightRadius: borderRadius.md,
-    padding: spacing.sm,
-  },
-  addInMonth: {
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  addInMonthText: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.xs,
-    fontWeight: '600',
-    color: colors.blue[600],
-  },
-});
-
-// ---------------------------------------------------------------------------
-// Main screen
+// Screen
 // ---------------------------------------------------------------------------
 
 export default function YearAtAGlanceScreen() {
   const currentYear = new Date().getFullYear();
   const [year, setYear] = useState(currentYear);
-  const [expandedMonth, setExpandedMonth] = useState<number | null>(null);
   const [formVisible, setFormVisible] = useState(false);
   const [editEntry, setEditEntry] = useState<YearEntry | null>(null);
+  const [initialDate, setInitialDate] = useState<string | undefined>(undefined);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const { data: entries = [], isLoading } = useYearEntries(year);
   const deleteMutation = useDeleteYearEntry();
 
-  const handleToggleMonth = (month: number) => {
-    setExpandedMonth((prev) => (prev === month ? null : month));
+  const sheetRef = useRef<BottomSheet>(null);
+  const snapPoints = useMemo(() => ['50%', '85%'], []);
+
+  // Build per-month entry buckets + per-day type maps once per render
+  const { perMonthEntries, perMonthDayType, perMonthBirthdayDays, summaryStats } = useMemo(() => {
+    const monthBuckets: YearEntry[][] = Array.from({ length: 12 }, () => []);
+    // For each month, map day-of-month → dominant (strongest) entry type (used for bg color)
+    const dayTypeMap: Map<number, YearEntryType>[] = Array.from({ length: 12 }, () => new Map());
+    // For each month, set of days that have a birthday (separate from dominant — used for overlay dot)
+    const birthdayDaysMap: Set<number>[] = Array.from({ length: 12 }, () => new Set());
+
+    let birthdayCount = 0;
+    let travelAwayCount = 0;
+
+    for (const entry of entries) {
+      if (entry.type === 'birthday') {
+        const dateForYear = birthdayDateForYear(entry, year);
+        if (!dateForYear) continue; // Feb 29 on non-leap
+        birthdayCount++;
+        const month = Number(dateForYear.slice(5, 7)) - 1;
+        const day = Number(dateForYear.slice(8, 10));
+        monthBuckets[month]!.push(entry);
+        birthdayDaysMap[month]!.add(day);
+        const existing = dayTypeMap[month]!.get(day);
+        if (!existing || TYPE_RANK.birthday > TYPE_RANK[existing]) {
+          dayTypeMap[month]!.set(day, 'birthday');
+        }
+      } else {
+        // travel / away — may span multiple months
+        travelAwayCount++;
+        const start = new Date(`${entry.start_date}T00:00:00`);
+        const end = new Date(`${entry.end_date ?? entry.start_date}T00:00:00`);
+        for (let m = 0; m < 12; m++) {
+          const monthStart = new Date(year, m, 1);
+          const monthEnd = new Date(year, m + 1, 0);
+          if (end < monthStart || start > monthEnd) continue;
+          monthBuckets[m]!.push(entry);
+
+          const rangeStart = start < monthStart ? monthStart : start;
+          const rangeEnd = end > monthEnd ? monthEnd : end;
+          for (let d = rangeStart.getDate(); d <= rangeEnd.getDate(); d++) {
+            const existing = dayTypeMap[m]!.get(d);
+            if (!existing || TYPE_RANK[entry.type] > TYPE_RANK[existing]) {
+              dayTypeMap[m]!.set(d, entry.type);
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      perMonthEntries: monthBuckets,
+      perMonthDayType: dayTypeMap,
+      perMonthBirthdayDays: birthdayDaysMap,
+      summaryStats: { birthdayCount, travelAwayCount },
+    };
+  }, [entries, year]);
+
+  // Entries that match the selected date (birthdays match MM-DD; travel/away match range)
+  const selectedDateEntries = useMemo<YearEntry[]>(() => {
+    if (!selectedDate) return [];
+    const selYear = Number(selectedDate.slice(0, 4));
+    const selMonthDay = selectedDate.slice(5);
+    const out: YearEntry[] = [];
+    for (const entry of entries) {
+      if (entry.type === 'birthday') {
+        const dateForYear = birthdayDateForYear(entry, selYear);
+        if (dateForYear === selectedDate) out.push(entry);
+        continue;
+      }
+      const start = entry.start_date;
+      const end = entry.end_date ?? entry.start_date;
+      if (selectedDate >= start && selectedDate <= end) out.push(entry);
+      // Silence lint: selMonthDay unused variable
+      void selMonthDay;
+    }
+    return out;
+  }, [entries, selectedDate]);
+
+  // ---------------------------------------------------------------------------
+  // Handlers
+  // ---------------------------------------------------------------------------
+
+  const openAddForm = (dateISO?: string) => {
+    setEditEntry(null);
+    setInitialDate(dateISO);
+    setFormVisible(true);
   };
 
-  const handleEditEntry = (entry: YearEntry) => {
+  const openEditForm = (entry: YearEntry) => {
     setEditEntry(entry);
+    setInitialDate(undefined);
     setFormVisible(true);
+    sheetRef.current?.close();
+  };
+
+  const handleDayPress = (dateISO: string) => {
+    setSelectedDate(dateISO);
+    sheetRef.current?.expand();
   };
 
   const handleDeleteEntry = (entry: YearEntry) => {
-    Alert.alert(
-      'Delete Entry',
-      `Delete "${entry.title}"?${entry.linked_project_id ? ' The linked trip plan project will be kept.' : ''}`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () =>
-            deleteMutation.mutate(
-              { id: entry.id },
-              { onError: (e: Error) => Alert.alert('Error', e.message) },
-            ),
-        },
-      ],
-    );
+    const hasLinked = !!entry.linked_project_id;
+    const msg = hasLinked
+      ? `Delete "${entry.title}"? The linked trip project will be kept — delete it separately in Project Planner if needed.`
+      : `Delete "${entry.title}"?`;
+
+    Alert.alert('Delete Entry', msg, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () =>
+          deleteMutation.mutate(
+            { id: entry.id },
+            { onError: (e: Error) => Alert.alert('Error', e.message) },
+          ),
+      },
+    ]);
   };
 
-  const handleAddPress = () => {
-    setEditEntry(null);
-    setFormVisible(true);
+  const openLinkedProject = (entry: YearEntry) => {
+    if (!entry.linked_project_id) return;
+    sheetRef.current?.close();
+    router.push(`/project-planner/${entry.linked_project_id}`);
   };
 
   const handleFormClose = () => {
     setFormVisible(false);
     setEditEntry(null);
+    setInitialDate(undefined);
   };
 
-  // Build grid rows: 6 rows × 2 cols = 12 months
-  const monthPairs = useMemo(() => {
-    const pairs: [number, number][] = [];
-    for (let i = 1; i <= 12; i += 2) {
-      pairs.push([i, i + 1]);
-    }
-    return pairs;
-  }, []);
+  const renderBackdrop = (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+    <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
+  );
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Action bar */}
+      {/* Year nav + add */}
       <View style={styles.header}>
-        <View style={{ flex: 1 }} />
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress}>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => setYear((y) => y - 1)}
+        >
+          <Text style={styles.navArrow}>‹</Text>
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.yearLabel}>{year}</Text>
+          {year !== currentYear && (
+            <TouchableOpacity onPress={() => setYear(currentYear)}>
+              <Text style={styles.thisYearLink}>This year</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={styles.navBtn}
+          onPress={() => setYear((y) => y + 1)}
+        >
+          <Text style={styles.navArrow}>›</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.addBtn} onPress={() => openAddForm()}>
           <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Year selector */}
-      <View style={styles.yearSelector}>
-        <TouchableOpacity
-          style={styles.yearArrow}
-          onPress={() => { setYear((y) => y - 1); setExpandedMonth(null); }}
-        >
-          <Text style={styles.yearArrowText}>‹</Text>
-        </TouchableOpacity>
-        <Text style={styles.yearLabel}>{year}</Text>
-        <TouchableOpacity
-          style={styles.yearArrow}
-          onPress={() => { setYear((y) => y + 1); setExpandedMonth(null); }}
-        >
-          <Text style={styles.yearArrowText}>›</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Summary stats */}
+      {(summaryStats.birthdayCount > 0 || summaryStats.travelAwayCount > 0) && (
+        <Text style={styles.summaryStats}>
+          {summaryStats.birthdayCount} birthday{summaryStats.birthdayCount === 1 ? '' : 's'}
+          {' · '}
+          {summaryStats.travelAwayCount} travel/away
+        </Text>
+      )}
 
       {/* Legend */}
       <View style={styles.legend}>
-        {(Object.entries(TYPE_CONFIG) as [YearEntryType, typeof TYPE_CONFIG[YearEntryType]][]).map(
-          ([type, cfg]) => (
-            <View key={type} style={styles.legendItem}>
+        {(['birthday', 'travel', 'away'] as YearEntryType[]).map((t) => {
+          const cfg = TYPE_CONFIG[t];
+          return (
+            <View key={t} style={styles.legendItem}>
               <View style={[styles.legendDot, { backgroundColor: cfg.dot }]} />
               <Text style={styles.legendLabel}>{cfg.label}</Text>
             </View>
-          ),
-        )}
+          );
+        })}
       </View>
 
-      {/* 12-month grid */}
+      {/* 12 stacked month cards */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -476,43 +297,281 @@ export default function YearAtAGlanceScreen() {
             <Text style={styles.loadingText}>Loading…</Text>
           </View>
         ) : (
-          monthPairs.map(([m1, m2]) => (
-            <View key={m1} style={styles.gridRow}>
-              <MonthCell
-                year={year}
-                month={m1}
-                entries={entries}
-                isExpanded={expandedMonth === m1}
-                onToggle={() => handleToggleMonth(m1)}
-                onEditEntry={handleEditEntry}
-                onDeleteEntry={handleDeleteEntry}
-                onAddEntry={handleAddPress}
-              />
-              {m2 <= 12 ? (
-                <MonthCell
-                  year={year}
-                  month={m2}
-                  entries={entries}
-                  isExpanded={expandedMonth === m2}
-                  onToggle={() => handleToggleMonth(m2)}
-                  onEditEntry={handleEditEntry}
-                  onDeleteEntry={handleDeleteEntry}
-                  onAddEntry={handleAddPress}
-                />
-              ) : (
-                <View style={{ flex: 1, margin: spacing.xs }} />
-              )}
-            </View>
+          Array.from({ length: 12 }, (_, m) => (
+            <MonthCard
+              key={m}
+              year={year}
+              month={m}
+              entries={perMonthEntries[m] ?? []}
+              dayTypeMap={perMonthDayType[m] ?? new Map()}
+              birthdayDays={perMonthBirthdayDays[m] ?? new Set()}
+              selectedDate={selectedDate}
+              onDayPress={handleDayPress}
+              onEntryPress={(entry) => {
+                setSelectedDate(entry.type === 'birthday'
+                  ? (birthdayDateForYear(entry, year) ?? entry.start_date)
+                  : entry.start_date);
+                sheetRef.current?.expand();
+              }}
+            />
           ))
+        )}
+
+        {!isLoading && entries.length === 0 && (
+          <View style={styles.empty}>
+            <Text style={styles.emptyText}>No entries yet for {year}.</Text>
+            <TouchableOpacity onPress={() => openAddForm()}>
+              <Text style={styles.emptyLink}>Add your first entry</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </ScrollView>
 
+      {/* Day detail bottom sheet */}
+      <BottomSheet
+        ref={sheetRef}
+        index={-1}
+        snapPoints={snapPoints}
+        enablePanDownToClose
+        backdropComponent={renderBackdrop}
+        backgroundStyle={styles.sheetBg}
+        handleIndicatorStyle={styles.sheetHandle}
+        onClose={() => setSelectedDate(null)}
+      >
+        <BottomSheetScrollView contentContainerStyle={styles.sheetContent}>
+          {selectedDate && (
+            <>
+              <Text style={styles.sheetTitle}>
+                {new Date(`${selectedDate}T12:00:00`).toLocaleDateString(undefined, {
+                  weekday: 'long',
+                  month: 'long',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+              </Text>
+
+              {selectedDateEntries.length === 0 ? (
+                <Text style={styles.sheetEmpty}>No entries on this day.</Text>
+              ) : (
+                selectedDateEntries.map((entry) => (
+                  <EntryDetailBlock
+                    key={entry.id}
+                    entry={entry}
+                    year={year}
+                    onEdit={() => openEditForm(entry)}
+                    onDelete={() => handleDeleteEntry(entry)}
+                    onOpenProject={() => openLinkedProject(entry)}
+                  />
+                ))
+              )}
+
+              <TouchableOpacity
+                style={styles.sheetAddBtn}
+                onPress={() => {
+                  sheetRef.current?.close();
+                  openAddForm(selectedDate);
+                }}
+              >
+                <Text style={styles.sheetAddBtnText}>+ Add entry for this date</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </BottomSheetScrollView>
+      </BottomSheet>
+
+      {/* Create / Edit form */}
       <YearEntryFormModal
         visible={formVisible}
         editEntry={editEntry}
+        initialDate={initialDate}
         onClose={handleFormClose}
       />
     </SafeAreaView>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// MonthCard — 7-col mini calendar + entry list below
+// ---------------------------------------------------------------------------
+
+interface MonthCardProps {
+  year: number;
+  month: number; // 0-indexed
+  entries: YearEntry[];
+  dayTypeMap: Map<number, YearEntryType>;
+  birthdayDays: Set<number>;
+  selectedDate: string | null;
+  onDayPress: (dateISO: string) => void;
+  onEntryPress: (entry: YearEntry) => void;
+}
+
+function MonthCard({ year, month, entries, dayTypeMap, birthdayDays, selectedDate, onDayPress, onEntryPress }: MonthCardProps) {
+  const totalDays = daysInMonth(year, month);
+  const firstDay = firstDayOfWeek(year, month);
+  const todayISO = new Date().toISOString().slice(0, 10);
+  const mm = String(month + 1).padStart(2, '0');
+
+  const cells: (number | null)[] = [
+    ...Array(firstDay).fill(null),
+    ...Array.from({ length: totalDays }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = Array.from({ length: cells.length / 7 }, (_, i) =>
+    cells.slice(i * 7, i * 7 + 7)
+  );
+
+  const visibleEntries = entries.slice(0, 4);
+  const moreCount = Math.max(0, entries.length - 4);
+
+  return (
+    <View style={styles.monthCard}>
+      <Text style={styles.monthName}>{MONTH_NAMES[month]}</Text>
+
+      {/* Day-of-week header */}
+      <View style={styles.weekHeader}>
+        {DAY_HEADERS.map((d, i) => (
+          <Text key={i} style={styles.weekHeaderCell}>{d}</Text>
+        ))}
+      </View>
+
+      {/* Mini calendar weeks */}
+      {weeks.map((week, wi) => (
+        <View key={wi} style={styles.weekRow}>
+          {week.map((day, di) => {
+            if (!day) return <View key={di} style={styles.miniCell} />;
+
+            const dd = String(day).padStart(2, '0');
+            const dateISO = `${year}-${mm}-${dd}`;
+            const isToday = dateISO === todayISO;
+            const isSelected = dateISO === selectedDate;
+            const dayType = dayTypeMap.get(day);
+            const hasBirthday = birthdayDays.has(day);
+            const cfg = dayType ? TYPE_CONFIG[dayType] : null;
+            // Show overlay pink dot only if day has a birthday AND dominant type isn't birthday
+            const showBirthdayOverlay = hasBirthday && dayType !== 'birthday';
+
+            return (
+              <TouchableOpacity
+                key={di}
+                style={[
+                  styles.miniCell,
+                  cfg && { backgroundColor: cfg.bg },
+                  isSelected && styles.miniCellSelected,
+                ]}
+                onPress={() => onDayPress(dateISO)}
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.miniCellText,
+                    isToday && styles.miniCellToday,
+                  ]}
+                >
+                  {day}
+                </Text>
+                {showBirthdayOverlay && <View style={styles.birthdayOverlayDot} />}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      ))}
+
+      {/* Entry list below calendar */}
+      {visibleEntries.length > 0 && (
+        <View style={styles.entryList}>
+          {visibleEntries.map((entry) => (
+            <TouchableOpacity
+              key={entry.id}
+              style={styles.entryRow}
+              onPress={() => onEntryPress(entry)}
+            >
+              <View style={[styles.entryDot, { backgroundColor: TYPE_CONFIG[entry.type].dot }]} />
+              <Text style={styles.entryTitle} numberOfLines={1}>
+                {TYPE_CONFIG[entry.type].icon} {entry.title}
+              </Text>
+              <Text style={styles.entryDate} numberOfLines={1}>
+                {formatMonthLabel(entry, year)}
+              </Text>
+              {entry.linked_project_id && <Text style={styles.entryLinkedIcon}>🗂</Text>}
+            </TouchableOpacity>
+          ))}
+          {moreCount > 0 && (
+            <Text style={styles.moreCount}>+{moreCount} more</Text>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// EntryDetailBlock — shown inside the bottom sheet
+// ---------------------------------------------------------------------------
+
+function EntryDetailBlock({
+  entry,
+  year,
+  onEdit,
+  onDelete,
+  onOpenProject,
+}: {
+  entry: YearEntry;
+  year: number;
+  onEdit: () => void;
+  onDelete: () => void;
+  onOpenProject: () => void;
+}) {
+  const cfg = TYPE_CONFIG[entry.type];
+  const avail = entry.availability_status;
+
+  return (
+    <View style={styles.detailBlock}>
+      <View style={styles.detailHeader}>
+        <Text style={styles.detailIcon}>{cfg.icon}</Text>
+        <View style={styles.detailHeaderBody}>
+          <Text style={styles.detailTitle} numberOfLines={2}>{entry.title}</Text>
+          <View style={styles.detailBadgeRow}>
+            <View style={[styles.detailBadge, { backgroundColor: cfg.bg }]}>
+              <Text style={[styles.detailBadgeText, { color: cfg.dot }]}>{cfg.label}</Text>
+            </View>
+            {avail && (
+              <View style={[styles.detailBadge, { backgroundColor: AVAILABILITY_STYLE[avail].bg }]}>
+                <Text style={[styles.detailBadgeText, { color: AVAILABILITY_STYLE[avail].text }]}>
+                  {AVAILABILITY_LABEL[avail]}
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+
+      <Text style={styles.detailMeta}>{formatMonthLabel(entry, year)}</Text>
+
+      {entry.location && (
+        <Text style={styles.detailMeta}>📍 {entry.location}</Text>
+      )}
+      {entry.note && (
+        <Text style={styles.detailNote}>{entry.note}</Text>
+      )}
+
+      {entry.linked_project_id && (
+        <TouchableOpacity style={styles.linkedProjectBtn} onPress={onOpenProject}>
+          <Text style={styles.linkedProjectBtnText}>🗂 Open linked trip project →</Text>
+        </TouchableOpacity>
+      )}
+
+      <View style={styles.detailActions}>
+        <TouchableOpacity style={styles.detailBtn} onPress={onEdit}>
+          <Text style={styles.detailBtnText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.detailBtn, styles.detailBtnDanger]}
+          onPress={onDelete}
+        >
+          <Text style={styles.detailBtnTextDanger}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
   );
 }
 
@@ -527,17 +586,35 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: colors.blue[100],
+    gap: spacing.xs,
   },
-  headerTitle: {
+  navBtn: { padding: spacing.sm },
+  navArrow: {
+    fontFamily: fontFamily.sans,
+    fontSize: 24,
+    color: colors.blue[600],
+    lineHeight: 28,
+  },
+  headerCenter: {
     flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  yearLabel: {
     fontFamily: fontFamily.handwriting,
-    fontSize: fontSize['2xl'],
+    fontSize: fontSize['3xl'],
     color: colors.ink.DEFAULT,
+  },
+  thisYearLink: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.blue[600],
+    fontWeight: '500',
   },
   addBtn: {
     width: 34,
@@ -547,37 +624,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addBtnText: { color: '#FFFFFF', fontSize: 22, lineHeight: 26, fontWeight: '300' },
-
-  // Year selector
-  yearSelector: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: spacing.sm,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.blue[100],
-    gap: spacing.xl,
-  },
-  yearArrow: {
-    padding: spacing.md,
-  },
-  yearArrowText: {
-    fontFamily: fontFamily.sans,
-    fontSize: 24,
-    color: colors.blue[600],
-    lineHeight: 28,
-  },
-  yearLabel: {
-    fontFamily: fontFamily.handwriting,
-    fontSize: fontSize['3xl'],
-    color: colors.ink.DEFAULT,
-    minWidth: 80,
-    textAlign: 'center',
+  addBtnText: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    lineHeight: 26,
+    fontWeight: '300',
   },
 
   // Legend
+  summaryStats: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.ink.light,
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: 2,
+    backgroundColor: '#FFFFFF',
+  },
   legend: {
     flexDirection: 'row',
     paddingHorizontal: spacing.lg,
@@ -587,40 +650,242 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.gray[100],
   },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-  },
+  legendItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendLabel: {
     fontFamily: fontFamily.sans,
     fontSize: fontSize.xs,
     color: colors.ink.light,
   },
 
-  // Grid
+  // Scroll area
   scroll: { flex: 1 },
-  scrollContent: {
-    padding: spacing.sm,
-    paddingBottom: spacing['3xl'],
+  scrollContent: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing['3xl'] },
+
+  // Loading / empty
+  loading: { paddingTop: spacing['3xl'] * 2, alignItems: 'center' },
+  loadingText: { fontFamily: fontFamily.sans, fontSize: fontSize.base, color: colors.gray[400] },
+  empty: { paddingVertical: spacing['3xl'], alignItems: 'center', gap: spacing.sm },
+  emptyText: { fontFamily: fontFamily.sans, fontSize: fontSize.base, color: colors.gray[400] },
+  emptyLink: { fontFamily: fontFamily.sans, fontSize: fontSize.base, fontWeight: '500', color: colors.blue[600] },
+
+  // Month card
+  monthCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.blue[100],
+    padding: spacing.md,
+    gap: spacing.xs,
   },
-  gridRow: {
+  monthName: {
+    fontFamily: fontFamily.handwriting,
+    fontSize: fontSize.xl,
+    color: colors.ink.DEFAULT,
+    paddingBottom: spacing.xs,
+  },
+  weekHeader: {
     flexDirection: 'row',
   },
-
-  // Loading
-  loading: {
-    paddingTop: spacing['3xl'] * 2,
-    alignItems: 'center',
+  weekHeaderCell: {
+    flex: 1,
+    textAlign: 'center',
+    fontFamily: fontFamily.sans,
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.gray[400],
+    paddingVertical: 2,
   },
-  loadingText: {
+  weekRow: { flexDirection: 'row' },
+  miniCell: {
+    flex: 1,
+    aspectRatio: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+    margin: 1,
+  },
+  miniCellSelected: {
+    borderWidth: 1.5,
+    borderColor: colors.blue[500],
+  },
+  miniCellText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.ink.DEFAULT,
+  },
+  miniCellToday: {
+    color: colors.blue[600],
+    fontWeight: '700',
+  },
+  birthdayOverlayDot: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#EC4899',
+  },
+
+  // Entry list below calendar
+  entryList: {
+    marginTop: spacing.sm,
+    gap: spacing.xs,
+  },
+  entryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: 4,
+  },
+  entryDot: { width: 6, height: 6, borderRadius: 3 },
+  entryTitle: {
+    flex: 1,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.ink.DEFAULT,
+  },
+  entryDate: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.gray[400],
+  },
+  entryLinkedIcon: { fontSize: 12 },
+  moreCount: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.gray[400],
+    paddingLeft: 14,
+  },
+
+  // Bottom sheet
+  sheetBg: {
+    backgroundColor: colors.paper,
+    borderTopLeftRadius: borderRadius.xl,
+    borderTopRightRadius: borderRadius.xl,
+  },
+  sheetHandle: { backgroundColor: colors.gray[300], width: 40 },
+  sheetContent: {
+    padding: spacing.lg,
+    paddingBottom: spacing['3xl'],
+    gap: spacing.md,
+  },
+  sheetTitle: {
+    fontFamily: fontFamily.handwriting,
+    fontSize: fontSize['2xl'],
+    color: colors.ink.DEFAULT,
+  },
+  sheetEmpty: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.gray[400],
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
+  },
+  sheetAddBtn: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.blue[200],
+    backgroundColor: colors.blue[50],
+  },
+  sheetAddBtnText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.blue[700],
+  },
+
+  // Detail block (inside sheet)
+  detailBlock: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    borderWidth: 1,
+    borderColor: colors.blue[100],
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  detailIcon: { fontSize: 22, marginTop: 2 },
+  detailHeaderBody: { flex: 1, gap: spacing.xs },
+  detailTitle: {
     fontFamily: fontFamily.sans,
     fontSize: fontSize.base,
-    color: colors.gray[400],
+    fontWeight: '600',
+    color: colors.ink.DEFAULT,
+  },
+  detailBadgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
+  detailBadge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: borderRadius.full,
+  },
+  detailBadgeText: {
+    fontFamily: fontFamily.sans,
+    fontSize: 10,
+    fontWeight: '600',
+  },
+  detailMeta: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.ink.light,
+  },
+  detailNote: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.ink.DEFAULT,
+    lineHeight: 20,
+    paddingTop: spacing.xs,
+  },
+  linkedProjectBtn: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    backgroundColor: colors.amber[50],
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.amber[200],
+  },
+  linkedProjectBtnText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.amber[700],
+  },
+  detailActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingTop: spacing.xs,
+  },
+  detailBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.blue[200],
+    backgroundColor: colors.blue[50],
+  },
+  detailBtnText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.blue[700],
+  },
+  detailBtnDanger: {
+    borderColor: colors.red[200],
+    backgroundColor: colors.red[50],
+  },
+  detailBtnTextDanger: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.red[700],
   },
 });

@@ -5,7 +5,10 @@ export type ReminderType =
   | "renewal"
   | "birthday"
   | "travel"
-  | "morning_summary";
+  | "morning_summary"
+  | "activity_starting"
+  | "activity_overdue"
+  | "event_upcoming";
 
 export interface ReminderPreference {
   id: string;
@@ -18,6 +21,12 @@ export interface ReminderPreference {
   birthday_reminder_days_before: number;
   travel_reminder_days_before: number;
   renewal_reminder_days_before: number;
+  // Activity (scheduled block) reminders
+  activity_starting_enabled: boolean;
+  activity_reminder_minutes_before: number;
+  activity_overdue_enabled: boolean;
+  // Calendar event (appointment/other) reminders
+  event_reminder_minutes_before: number;
   created_at: string;
   updated_at: string;
 }

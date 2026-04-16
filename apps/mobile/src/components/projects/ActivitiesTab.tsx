@@ -1,7 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
+  ActionSheetIOS,
   Alert,
   FlatList,
+  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,7 +21,7 @@ type SubTab = 'active' | 'delegated' | 'archived';
 
 const STATUS_LABELS: Record<string, string> = {
   not_started: 'Not started',
-  in_progress: 'In progress',
+  working: 'Working',
   completed: 'Completed',
   postponed: 'Postponed',
   delegated: 'Delegated',
@@ -28,7 +30,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   not_started: { bg: colors.gray[100],   text: colors.gray[600] },
-  in_progress: { bg: colors.blue[100],   text: colors.blue[700] },
+  working: { bg: colors.blue[100],   text: colors.blue[700] },
   completed:   { bg: colors.green[100],  text: colors.green[700] },
   postponed:   { bg: colors.amber[100],  text: colors.amber[700] },
   delegated:   { bg: colors.purple[100], text: colors.purple[700] },
@@ -43,6 +45,7 @@ interface Props {
 export function ActivitiesTab({ projectId, activities }: Props) {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('active');
   const [addFormVisible, setAddFormVisible] = useState(false);
+  const [editActivity, setEditActivity] = useState<Activity | null>(null);
 
   const updateStatus = useUpdateActivityStatus();
   const archiveActivity = useArchiveActivity();
@@ -71,16 +74,53 @@ export function ActivitiesTab({ projectId, activities }: Props) {
     archived;
 
   const handleStatusChange = (activity: Activity) => {
-    const NEXT_STATUS: Record<string, string> = {
-      not_started: 'in_progress',
-      in_progress: 'completed',
-      completed: 'not_started',
-      postponed: 'in_progress',
-      delegated: 'completed',
-      cancelled: 'not_started',
-    };
-    const nextStatus = NEXT_STATUS[activity.status] ?? 'in_progress';
-    updateStatus.mutate({ activityId: activity.id, status: nextStatus });
+    const options: { label: string; value: string }[] = [
+      { label: 'Not started', value: 'not_started' },
+      { label: 'Working',     value: 'working' },
+      { label: 'Completed',   value: 'completed' },
+      { label: 'Postponed',   value: 'postponed' },
+      { label: 'Delegated',   value: 'delegated' },
+      { label: 'Cancelled',   value: 'cancelled' },
+    ];
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          title: `Status: ${STATUS_LABELS[activity.status] ?? activity.status}`,
+          options: ['Cancel', ...options.map((o) => o.label)],
+          cancelButtonIndex: 0,
+        },
+        (idx) => {
+          if (idx > 0) {
+            const picked = options[idx - 1];
+            if (picked && picked.value !== activity.status) {
+              updateStatus.mutate(
+                { activityId: activity.id, status: picked.value },
+                { onError: (e: Error) => Alert.alert('Error', e.message) },
+              );
+            }
+          }
+        },
+      );
+    } else {
+      Alert.alert(
+        'Change Status',
+        `Currently: ${STATUS_LABELS[activity.status] ?? activity.status}`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          ...options
+            .filter((o) => o.value !== activity.status)
+            .map((o) => ({
+              text: o.label,
+              onPress: () =>
+                updateStatus.mutate(
+                  { activityId: activity.id, status: o.value },
+                  { onError: (e: Error) => Alert.alert('Error', e.message) },
+                ),
+            })),
+        ],
+      );
+    }
   };
 
   const handleArchive = (activity: Activity) => {
@@ -104,8 +144,9 @@ export function ActivitiesTab({ projectId, activities }: Props) {
     ]);
   };
 
+  const FALLBACK_SC = { bg: colors.gray[100], text: colors.gray[600] };
   const renderItem = ({ item }: { item: Activity }) => {
-    const sc = STATUS_COLORS[item.status] ?? STATUS_COLORS.not_started;
+    const sc = STATUS_COLORS[item.status] ?? FALLBACK_SC;
     const dateLabel = new Date(item.activity_date + 'T00:00:00').toLocaleDateString(undefined, {
       month: 'short',
       day: 'numeric',
@@ -127,36 +168,45 @@ export function ActivitiesTab({ projectId, activities }: Props) {
               <Text style={styles.contactName}>{contactName}</Text>
             ) : null}
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+          {/* Tappable status chip — opens picker */}
+          <TouchableOpacity
+            style={[styles.statusBadge, { backgroundColor: sc.bg }]}
+            onPress={() => !item.archived && handleStatusChange(item)}
+            disabled={item.archived}
+            activeOpacity={0.7}
+          >
             <Text style={[styles.statusText, { color: sc.text }]}>
               {STATUS_LABELS[item.status] ?? item.status}
             </Text>
-          </View>
+          </TouchableOpacity>
         </View>
 
-        {/* Action buttons */}
+        {/* Icon action buttons */}
         <View style={styles.actions}>
           {!item.archived && (
             <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => handleStatusChange(item)}
+              style={styles.iconBtn}
+              onPress={() => setEditActivity(item)}
+              accessibilityLabel="Edit"
             >
-              <Text style={styles.actionBtnText}>Toggle Status</Text>
+              <Text style={styles.iconBtnText}>✎</Text>
             </TouchableOpacity>
           )}
           {!item.archived && (
             <TouchableOpacity
-              style={[styles.actionBtn, styles.actionBtnSecondary]}
+              style={styles.iconBtn}
               onPress={() => handleArchive(item)}
+              accessibilityLabel="Archive"
             >
-              <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary]}>Archive</Text>
+              <Text style={styles.iconBtnText}>📥</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
-            style={[styles.actionBtn, styles.actionBtnDanger]}
+            style={[styles.iconBtn, styles.iconBtnDanger]}
             onPress={() => handleDelete(item)}
+            accessibilityLabel="Delete"
           >
-            <Text style={[styles.actionBtnText, styles.actionBtnTextDanger]}>Delete</Text>
+            <Text style={styles.iconBtnTextDanger}>✕</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -187,7 +237,7 @@ export function ActivitiesTab({ projectId, activities }: Props) {
           );
         })}
         <TouchableOpacity style={styles.addBtn} onPress={() => setAddFormVisible(true)}>
-          <Text style={styles.addBtnText}>+ Add</Text>
+          <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
       </View>
 
@@ -208,9 +258,13 @@ export function ActivitiesTab({ projectId, activities }: Props) {
       />
 
       <ProjectActivityFormModal
-        visible={addFormVisible}
+        visible={addFormVisible || !!editActivity}
         projectId={projectId}
-        onClose={() => setAddFormVisible(false)}
+        editActivity={editActivity}
+        onClose={() => {
+          setAddFormVisible(false);
+          setEditActivity(null);
+        }}
       />
     </View>
   );
@@ -238,12 +292,20 @@ const styles = StyleSheet.create({
   subTabTextActive: { color: colors.blue[700], fontWeight: '600' },
   addBtn: {
     marginLeft: 'auto',
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: borderRadius.full,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.blue[600],
   },
-  addBtnText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, fontWeight: '600', color: '#FFFFFF' },
+  addBtnText: {
+    fontFamily: fontFamily.sans,
+    fontSize: 20,
+    fontWeight: '400',
+    color: '#FFFFFF',
+    lineHeight: 22,
+  },
   listContent: { paddingTop: spacing.sm, paddingBottom: spacing.md },
   card: {
     backgroundColor: '#FFFFFF',
@@ -263,21 +325,27 @@ const styles = StyleSheet.create({
   statusText: { fontFamily: fontFamily.sans, fontSize: 10, fontWeight: '600', textTransform: 'capitalize' },
   actions: {
     flexDirection: 'row',
-    borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
+    justifyContent: 'flex-end',
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: borderRadius.full,
     alignItems: 'center',
-    borderRightWidth: 1,
-    borderRightColor: colors.gray[100],
+    justifyContent: 'center',
+    backgroundColor: colors.gray[50],
+    borderWidth: 1,
+    borderColor: colors.gray[200],
   },
-  actionBtnSecondary: {},
-  actionBtnDanger: {},
-  actionBtnText: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, fontWeight: '500', color: colors.blue[600] },
-  actionBtnTextSecondary: { color: colors.ink.light },
-  actionBtnTextDanger: { color: colors.red[600] },
+  iconBtnDanger: {
+    backgroundColor: colors.red[50],
+    borderColor: colors.red[200],
+  },
+  iconBtnText: { fontSize: 16 },
+  iconBtnTextDanger: { fontSize: 16 },
   empty: { paddingVertical: spacing['3xl'], alignItems: 'center' },
   emptyText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.gray[400] },
 });

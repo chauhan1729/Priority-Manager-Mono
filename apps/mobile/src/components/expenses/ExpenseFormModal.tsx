@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { Contact, Expense, ExpenseCategory, Project } from '@pm/types';
+import type { Contact, Expense, ExpenseCategory, Project, YearEntry } from '@pm/types';
 import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
@@ -19,11 +19,13 @@ import {
   EXPENSE_RECURRENCE_RULES,
   isValidExpenseAmount,
   isValidExpenseCategory,
+  isValidExpenseRecurrenceRule,
 } from '@pm/domain';
 import {
   type CreateExpenseData,
   type UpdateExpenseData,
   useCreateExpense,
+  useCreateOccurrence,
   useUpdateExpense,
 } from '../../hooks/useExpenses';
 import { DatePickerField } from '../ui';
@@ -41,7 +43,23 @@ interface Props {
   initialMonthKey: string;
   projects: Project[];
   contacts: Contact[];
+  yearEntries: YearEntry[];
   onClose: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// ISO ↔ Date adapters
+// ---------------------------------------------------------------------------
+
+function isoDateToDate(iso: string): Date {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date();
+  return new Date(`${iso}T12:00:00`);
+}
+function dateToIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +72,7 @@ export function ExpenseFormModal({
   initialMonthKey,
   projects,
   contacts,
+  yearEntries,
   onClose,
 }: Props) {
   const today = new Date().toISOString().slice(0, 10);
@@ -67,14 +86,28 @@ export function ExpenseFormModal({
   const [paymentMethod, setPaymentMethod] = useState('');
   const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null);
   const [linkedContactId, setLinkedContactId] = useState<string | null>(null);
+  const [linkedYearEntryId, setLinkedYearEntryId] = useState<string | null>(null);
   const [recurrenceRule, setRecurrenceRule] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [projectOpen, setProjectOpen] = useState(false);
   const [contactOpen, setContactOpen] = useState(false);
+  const [tripOpen, setTripOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+
+  // When editing a recurring expense, user can choose: update the schedule (default)
+  // or record a one-time off-cycle occurrence.
+  const [recurringEditMode, setRecurringEditMode] = useState<'definition' | 'occurrence'>(
+    'definition',
+  );
 
   const createMutation = useCreateExpense();
   const updateMutation = useUpdateExpense();
+  const occurrenceMutation = useCreateOccurrence();
+
+  // Only travel/away year entries (not birthdays)
+  const tripOptions = yearEntries.filter((e) => e.type === 'travel' || e.type === 'away');
+
+  const isEditingRecurring = !!editExpense && editExpense.recurrence_rule !== null;
 
   // Populate from editExpense
   useEffect(() => {
@@ -88,6 +121,7 @@ export function ExpenseFormModal({
         setPaymentMethod(editExpense.payment_method ?? '');
         setLinkedProjectId(editExpense.linked_project_id);
         setLinkedContactId(editExpense.linked_contact_id);
+        setLinkedYearEntryId(editExpense.linked_year_entry_id);
         setRecurrenceRule(editExpense.recurrence_rule);
         setNote(editExpense.note ?? '');
       } else {
@@ -99,12 +133,15 @@ export function ExpenseFormModal({
         setPaymentMethod('');
         setLinkedProjectId(null);
         setLinkedContactId(null);
+        setLinkedYearEntryId(null);
         setRecurrenceRule(null);
         setNote('');
       }
       setProjectOpen(false);
       setContactOpen(false);
+      setTripOpen(false);
       setSaving(false);
+      setRecurringEditMode('definition');
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, editExpense?.id]);
@@ -124,28 +161,56 @@ export function ExpenseFormModal({
       Alert.alert('Validation', 'Select a valid category.');
       return;
     }
+    if (!isValidExpenseRecurrenceRule(recurrenceRule)) {
+      Alert.alert('Validation', 'Select a valid recurrence option.');
+      return;
+    }
 
     setSaving(true);
     try {
       if (editExpense) {
-        const data: UpdateExpenseData = {
-          title: trimmedTitle,
-          amount,
-          expense_date: date,
-          category,
-          merchant_payee: merchant.trim() || null,
-          payment_method: paymentMethod.trim() || null,
-          linked_project_id: linkedProjectId,
-          linked_contact_id: linkedContactId,
-          recurrence_rule: recurrenceRule,
-          note: note.trim() || null,
-        };
-        await new Promise<void>((resolve, reject) =>
-          updateMutation.mutate(
-            { id: editExpense.id, data },
-            { onSuccess: () => resolve(), onError: (e) => reject(e) },
-          ),
-        );
+        if (isEditingRecurring && recurringEditMode === 'occurrence') {
+          // "Record this occurrence only" — create a one-time copy, leave template untouched
+          const overrides: CreateExpenseData = {
+            title: trimmedTitle,
+            amount,
+            expense_date: date,
+            category,
+            merchant_payee: merchant.trim() || null,
+            payment_method: paymentMethod.trim() || null,
+            linked_project_id: linkedProjectId,
+            linked_contact_id: linkedContactId,
+            linked_year_entry_id: linkedYearEntryId,
+            recurrence_rule: null, // force one-time (hook also hard-sets)
+            note: note.trim() || null,
+          };
+          await new Promise<void>((resolve, reject) =>
+            occurrenceMutation.mutate(
+              { sourceExpenseId: editExpense.id, overrides },
+              { onSuccess: () => resolve(), onError: (e) => reject(e) },
+            ),
+          );
+        } else {
+          const data: UpdateExpenseData = {
+            title: trimmedTitle,
+            amount,
+            expense_date: date,
+            category,
+            merchant_payee: merchant.trim() || null,
+            payment_method: paymentMethod.trim() || null,
+            linked_project_id: linkedProjectId,
+            linked_contact_id: linkedContactId,
+            linked_year_entry_id: linkedYearEntryId,
+            recurrence_rule: recurrenceRule,
+            note: note.trim() || null,
+          };
+          await new Promise<void>((resolve, reject) =>
+            updateMutation.mutate(
+              { id: editExpense.id, data },
+              { onSuccess: () => resolve(), onError: (e) => reject(e) },
+            ),
+          );
+        }
       } else {
         const data: CreateExpenseData = {
           title: trimmedTitle,
@@ -156,6 +221,7 @@ export function ExpenseFormModal({
           payment_method: paymentMethod.trim() || null,
           linked_project_id: linkedProjectId,
           linked_contact_id: linkedContactId,
+          linked_year_entry_id: linkedYearEntryId,
           recurrence_rule: recurrenceRule,
           note: note.trim() || null,
         };
@@ -173,6 +239,8 @@ export function ExpenseFormModal({
       setSaving(false);
     }
   };
+
+  const selectedTrip = tripOptions.find((t) => t.id === linkedYearEntryId);
 
   const selectedProject = projects.find((p) => p.id === linkedProjectId);
   const selectedContact = contacts.find((c) => c.id === linkedContactId);
@@ -194,7 +262,11 @@ export function ExpenseFormModal({
             <Text style={styles.cancelBtnText}>Cancel</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>
-            {editExpense ? 'Edit Expense' : 'Add Expense'}
+            {editExpense
+              ? isEditingRecurring && recurringEditMode === 'occurrence'
+                ? 'Record Occurrence'
+                : 'Edit Expense'
+              : 'Add Expense'}
           </Text>
           <TouchableOpacity
             onPress={handleSave}
@@ -206,6 +278,52 @@ export function ExpenseFormModal({
         </View>
 
         <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+          {/* Recurring-edit mode toggle (edit mode + recurring source only) */}
+          {isEditingRecurring && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Edit Mode</Text>
+              <View style={styles.chipRow}>
+                <TouchableOpacity
+                  style={[
+                    styles.chip,
+                    recurringEditMode === 'definition' && styles.chipActive,
+                  ]}
+                  onPress={() => setRecurringEditMode('definition')}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      recurringEditMode === 'definition' && styles.chipTextActive,
+                    ]}
+                  >
+                    Update recurring schedule
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.chip,
+                    recurringEditMode === 'occurrence' && styles.chipActive,
+                  ]}
+                  onPress={() => setRecurringEditMode('occurrence')}
+                >
+                  <Text
+                    style={[
+                      styles.chipText,
+                      recurringEditMode === 'occurrence' && styles.chipTextActive,
+                    ]}
+                  >
+                    Record this occurrence only
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.modeHint}>
+                {recurringEditMode === 'occurrence'
+                  ? 'Creates a new one-time expense for the date below. The recurring schedule stays unchanged.'
+                  : 'Changes the recurring schedule itself and the linked Calendar renewal.'}
+              </Text>
+            </View>
+          )}
+
           {/* Title */}
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Title</Text>
@@ -235,7 +353,10 @@ export function ExpenseFormModal({
           {/* Date */}
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Date</Text>
-            <DatePickerField value={date} onChange={setDate} />
+            <DatePickerField
+              value={isoDateToDate(date)}
+              onChange={(d) => setDate(dateToIsoDate(d))}
+            />
           </View>
 
           {/* Category */}
@@ -280,7 +401,8 @@ export function ExpenseFormModal({
             />
           </View>
 
-          {/* Recurrence */}
+          {/* Recurrence (hidden when recording a one-time occurrence from a recurring template) */}
+          {!(isEditingRecurring && recurringEditMode === 'occurrence') && (
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Recurrence</Text>
             <View style={styles.chipRow}>
@@ -305,6 +427,7 @@ export function ExpenseFormModal({
               ))}
             </View>
           </View>
+          )}
 
           {/* Linked Project */}
           <View style={styles.fieldGroup}>
@@ -375,6 +498,49 @@ export function ExpenseFormModal({
               </View>
             )}
           </View>
+
+          {/* Linked Trip (travel / away year entries) */}
+          {tripOptions.length > 0 && (
+            <View style={styles.fieldGroup}>
+              <Text style={styles.label}>Linked Trip</Text>
+              <TouchableOpacity
+                style={styles.pickerBtn}
+                onPress={() => {
+                  setTripOpen((o) => !o);
+                  setProjectOpen(false);
+                  setContactOpen(false);
+                }}
+              >
+                <Text style={selectedTrip ? styles.pickerBtnText : styles.pickerBtnPlaceholder}>
+                  {selectedTrip ? `✈ ${selectedTrip.title}` : 'Select a trip…'}
+                </Text>
+                <Text style={styles.pickerChevron}>{tripOpen ? '▲' : '▼'}</Text>
+              </TouchableOpacity>
+              {tripOpen && (
+                <View style={styles.pickerList}>
+                  <TouchableOpacity
+                    style={styles.pickerItem}
+                    onPress={() => { setLinkedYearEntryId(null); setTripOpen(false); }}
+                  >
+                    <Text style={styles.pickerItemNone}>None</Text>
+                  </TouchableOpacity>
+                  {tripOptions.map((t) => (
+                    <TouchableOpacity
+                      key={t.id}
+                      style={[styles.pickerItem, linkedYearEntryId === t.id && styles.pickerItemActive]}
+                      onPress={() => { setLinkedYearEntryId(t.id); setTripOpen(false); }}
+                    >
+                      <Text
+                        style={[styles.pickerItemText, linkedYearEntryId === t.id && styles.pickerItemTextActive]}
+                      >
+                        ✈ {t.title}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Note */}
           <View style={styles.fieldGroup}>
@@ -550,5 +716,12 @@ const styles = StyleSheet.create({
   pickerItemTextActive: {
     color: colors.blue[700],
     fontWeight: '600',
+  },
+  modeHint: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
+    marginTop: spacing.xs,
+    lineHeight: 16,
   },
 });

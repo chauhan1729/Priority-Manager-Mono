@@ -12,7 +12,9 @@ import {
   View,
 } from 'react-native';
 import { canCreateActivityOnDate } from '@pm/domain';
+import type { Activity } from '@pm/types';
 import { useCreateProjectActivity } from '../../hooks/useProjects';
+import { useUpdateActivity } from '../../hooks/useActivities';
 import { useContacts } from '../../hooks/useContacts';
 import { DatePickerField } from '../ui';
 import { colors } from '../../theme/colors';
@@ -125,10 +127,25 @@ const cp = StyleSheet.create({
 interface Props {
   visible: boolean;
   projectId: string;
+  editActivity?: Activity | null;
   onClose: () => void;
 }
 
-export function ProjectActivityFormModal({ visible, projectId, onClose }: Props) {
+// ISO ↔ Date adapter
+function isoToDate(iso: string): Date {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return new Date();
+  return new Date(`${iso}T12:00:00`);
+}
+function dateToIso(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function ProjectActivityFormModal({ visible, projectId, editActivity, onClose }: Props) {
+  const isEdit = !!editActivity;
+
   const [title, setTitle] = useState('');
   const [date, setDate] = useState(todayISO());
   const [sectionType, setSectionType] = useState<'work' | 'delegated'>('work');
@@ -143,22 +160,54 @@ export function ProjectActivityFormModal({ visible, projectId, onClose }: Props)
   const [contactPickerVisible, setContactPickerVisible] = useState(false);
 
   const createMutation = useCreateProjectActivity();
+  const updateMutation = useUpdateActivity();
   const { data: contacts = [] } = useContacts();
+
+  const isPending = isEdit ? updateMutation.isPending : createMutation.isPending;
 
   useEffect(() => {
     if (!visible) return;
-    setTitle('');
-    setDate(todayISO());
-    setSectionType('work');
-    setContactId(null);
-    setContactName('');
-    setHours(1);
-    setIsCustom(false);
-    setCustomHours('');
-    setPriority(null);
-    setNote('');
+    if (editActivity) {
+      setTitle(editActivity.title);
+      setDate(editActivity.activity_date);
+      setSectionType(editActivity.section_type === 'delegated' ? 'delegated' : 'work');
+      setContactId(editActivity.delegated_contact_id);
+      setContactName(''); // resolved below via contacts list
+      const h = (editActivity.estimated_minutes ?? 60) / 60;
+      const preset = HOURS_CHIPS.find((c) => c.value === h && c.value !== 0);
+      if (preset) {
+        setHours(h);
+        setIsCustom(false);
+        setCustomHours('');
+      } else {
+        setHours(h);
+        setIsCustom(true);
+        setCustomHours(String(h));
+      }
+      setPriority(editActivity.priority ?? null);
+      setNote(editActivity.note ?? '');
+    } else {
+      setTitle('');
+      setDate(todayISO());
+      setSectionType('work');
+      setContactId(null);
+      setContactName('');
+      setHours(1);
+      setIsCustom(false);
+      setCustomHours('');
+      setPriority(null);
+      setNote('');
+    }
     setError(null);
-  }, [visible]);
+  }, [visible, editActivity]);
+
+  // Resolve contact name when editing
+  useEffect(() => {
+    if (contactId) {
+      const c = contacts.find((x) => x.id === contactId);
+      if (c) setContactName(c.full_name);
+    }
+  }, [contactId, contacts]);
 
   const effectiveHours = isCustom ? (parseFloat(customHours) || 1) : hours;
 
@@ -168,6 +217,27 @@ export function ProjectActivityFormModal({ visible, projectId, onClose }: Props)
     if (!canCreateActivityOnDate(date)) { setError('Cannot create activities in the past.'); return; }
     if (sectionType === 'delegated' && !contactId) { setError('Select a contact for delegation.'); return; }
     if (effectiveHours <= 0) { setError('Estimated time must be positive.'); return; }
+
+    if (isEdit && editActivity) {
+      updateMutation.mutate(
+        {
+          id: editActivity.id,
+          title: title.trim(),
+          activity_date: date,
+          section_type: sectionType,
+          priority,
+          linked_project_id: projectId,
+          delegated_contact_id: sectionType === 'delegated' ? contactId : null,
+          estimated_minutes: Math.round(effectiveHours * 60),
+          note: note.trim() || null,
+        },
+        {
+          onSuccess: onClose,
+          onError: (e: Error) => setError(e.message),
+        },
+      );
+      return;
+    }
 
     createMutation.mutate(
       {
@@ -200,13 +270,13 @@ export function ProjectActivityFormModal({ visible, projectId, onClose }: Props)
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
           <View style={styles.header}>
-            <TouchableOpacity onPress={onClose} disabled={createMutation.isPending}>
+            <TouchableOpacity onPress={onClose} disabled={isPending}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Add Activity</Text>
-            <TouchableOpacity onPress={handleSave} disabled={createMutation.isPending}>
-              <Text style={[styles.saveText, createMutation.isPending && styles.textDisabled]}>
-                {createMutation.isPending ? 'Saving…' : 'Save'}
+            <Text style={styles.headerTitle}>{isEdit ? 'Edit Activity' : 'Add Activity'}</Text>
+            <TouchableOpacity onPress={handleSave} disabled={isPending}>
+              <Text style={[styles.saveText, isPending && styles.textDisabled]}>
+                {isPending ? 'Saving…' : 'Save'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -269,9 +339,9 @@ export function ProjectActivityFormModal({ visible, projectId, onClose }: Props)
             <View style={styles.section}>
               <DatePickerField
                 label="Date"
-                value={date}
-                onChange={setDate}
-                minimumDate={todayISO()}
+                value={isoToDate(date)}
+                onChange={(d) => setDate(dateToIso(d))}
+                {...(isEdit ? {} : { minimumDate: isoToDate(todayISO()) })}
               />
             </View>
 

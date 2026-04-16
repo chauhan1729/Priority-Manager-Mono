@@ -41,6 +41,8 @@ interface Props {
   projectProgressPercent?: number | null;
   onPress: () => void;
   onLongPress: () => void;
+  onOpenProject?: (() => void) | undefined;
+  onOpenGoal?: (() => void) | undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,6 +56,8 @@ function PriorityCardBase({
   projectProgressPercent,
   onPress,
   onLongPress,
+  onOpenProject,
+  onOpenGoal,
 }: Props) {
   const statusStyle = STATUS_STYLE[priority.status] ?? STATUS_STYLE.planned;
   const effectiveProgress = getEffectiveProgress(priority, projectProgressPercent ?? null);
@@ -124,20 +128,52 @@ function PriorityCardBase({
         )}
       </View>
 
-      {/* Linked goal / project badges */}
+      {/* Linked goal / project badges (tappable if handlers provided) */}
       {(linkedGoalTitle || linkedProjectName) && (
         <View style={styles.linksRow}>
           {linkedGoalTitle && (
-            <View style={styles.linkBadge}>
-              <Text style={styles.linkBadgeText} numberOfLines={1}>🎯 {linkedGoalTitle}</Text>
-            </View>
+            onOpenGoal ? (
+              <TouchableOpacity style={styles.linkBadge} onPress={onOpenGoal} activeOpacity={0.7}>
+                <Text style={styles.linkBadgeText} numberOfLines={1}>🎯 {linkedGoalTitle}</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={styles.linkBadge}>
+                <Text style={styles.linkBadgeText} numberOfLines={1}>🎯 {linkedGoalTitle}</Text>
+              </View>
+            )
           )}
           {linkedProjectName && (
-            <View style={[styles.linkBadge, styles.projectBadge]}>
-              <Text style={styles.linkBadgeText} numberOfLines={1}>🗂 {linkedProjectName}</Text>
-            </View>
+            onOpenProject ? (
+              <TouchableOpacity
+                style={[styles.linkBadge, styles.projectBadge]}
+                onPress={onOpenProject}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.linkBadgeText} numberOfLines={1}>🗂 {linkedProjectName}</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.linkBadge, styles.projectBadge]}>
+                <Text style={styles.linkBadgeText} numberOfLines={1}>🗂 {linkedProjectName}</Text>
+              </View>
+            )
           )}
         </View>
+      )}
+
+      {/* Target date */}
+      {priority.target_date && (
+        <Text style={styles.targetDate}>
+          Due {new Date(`${priority.target_date}T12:00:00`).toLocaleDateString(undefined, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+          })}
+        </Text>
+      )}
+
+      {/* Note preview */}
+      {priority.note && (
+        <Text style={styles.notePreview} numberOfLines={2}>{priority.note}</Text>
       )}
 
       {/* Carry-forward button */}
@@ -268,6 +304,18 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.sans,
     fontSize: 10,
     color: colors.blue[700],
+  },
+  targetDate: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
+  },
+  notePreview: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.ink.light,
+    fontStyle: 'italic',
+    lineHeight: 16,
   },
   carryBtn: {
     alignSelf: 'flex-start',

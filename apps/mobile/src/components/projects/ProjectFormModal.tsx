@@ -30,6 +30,18 @@ const STATUS_OPTIONS: { label: string; value: ProjectStatus }[] = [
   { label: 'Cancelled',   value: 'cancelled' },
 ];
 
+// ISO ↔ Date adapters
+function isoDateToDate(iso: string): Date | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  return new Date(`${iso}T12:00:00`);
+}
+function dateToIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 interface Props {
   visible: boolean;
   editProject?: Project | null;
@@ -182,8 +194,8 @@ export function ProjectFormModal({ visible, editProject, onClose }: Props) {
           <View style={styles.section}>
             <DatePickerField
               label="Start Date (optional)"
-              value={startDate}
-              onChange={setStartDate}
+              value={isoDateToDate(startDate)}
+              onChange={(d) => setStartDate(dateToIsoDate(d))}
             />
           </View>
 
@@ -191,8 +203,8 @@ export function ProjectFormModal({ visible, editProject, onClose }: Props) {
           <View style={styles.section}>
             <DatePickerField
               label="Target End Date (optional)"
-              value={endDate}
-              onChange={setEndDate}
+              value={isoDateToDate(endDate)}
+              onChange={(d) => setEndDate(dateToIsoDate(d))}
             />
           </View>
         </ScrollView>

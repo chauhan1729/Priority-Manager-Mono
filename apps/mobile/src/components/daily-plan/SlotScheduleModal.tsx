@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import type { Activity } from '@pm/types';
-import { localTimeToUTC } from '@pm/domain';
 import { useScheduleActivity } from '../../hooks/useScheduleInstances';
 import { Badge } from '../ui/Badge';
 import { TimePickerField } from '../ui/TimePickerField';
@@ -17,7 +16,7 @@ interface Props {
   projectMap: Map<string, string>;
   scheduleDate: string;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (startAt: string) => void;
 }
 
 function roundUpToNext15(date: Date): Date {
@@ -48,16 +47,27 @@ export function SlotScheduleModal({
   const [focusMinutes, setFocusMinutes] = useState<string>('60');
   const [error, setError] = useState<string | null>(null);
 
+  // Open/close the sheet when slotStartISO toggles. Matches the pattern used in
+  // ScheduleBlockModal which works reliably; keep deps minimal (only slotStartISO).
   useEffect(() => {
     if (slotStartISO) {
       const slotDate = parseSlotTime(slotStartISO);
       setStartTime(slotDate);
-      setSelectedId(unscheduledActivities.length === 1 ? unscheduledActivities[0]!.id : null);
       setFocusMinutes('60');
       setError(null);
       sheetRef.current?.expand();
     } else {
       sheetRef.current?.close();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [slotStartISO]);
+
+  // Pre-select the only unscheduled activity when the list resolves to exactly one
+  useEffect(() => {
+    if (slotStartISO && unscheduledActivities.length === 1) {
+      setSelectedId(unscheduledActivities[0]!.id);
+    } else if (!slotStartISO) {
+      setSelectedId(null);
     }
   }, [slotStartISO, unscheduledActivities]);
 
@@ -77,9 +87,11 @@ export function SlotScheduleModal({
   );
 
   function buildUTCString(timeDate: Date): string {
-    const hhmm = `${String(timeDate.getHours()).padStart(2, '0')}:${String(timeDate.getMinutes()).padStart(2, '0')}`;
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return localTimeToUTC(scheduleDate, hhmm, tz).toISOString();
+    // Local-time → UTC ISO. Date constructor with TZ-less datetime is local;
+    // toISOString() emits UTC. Engine-agnostic, no Intl dependency.
+    const hh = String(timeDate.getHours()).padStart(2, '0');
+    const mm = String(timeDate.getMinutes()).padStart(2, '0');
+    return new Date(`${scheduleDate}T${hh}:${mm}:00`).toISOString();
   }
 
   function handleSchedule() {
@@ -100,7 +112,7 @@ export function SlotScheduleModal({
     scheduleActivity.mutate(
       { activityId: selectedId, scheduleDate, startAt, endAt, focusMinutes: focus },
       {
-        onSuccess: () => { onSuccess(); sheetRef.current?.close(); },
+        onSuccess: () => { onSuccess(startAt); sheetRef.current?.close(); },
         onError: (e) => setError(e instanceof Error ? e.message : 'Failed to schedule.'),
       }
     );
@@ -119,14 +131,16 @@ export function SlotScheduleModal({
       handleIndicatorStyle={styles.handle}
       onClose={onClose}
     >
-      <View style={styles.content}>
+      <BottomSheetScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.title}>Schedule from Slot</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
 
-        {/* Activity picker */}
-        <Text style={styles.label}>Activity</Text>
-        <ScrollView style={styles.activityList} showsVerticalScrollIndicator={false}>
+        {/* Activity picker — rendered inline (outer BottomSheetScrollView handles scroll) */}
+        <Text style={styles.label}>
+          Activity {unscheduledActivities.length > 0 ? `(${unscheduledActivities.length})` : ''}
+        </Text>
+        <View style={styles.activityList}>
           {unscheduledActivities.length === 0 ? (
             <Text style={styles.emptyText}>No unscheduled activities for this date.</Text>
           ) : (
@@ -155,7 +169,7 @@ export function SlotScheduleModal({
               );
             })
           )}
-        </ScrollView>
+        </View>
 
         {/* Time + duration */}
         <TimePickerField label="Start time" value={startTime} onChange={setStartTime} />
@@ -185,7 +199,7 @@ export function SlotScheduleModal({
             {scheduleActivity.isPending ? 'Scheduling…' : 'Add to Timeline'}
           </Text>
         </TouchableOpacity>
-      </View>
+      </BottomSheetScrollView>
     </BottomSheet>
   );
 }
@@ -193,14 +207,14 @@ export function SlotScheduleModal({
 const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.paper, borderTopLeftRadius: borderRadius.xl, borderTopRightRadius: borderRadius.xl },
   handle: { backgroundColor: colors.gray[300], width: 40 },
-  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['3xl'], flex: 1 },
+  content: { padding: spacing.lg, gap: spacing.md, paddingBottom: spacing['3xl'] },
   title: { fontFamily: fontFamily.handwriting, fontSize: fontSize['2xl'], color: colors.ink.DEFAULT },
   label: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.ink.light },
   error: {
     fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.red[600],
     backgroundColor: colors.red[50], borderRadius: borderRadius.md, padding: spacing.sm,
   },
-  activityList: { maxHeight: 180, borderWidth: 1, borderColor: colors.blue[100], borderRadius: borderRadius.lg, backgroundColor: '#FFFFFF' },
+  activityList: { borderWidth: 1, borderColor: colors.blue[100], borderRadius: borderRadius.lg, backgroundColor: '#FFFFFF', overflow: 'hidden' },
   emptyText: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.ink.light, padding: spacing.md, textAlign: 'center' },
   activityRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',

@@ -26,6 +26,10 @@ const BASE_PREFS = {
   birthday_reminder_days_before: 1,
   travel_reminder_days_before: 1,
   renewal_reminder_days_before: 3,
+  activity_starting_enabled: true,
+  activity_reminder_minutes_before: 5,
+  activity_overdue_enabled: true,
+  event_reminder_minutes_before: 15,
 };
 
 function makeMeeting(overrides: Record<string, unknown> = {}) {

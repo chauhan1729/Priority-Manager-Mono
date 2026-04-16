@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -7,9 +8,18 @@ import {
 } from 'react-native';
 import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { expandRecurringMeetings, isMeetingPast } from '@pm/domain';
-import type { Meeting } from '@pm/types';
-import { useMeetings } from '../src/hooks/useMeetings';
+import {
+  expandRecurringMeetings,
+  isMeetingPast,
+  needsStatusUpdatePrompt,
+  needsTakeawayPrompt,
+} from '@pm/domain';
+import type { Contact, Meeting } from '@pm/types';
+import {
+  useMeetings,
+  useArchivedMeetings,
+  useUnarchiveMeeting,
+} from '../src/hooks/useMeetings';
 import { useContacts } from '../src/hooks/useContacts';
 import { MeetingCard } from '../src/components/meetings/MeetingCard';
 import { SkeletonList } from '../src/components/ui';
@@ -22,28 +32,50 @@ import { todayISO, addDays } from '../src/lib/dateUtils';
 
 // ---- helpers ---------------------------------------------------------------
 
-type Tab = 'upcoming' | 'past';
+type Tab = 'upcoming' | 'past' | 'archived';
 
 function buildLists(
   allMeetings: Meeting[],
   today: string,
-): { upcoming: Meeting[]; past: Meeting[] } {
+): { upcoming: Meeting[]; past: Meeting[]; attentionCount: number } {
   const future90 = addDays(today, 90);
   const past90 = addDays(today, -90);
 
   // Upcoming: status=upcoming meetings, expanded over [today, today+90]
   const upcomingBase = allMeetings.filter((m) => m.status === 'upcoming');
-  const upcoming = expandRecurringMeetings(upcomingBase, today, future90);
+  const upcomingExpanded = expandRecurringMeetings(upcomingBase, today, future90);
+
+  // Dedupe by meeting.id — show only the next occurrence of each recurring meeting
+  // (matches web MeetingPlannerView behavior)
+  const seen = new Set<string>();
+  const upcoming = upcomingExpanded
+    .sort((a, b) => a.start_at.localeCompare(b.start_at))
+    .filter((m) => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    });
 
   // Past: meetings that are past (by time) OR have a terminal status
   const pastBase = allMeetings.filter(
     (m) => isMeetingPast(m) || m.status === 'completed' || m.status === 'missed' || m.status === 'cancelled',
   );
-  // Expand in case any recurring meetings had past occurrences, then sort desc
+  // Expand so recurring past occurrences show individually, then sort desc
   const pastExpanded = expandRecurringMeetings(pastBase, past90, today);
   const past = [...pastExpanded].sort((a, b) => b.start_at.localeCompare(a.start_at));
 
-  return { upcoming, past };
+  // Attention: past meetings needing a status update or takeaway
+  const attentionCount = past.filter(
+    (m) => needsStatusUpdatePrompt(m) || needsTakeawayPrompt(m),
+  ).length;
+
+  return { upcoming, past, attentionCount };
+}
+
+function buildContactSubtitle(contact: Contact | undefined): string | undefined {
+  if (!contact) return undefined;
+  const parts = [contact.role, contact.company].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
 // ---- component -------------------------------------------------------------
@@ -52,43 +84,68 @@ export default function MeetingPlannerScreen() {
   const today = todayISO();
 
   const [activeTab, setActiveTab] = useState<Tab>('upcoming');
-  const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
+  const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
   const [editMeeting, setEditMeeting] = useState<Meeting | null>(null);
 
   const { data: allMeetings = [], isLoading, refetch } = useMeetings();
+  const { data: archivedMeetings = [], isLoading: isLoadingArchived, refetch: refetchArchived } =
+    useArchivedMeetings();
+  const unarchiveMutation = useUnarchiveMeeting();
   const [refreshing, setRefreshing] = useState(false);
   const { data: contacts = [] } = useContacts();
 
   const contactMap = useMemo(
-    () => new Map(contacts.map((c) => [c.id, c.full_name])),
+    () => new Map(contacts.map((c) => [c.id, c] as const)),
     [contacts],
   );
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await refetch();
+    if (activeTab === 'archived') {
+      await refetchArchived();
+    } else {
+      await refetch();
+    }
     setRefreshing(false);
   };
 
-  const { upcoming, past } = useMemo(
+  const { upcoming, past, attentionCount } = useMemo(
     () => buildLists(allMeetings, today),
     [allMeetings, today],
   );
 
-  const displayedMeetings = activeTab === 'upcoming' ? upcoming : past;
+  const sortedArchived = useMemo(
+    () => [...archivedMeetings].sort((a, b) => b.start_at.localeCompare(a.start_at)),
+    [archivedMeetings],
+  );
+
+  const displayedMeetings =
+    activeTab === 'upcoming' ? upcoming : activeTab === 'past' ? past : sortedArchived;
+
+  // Live-lookup selected meeting by id so detail reflects post-save state
+  const selectedMeeting = useMemo(() => {
+    if (!selectedMeetingId) return null;
+    return (
+      [...upcoming, ...past, ...sortedArchived].find((m) => m.id === selectedMeetingId) ?? null
+    );
+  }, [selectedMeetingId, upcoming, past, sortedArchived]);
+
+  const selectedContact = selectedMeeting
+    ? contactMap.get(selectedMeeting.linked_contact_id)
+    : undefined;
 
   // -- handlers ---------------------------------------------------------------
 
   const handleCardPress = (meeting: Meeting) => {
-    setSelectedMeeting(meeting);
+    setSelectedMeetingId(meeting.id);
     setDetailVisible(true);
   };
 
   const handleDetailClose = () => {
     setDetailVisible(false);
-    setSelectedMeeting(null);
+    setSelectedMeetingId(null);
   };
 
   const handleDetailEdit = (meeting: Meeting) => {
@@ -100,6 +157,16 @@ export default function MeetingPlannerScreen() {
   const handleAddPress = () => {
     setEditMeeting(null);
     setFormVisible(true);
+  };
+
+  const handleUnarchive = (meeting: Meeting) => {
+    Alert.alert('Unarchive Meeting', `Restore "${meeting.title}" to your active list?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Unarchive',
+        onPress: () => unarchiveMutation.mutate({ meetingId: meeting.id }),
+      },
+    ]);
   };
 
   const handleFormClose = () => {
@@ -141,29 +208,70 @@ export default function MeetingPlannerScreen() {
           <Text style={[styles.tabBtnText, activeTab === 'past' && styles.tabBtnTextActive]}>
             Past
           </Text>
+          {attentionCount > 0 && (
+            <View style={styles.attentionBadge}>
+              <Text style={styles.attentionBadgeText}>{attentionCount}</Text>
+            </View>
+          )}
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tabBtn, activeTab === 'archived' && styles.tabBtnActive]}
+          onPress={() => setActiveTab('archived')}
+        >
+          <Text style={[styles.tabBtnText, activeTab === 'archived' && styles.tabBtnTextActive]}>
+            Archived
+          </Text>
+          {sortedArchived.length > 0 && (
+            <View style={[styles.badge, activeTab === 'archived' ? styles.badgeActive : styles.badgeInactive]}>
+              <Text style={[styles.badgeText, activeTab === 'archived' && styles.badgeTextActive]}>
+                {sortedArchived.length}
+              </Text>
+            </View>
+          )}
         </TouchableOpacity>
       </View>
 
       {/* List */}
       <FlashList
         data={displayedMeetings}
-        estimatedItemSize={90}
         keyExtractor={(item) => `${item.id}-${item.date}`}
-        renderItem={({ item }) => (
-          <MeetingCard
-            meeting={item}
-            contactName={contactMap.get(item.linked_contact_id)}
-            onPress={() => handleCardPress(item)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const c = contactMap.get(item.linked_contact_id);
+          return (
+            <View>
+              <MeetingCard
+                meeting={item}
+                contactName={c?.full_name}
+                contactSubtitle={buildContactSubtitle(c)}
+                onPress={() => handleCardPress(item)}
+              />
+              {activeTab === 'archived' && (
+                <View style={styles.unarchiveRow}>
+                  <TouchableOpacity
+                    style={styles.unarchiveBtn}
+                    onPress={() => handleUnarchive(item)}
+                  >
+                    <Text style={styles.unarchiveBtnText}>Unarchive</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          );
+        }}
         contentContainerStyle={styles.listContent}
         onRefresh={handleRefresh}
         refreshing={refreshing}
         ListEmptyComponent={
-          isLoading ? <SkeletonList count={4} /> : (
+          (activeTab === 'archived' ? isLoadingArchived : isLoading) ? (
+            <SkeletonList count={4} />
+          ) : (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>
-                {activeTab === 'upcoming' ? 'No upcoming meetings' : 'No past meetings'}
+                {activeTab === 'upcoming'
+                  ? 'No upcoming meetings'
+                  : activeTab === 'past'
+                  ? 'No past meetings'
+                  : 'No archived meetings'}
               </Text>
               {activeTab === 'upcoming' && (
                 <TouchableOpacity onPress={handleAddPress}>
@@ -179,7 +287,10 @@ export default function MeetingPlannerScreen() {
       {/* Detail screen */}
       <MeetingDetailScreen
         meeting={selectedMeeting}
-        contactName={selectedMeeting ? contactMap.get(selectedMeeting.linked_contact_id) : undefined}
+        contactName={selectedContact?.full_name}
+        contactSubtitle={buildContactSubtitle(selectedContact)}
+        contactEmail={selectedContact?.email ?? null}
+        contactPhone={selectedContact?.phone ?? null}
         visible={detailVisible}
         onClose={handleDetailClose}
         onEdit={handleDetailEdit}
@@ -274,6 +385,44 @@ const styles = StyleSheet.create({
     color: colors.blue[600],
   },
   badgeTextActive: { color: '#FFFFFF' },
+  attentionBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+    backgroundColor: colors.amber[500],
+  },
+  attentionBadgeText: {
+    fontFamily: fontFamily.sans,
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Unarchive
+  unarchiveRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    marginTop: -spacing.xs,
+  },
+  unarchiveBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
+    borderWidth: 1,
+    borderColor: colors.blue[300],
+    backgroundColor: colors.blue[50],
+  },
+  unarchiveBtnText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: colors.blue[700],
+  },
 
   // List
   listContent: {

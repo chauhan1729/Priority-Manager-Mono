@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Alert,
   FlatList,
   Modal,
   StyleSheet,
@@ -8,12 +7,15 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import type { MonthlyPriority, MonthlyPriorityStatus } from '@pm/types';
+import { useQuery } from '@tanstack/react-query';
+import type { MonthlyPriority } from '@pm/types';
 import { MP_STATUS_LABELS } from '@pm/domain';
 import {
   useCarryForwardPriority,
   useUpdatePriorityStatus,
 } from '../../hooks/useMonthlyPriorities';
+import { supabase } from '../../lib/supabase/client';
+import { useAuth } from '../../components/providers/AuthProvider';
 import { colors } from '../../theme/colors';
 import { borderRadius, spacing } from '../../theme/spacing';
 import { fontSize, fontFamily } from '../../theme/typography';
@@ -27,19 +29,22 @@ interface Props {
   monthLabel: string;
   priorities: MonthlyPriority[];
   onClose: () => void;
+  /** Triggered when the user picks "Rewrite" for a priority; parent opens form in next month */
+  onRewrite?: (priority: MonthlyPriority) => void;
 }
 
 // ---------------------------------------------------------------------------
 // Action type per priority
 // ---------------------------------------------------------------------------
 
-type ReviewAction = 'complete' | 'carry_forward' | 'drop' | null;
+type ReviewAction = 'complete' | 'carry_forward' | 'drop' | 'rewrite' | null;
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose }: Props) {
+export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose, onRewrite }: Props) {
+  const { user } = useAuth();
   const [actions, setActions] = useState<Record<string, ReviewAction>>({});
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -50,6 +55,36 @@ export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose }
   const activePriorities = priorities.filter(
     (p) => p.status !== 'completed' && p.status !== 'dropped',
   );
+
+  // Fetch project statuses for all linked projects — used to disable Carry when project ≠ in_progress
+  const linkedProjectIds = useMemo(
+    () => Array.from(new Set(
+      activePriorities.map((p) => p.linked_project_id).filter((id): id is string => !!id),
+    )),
+    [activePriorities],
+  );
+
+  const { data: projectStatuses = {} } = useQuery({
+    queryKey: ['projects', 'statuses', linkedProjectIds],
+    queryFn: async () => {
+      if (!user || linkedProjectIds.length === 0) return {};
+      const { data } = await supabase
+        .from('projects')
+        .select('id, status')
+        .eq('user_id', user.id)
+        .in('id', linkedProjectIds);
+      const map: Record<string, string> = {};
+      for (const p of data ?? []) map[p.id as string] = p.status as string;
+      return map;
+    },
+    enabled: visible && !!user && linkedProjectIds.length > 0,
+  });
+
+  const canCarryForward = (p: MonthlyPriority): boolean => {
+    if (!p.linked_project_id) return false;
+    const status = projectStatuses[p.linked_project_id];
+    return status === 'in_progress';
+  };
 
   const setAction = (id: string, action: ReviewAction) => {
     setActions((prev) => ({ ...prev, [id]: action }));
@@ -82,6 +117,17 @@ export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose }
               { onSuccess: () => resolve(), onError: (e) => reject(e) },
             ),
           );
+        } else if (action === 'rewrite') {
+          // Drop the source, then let the parent open the form in next month
+          await new Promise<void>((resolve, reject) =>
+            statusMutation.mutate(
+              { id: priority.id, status: 'dropped', month_key: priority.month_key },
+              { onSuccess: () => resolve(), onError: (e) => reject(e) },
+            ),
+          );
+          onRewrite?.(priority);
+          onClose();
+          return; // exit early; rewrite trigger supersedes remaining actions
         }
       }
       onClose();
@@ -132,6 +178,7 @@ export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose }
               style={styles.list}
               renderItem={({ item }) => {
                 const action = actions[item.id] ?? null;
+                const canCarry = canCarryForward(item);
                 return (
                   <View style={styles.row}>
                     <View style={styles.rowInfo}>
@@ -152,7 +199,14 @@ export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose }
                         color={colors.blue[600]}
                         activeBg={colors.blue[100]}
                         onPress={() => setAction(item.id, action === 'carry_forward' ? null : 'carry_forward')}
-                        disabled={!item.linked_project_id}
+                        disabled={!canCarry}
+                      />
+                      <ActionBtn
+                        label="✎ Rewrite"
+                        active={action === 'rewrite'}
+                        color={colors.violet[600]}
+                        activeBg={colors.violet[100]}
+                        onPress={() => setAction(item.id, action === 'rewrite' ? null : 'rewrite')}
                       />
                       <ActionBtn
                         label="✕ Drop"
@@ -162,6 +216,11 @@ export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose }
                         onPress={() => setAction(item.id, action === 'drop' ? null : 'drop')}
                       />
                     </View>
+                    {!canCarry && item.linked_project_id && (
+                      <Text style={styles.carryDisabledHint}>
+                        Linked project is not active — cannot carry forward.
+                      </Text>
+                    )}
                   </View>
                 );
               }}
@@ -287,15 +346,24 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     color: colors.gray[400],
   },
-  actionBtns: { flexDirection: 'row', gap: spacing.sm },
+  actionBtns: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
   actionBtn: {
     flex: 1,
-    paddingVertical: spacing.sm,
+    minWidth: 72,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
     borderRadius: borderRadius.md,
     borderWidth: 1,
     borderColor: colors.gray[200],
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
+  },
+  carryDisabledHint: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.amber[700],
+    fontStyle: 'italic',
+    paddingTop: spacing.xs,
   },
   actionBtnDisabled: { borderColor: colors.gray[100], backgroundColor: colors.gray[50] },
   actionBtnText: {

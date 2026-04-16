@@ -28,6 +28,7 @@ interface Props {
   contactOptions: SelectOption[];
   aPriorityCount: number;
   submitting: boolean;
+  readOnly?: boolean | undefined;
   onSubmit: (values: ActivityFormValues) => void;
   onClose: () => void;
 }
@@ -40,6 +41,7 @@ export function ActivityFormModal({
   contactOptions,
   aPriorityCount,
   submitting,
+  readOnly = false,
   onSubmit,
   onClose,
 }: Props) {
@@ -82,14 +84,18 @@ export function ActivityFormModal({
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={onClose} hitSlop={8}>
-              <Text style={styles.cancel}>Cancel</Text>
+              <Text style={styles.cancel}>{readOnly ? 'Close' : 'Cancel'}</Text>
             </TouchableOpacity>
             <Text style={styles.headerTitle}>{title}</Text>
-            <TouchableOpacity onPress={handleSubmit} disabled={submitting} hitSlop={8}>
-              <Text style={[styles.save, submitting && styles.saveDim]}>
-                {submitting ? 'Saving…' : 'Save'}
-              </Text>
-            </TouchableOpacity>
+            {readOnly ? (
+              <View style={{ width: 50 }} />
+            ) : (
+              <TouchableOpacity onPress={handleSubmit} disabled={submitting} hitSlop={8}>
+                <Text style={[styles.save, submitting && styles.saveDim]}>
+                  {submitting ? 'Saving…' : 'Save'}
+                </Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           <ScrollView
@@ -97,14 +103,26 @@ export function ActivityFormModal({
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            <ActivityForm
-              values={values}
-              onChange={handleChange}
-              projectOptions={projectOptions}
-              contactOptions={contactOptions}
-              aPriorityCount={aPriorityCount}
-              error={formError}
-            />
+            {readOnly ? (
+              <View style={styles.readOnlyBox}>
+                <Text style={styles.readOnlyHeading}>{values.title}</Text>
+                <Text style={styles.readOnlyNote}>
+                  This activity is completed and cannot be edited.
+                </Text>
+                {values.note ? (
+                  <Text style={styles.readOnlyBody}>"{values.note}"</Text>
+                ) : null}
+              </View>
+            ) : (
+              <ActivityForm
+                values={values}
+                onChange={handleChange}
+                projectOptions={projectOptions}
+                contactOptions={contactOptions}
+                aPriorityCount={aPriorityCount}
+                error={formError}
+              />
+            )}
           </ScrollView>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -145,5 +163,31 @@ const styles = StyleSheet.create({
   body: {
     padding: spacing.lg,
     gap: spacing.md,
+  },
+  readOnlyBox: {
+    gap: spacing.sm,
+    padding: spacing.lg,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.blue[100],
+    borderRadius: 12,
+  },
+  readOnlyHeading: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    color: colors.ink.DEFAULT,
+  },
+  readOnlyNote: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.ink.light,
+    fontStyle: 'italic',
+  },
+  readOnlyBody: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    color: colors.ink.DEFAULT,
+    marginTop: spacing.xs,
   },
 });

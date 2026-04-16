@@ -7,17 +7,12 @@ import { TimePickerField } from '../ui/TimePickerField';
 import { colors } from '../../theme/colors';
 import { borderRadius, spacing } from '../../theme/spacing';
 import { fontSize, fontFamily, fontWeight } from '../../theme/typography';
-import { localTimeToUTC } from '@pm/domain';
 
 interface Props {
   activity: Activity | null;
   scheduleDate: string;
   onClose: () => void;
-  onSuccess: () => void;
-}
-
-function timeToDate(scheduleDate: string, hours: number, minutes: number): Date {
-  return new Date(scheduleDate + `T${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:00`);
+  onSuccess: (startAt: string) => void;
 }
 
 function roundUpToNext15(date: Date): Date {
@@ -28,14 +23,12 @@ function roundUpToNext15(date: Date): Date {
 
 export function ScheduleModal({ activity, scheduleDate, onClose, onSuccess }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ['60%'], []);
+  const snapPoints = useMemo(() => ['55%'], []);
   const scheduleActivity = useScheduleActivity();
 
   const defaultStart = roundUpToNext15(new Date());
-  const defaultEnd = new Date(defaultStart.getTime() + (activity?.remaining_minutes ?? 60) * 60_000);
 
   const [startTime, setStartTime] = useState<Date>(defaultStart);
-  const [endTime, setEndTime] = useState<Date>(defaultEnd);
   const [focusMinutes, setFocusMinutes] = useState<string>(
     String(activity?.remaining_minutes ?? 60)
   );
@@ -44,10 +37,7 @@ export function ScheduleModal({ activity, scheduleDate, onClose, onSuccess }: Pr
   // Open sheet when activity changes
   React.useEffect(() => {
     if (activity) {
-      const s = roundUpToNext15(new Date());
-      const e = new Date(s.getTime() + (activity.remaining_minutes ?? 60) * 60_000);
-      setStartTime(s);
-      setEndTime(e);
+      setStartTime(roundUpToNext15(new Date()));
       setFocusMinutes(String(activity.remaining_minutes ?? 60));
       setError(null);
       sheetRef.current?.expand();
@@ -63,12 +53,14 @@ export function ScheduleModal({ activity, scheduleDate, onClose, onSuccess }: Pr
     []
   );
 
-  function buildUTCString(date: Date, timeDate: Date): string {
-    // Use local-time hours/minutes and combine with schedule date
-    const hhmm = `${String(timeDate.getHours()).padStart(2, '0')}:${String(timeDate.getMinutes()).padStart(2, '0')}`;
-    // Use Intl to detect local timezone
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    return localTimeToUTC(scheduleDate, hhmm, tz).toISOString();
+  function buildUTCString(timeDate: Date): string {
+    // Interpret HH:MM as local time on `scheduleDate`, then emit UTC ISO.
+    // JS's Date constructor treats TZ-less datetime strings as local time,
+    // so toISOString() gives the correct UTC equivalent. Works on all
+    // RN engines without relying on Intl.DateTimeFormat's timeZone option.
+    const hh = String(timeDate.getHours()).padStart(2, '0');
+    const mm = String(timeDate.getMinutes()).padStart(2, '0');
+    return new Date(`${scheduleDate}T${hh}:${mm}:00`).toISOString();
   }
 
   function handleSchedule() {
@@ -82,22 +74,29 @@ export function ScheduleModal({ activity, scheduleDate, onClose, onSuccess }: Pr
       setError(`Focus minutes cannot exceed remaining time (${activity.remaining_minutes} min).`);
       return;
     }
-    if (endTime <= startTime) {
-      setError('End time must be after start time.');
-      return;
-    }
 
-    const startAt = buildUTCString(new Date(scheduleDate), startTime);
-    const endAt = buildUTCString(new Date(scheduleDate), endTime);
+    // End time is derived from start + focus minutes
+    const endDate = new Date(startTime.getTime() + focus * 60_000);
+    const startAt = buildUTCString(startTime);
+    const endAt = buildUTCString(endDate);
 
     scheduleActivity.mutate(
       { activityId: activity.id, scheduleDate, startAt, endAt, focusMinutes: focus },
       {
-        onSuccess: () => { onSuccess(); sheetRef.current?.close(); },
+        onSuccess: () => { onSuccess(startAt); sheetRef.current?.close(); },
         onError: (e) => setError(e instanceof Error ? e.message : 'Failed to schedule.'),
       }
     );
   }
+
+  // Preview end time for the summary row
+  const previewEndTime = (() => {
+    const focus = parseInt(focusMinutes, 10);
+    if (isNaN(focus) || focus <= 0) return null;
+    return new Date(startTime.getTime() + focus * 60_000);
+  })();
+  const formatTime = (d: Date) =>
+    `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 
   return (
     <BottomSheet
@@ -122,10 +121,6 @@ export function ScheduleModal({ activity, scheduleDate, onClose, onSuccess }: Pr
 
         <View style={styles.fieldGap} />
 
-        <TimePickerField label="End time" value={endTime} onChange={setEndTime} />
-
-        <View style={styles.fieldGap} />
-
         <Text style={styles.label}>Focus minutes</Text>
         <TextInput
           style={styles.input}
@@ -137,6 +132,19 @@ export function ScheduleModal({ activity, scheduleDate, onClose, onSuccess }: Pr
         />
         {activity && (
           <Text style={styles.hint}>Remaining: {activity.remaining_minutes} min</Text>
+        )}
+
+        {/* Summary: start – end · focus */}
+        {previewEndTime && (
+          <View style={styles.summary}>
+            <Text style={styles.summaryText}>
+              <Text style={styles.summaryEmph}>{formatTime(startTime)}</Text>
+              {' – '}
+              <Text style={styles.summaryEmph}>{formatTime(previewEndTime)}</Text>
+              {' · '}
+              {focusMinutes} min
+            </Text>
+          </View>
         )}
 
         <TouchableOpacity
@@ -168,6 +176,23 @@ const styles = StyleSheet.create({
   },
   hint: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.gray[400], marginTop: -spacing.xs },
   fieldGap: { height: spacing.xs },
+  summary: {
+    borderWidth: 1,
+    borderColor: colors.blue[100],
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.blue[50],
+  },
+  summaryText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.ink.light,
+  },
+  summaryEmph: {
+    color: colors.ink.DEFAULT,
+    fontWeight: fontWeight.semibold,
+  },
   btn: { backgroundColor: colors.blue[600], borderRadius: borderRadius.md, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   btnDim: { opacity: 0.5 },
   btnText: { fontFamily: fontFamily.sans, fontSize: fontSize.base, fontWeight: fontWeight.semibold, color: '#FFFFFF' },

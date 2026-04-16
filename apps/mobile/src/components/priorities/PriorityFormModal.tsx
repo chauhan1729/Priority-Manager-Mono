@@ -44,6 +44,18 @@ const STATUSES: MonthlyPriorityStatus[] = [
   'planned', 'in_progress', 'on_hold', 'completed', 'dropped',
 ];
 
+// ISO ↔ Date adapters
+function isoDateToDate(iso: string): Date | null {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
+  return new Date(`${iso}T12:00:00`);
+}
+function dateToIsoDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -55,6 +67,8 @@ interface Props {
   monthKey: string;
   annualGoals: AnnualGoal[];
   projects: Project[];
+  /** Pre-fill form from this priority's values; save as NEW in `monthKey` (for month-end "Rewrite") */
+  rewriteFromPriority?: MonthlyPriority | null;
   onClose: () => void;
 }
 
@@ -69,9 +83,11 @@ export function PriorityFormModal({
   monthKey,
   annualGoals,
   projects,
+  rewriteFromPriority,
   onClose,
 }: Props) {
   const isEdit = !!editPriority;
+  const isRewrite = !isEdit && !!rewriteFromPriority;
 
   const [section, setSection] = useState<MonthlyPrioritySection>(initialSection);
   const [title, setTitle] = useState('');
@@ -112,6 +128,20 @@ export function PriorityFormModal({
       setStatus(editPriority.status);
       setNote(editPriority.note ?? '');
       setPinned(editPriority.pinned);
+    } else if (rewriteFromPriority) {
+      // Pre-fill from source priority, but target the new monthKey
+      setSection(rewriteFromPriority.section);
+      setTitle(rewriteFromPriority.title);
+      setCategory(rewriteFromPriority.category ?? '');
+      setStartedDate(''); // fresh start for new month
+      setTargetDate(rewriteFromPriority.target_date ?? '');
+      setLinkedGoalId(rewriteFromPriority.linked_annual_goal_id);
+      setLinkedProjectId(rewriteFromPriority.linked_project_id);
+      setProgressMode(rewriteFromPriority.progress_mode);
+      setManualProgress(0); // reset progress on rewrite
+      setStatus('planned'); // always reset to planned for new month
+      setNote(rewriteFromPriority.note ?? '');
+      setPinned(rewriteFromPriority.pinned);
     } else {
       setSection(initialSection);
       setTitle('');
@@ -129,7 +159,7 @@ export function PriorityFormModal({
     setError(null);
     setShowGoalPicker(false);
     setShowProjectPicker(false);
-  }, [visible, editPriority, initialSection]);
+  }, [visible, editPriority, initialSection, rewriteFromPriority]);
 
   // Reset auto_project mode if project gets unlinked
   useEffect(() => {
@@ -264,7 +294,9 @@ export function PriorityFormModal({
           <TouchableOpacity onPress={onClose} disabled={isPending}>
             <Text style={styles.cancelText}>Cancel</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{isEdit ? 'Edit Priority' : 'New Priority'}</Text>
+          <Text style={styles.headerTitle}>
+            {isEdit ? 'Edit Priority' : isRewrite ? 'Rewrite for New Month' : 'New Priority'}
+          </Text>
           <TouchableOpacity onPress={handleSave} disabled={isPending}>
             <Text style={[styles.saveText, isPending && styles.textDisabled]}>
               {isPending ? 'Saving…' : 'Save'}
@@ -331,15 +363,15 @@ export function PriorityFormModal({
           <View style={styles.section}>
             <DatePickerField
               label="Started Date (optional)"
-              value={startedDate}
-              onChange={setStartedDate}
+              value={isoDateToDate(startedDate)}
+              onChange={(d) => setStartedDate(dateToIsoDate(d))}
             />
           </View>
           <View style={styles.section}>
             <DatePickerField
               label="Target Date (optional)"
-              value={targetDate}
-              onChange={setTargetDate}
+              value={isoDateToDate(targetDate)}
+              onChange={(d) => setTargetDate(dateToIsoDate(d))}
             />
           </View>
 

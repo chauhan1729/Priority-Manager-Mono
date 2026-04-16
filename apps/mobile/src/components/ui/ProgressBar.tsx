@@ -6,14 +6,21 @@ import { borderRadius } from '../../theme/spacing';
 interface ProgressBarProps {
   percent: number; // 0–100
   style?: ViewStyle;
+  color?: string | undefined;
 }
 
-export function ProgressBar({ percent, style }: ProgressBarProps) {
+export function ProgressBar({ percent, style, color }: ProgressBarProps) {
   const clamped = Math.min(100, Math.max(0, percent));
 
   return (
     <View style={[styles.track, style]}>
-      <View style={[styles.fill, { width: `${clamped}%` as `${number}%` }]} />
+      <View
+        style={[
+          styles.fill,
+          { width: `${clamped}%` as `${number}%` },
+          color ? { backgroundColor: color } : null,
+        ]}
+      />
     </View>
   );
 }
