@@ -15,16 +15,16 @@ import {
   useCalendarEventsForMonth,
   useMonthNote,
   useUpsertMonthNote,
-} from '../../src/hooks/useCalendarEvents';
-import { useContacts } from '../../src/hooks/useContacts';
-import { useYearEntries } from '../../src/hooks/useYearEntries';
-import { MonthGrid } from '../../src/components/calendar/MonthGrid';
-import { EventDetailSheet } from '../../src/components/calendar/EventDetailSheet';
-import { CalendarEventFormModal } from '../../src/components/calendar/CalendarEventFormModal';
-import { colors } from '../../src/theme/colors';
-import { borderRadius, spacing } from '../../src/theme/spacing';
-import { fontSize, fontFamily } from '../../src/theme/typography';
-import { todayISO } from '../../src/lib/dateUtils';
+} from '../src/hooks/useCalendarEvents';
+import { useContacts } from '../src/hooks/useContacts';
+import { useYearEntries } from '../src/hooks/useYearEntries';
+import { MonthGrid } from '../src/components/calendar/MonthGrid';
+import { EventDetailSheet } from '../src/components/calendar/EventDetailSheet';
+import { CalendarEventFormModal } from '../src/components/calendar/CalendarEventFormModal';
+import { colors } from '../src/theme/colors';
+import { borderRadius, spacing } from '../src/theme/spacing';
+import { fontSize, fontFamily } from '../src/theme/typography';
+import { todayISO } from '../src/lib/dateUtils';
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -220,7 +220,7 @@ export default function CalendarScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Month navigation header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.navBtn} onPress={goToPrevMonth}>

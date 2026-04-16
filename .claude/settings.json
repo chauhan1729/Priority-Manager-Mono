@@ -8,7 +8,10 @@
       "Bash(grep -c \"sm:\\\\|md:\\\\|lg:\\\\|xl:\" /c/Users/sonum/Documents/\"Antigravity Projects\"/\"Priority Manager App\"/apps/web/src/components/**/*.tsx)",
       "Bash(npx tsc *)",
       "Bash(npx expo *)",
-      "Bash(pnpm --filter web tsc --noEmit --skipLibCheck)"
+      "Bash(pnpm --filter web tsc --noEmit --skipLibCheck)",
+      "Bash(xargs grep *)",
+      "Bash(pnpm --filter web exec tsc --noEmit)",
+      "Bash(pnpm --filter mobile exec tsc --noEmit)"
     ]
   }
 }

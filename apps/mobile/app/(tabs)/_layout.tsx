@@ -1,15 +1,15 @@
 import { Tabs } from "expo-router";
+import { TopBar } from "../../src/components/layout/TopBar";
+import { IconDailyPlan, IconActivities } from "../../src/components/layout/NavIcons";
 
 /**
- * Spec §8: 10 navigation items. On mobile we use bottom tabs for the primary 5
- * (Daily Plan, Activities, Calendar, Meeting Planner, More).
- * "More" opens a drawer/sheet with the remaining 5.
+ * Bottom tab bar with 2 primary tabs: Daily Plan and Activities.
+ * All other screens are accessible via the sidebar drawer (logo tap in TopBar).
  */
 export default function TabsLayout() {
   return (
     <Tabs
       screenOptions={{
-        headerShown: false,
         tabBarActiveTintColor: "#2563EB",
         tabBarInactiveTintColor: "#4A4A6A",
         tabBarStyle: {
@@ -23,11 +23,22 @@ export default function TabsLayout() {
         },
       }}
     >
-      <Tabs.Screen name="daily-plan" options={{ title: "Daily Plan" }} />
-      <Tabs.Screen name="activities" options={{ title: "Activities" }} />
-      <Tabs.Screen name="calendar" options={{ title: "Calendar" }} />
-      <Tabs.Screen name="meeting-planner" options={{ title: "Meetings" }} />
-      <Tabs.Screen name="more" options={{ title: "More" }} />
+      <Tabs.Screen
+        name="daily-plan"
+        options={{
+          title: "Daily Plan",
+          header: () => <TopBar title="Daily Plan" />,
+          tabBarIcon: ({ color }) => <IconDailyPlan color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="activities"
+        options={{
+          title: "Activities",
+          header: () => <TopBar title="Activities" />,
+          tabBarIcon: ({ color }) => <IconActivities color={color} />,
+        }}
+      />
     </Tabs>
   );
 }

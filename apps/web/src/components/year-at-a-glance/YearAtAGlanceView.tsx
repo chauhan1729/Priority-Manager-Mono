@@ -95,7 +95,7 @@ export function YearAtAGlanceView({ yearEntries, projects, year, currentYear }: 
       {/* Header */}
       <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
         {/* Row 1: Page title */}
-        <h1 className="font-handwriting text-2xl text-ink mb-2">Year at a Glance</h1>
+        <h1 className="hidden md:block font-handwriting text-2xl text-ink mb-2">Year at a Glance</h1>
 
         {/* Row 2: Year nav + stats + Add Entry */}
         <div className="flex items-center justify-between gap-2">

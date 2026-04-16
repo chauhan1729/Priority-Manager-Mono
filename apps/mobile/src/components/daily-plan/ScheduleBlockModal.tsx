@@ -27,6 +27,7 @@ interface Props {
   block: ScheduleBlockInfo | null;
   onClose: () => void;
   onPostpone?: (activityId: string) => void;
+  onCompleted?: () => void;
 }
 
 const BLOCK_STATUSES = [
@@ -37,7 +38,7 @@ const BLOCK_STATUSES = [
   { value: 'missed', label: 'Missed' },
 ] as const;
 
-export function ScheduleBlockModal({ block, onClose, onPostpone }: Props) {
+export function ScheduleBlockModal({ block, onClose, onPostpone, onCompleted }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
   const snapPoints = useMemo(() => ['55%'], []);
   const updateStatus = useUpdateScheduleBlockStatus();
@@ -60,7 +61,12 @@ export function ScheduleBlockModal({ block, onClose, onPostpone }: Props) {
     if (!block) return;
     updateStatus.mutate(
       { instanceId: block.instanceId, status, scheduleDate: block.scheduleDate },
-      { onSuccess: () => sheetRef.current?.close() }
+      {
+        onSuccess: () => {
+          sheetRef.current?.close();
+          if (status === 'completed') onCompleted?.();
+        },
+      }
     );
   }
 

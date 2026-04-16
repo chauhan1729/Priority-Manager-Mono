@@ -188,7 +188,7 @@ export function MonthlyPrioritiesView({
       {/* Header */}
       <div className="px-4 py-3 md:px-8 md:py-4 border-b border-blue-50">
         {/* Row 1: Page title */}
-        <h1 className="font-handwriting text-2xl text-ink mb-2">Monthly Priorities</h1>
+        <h1 className="hidden md:block font-handwriting text-2xl text-ink mb-2">Monthly Priorities</h1>
 
         {/* Row 2: Month nav + stats */}
         <div className="flex items-center justify-between gap-2">

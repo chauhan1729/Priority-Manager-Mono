@@ -427,10 +427,10 @@ export default function YearAtAGlanceScreen() {
   }, []);
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Action bar */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Year at a Glance</Text>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity style={styles.addBtn} onPress={handleAddPress}>
           <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>

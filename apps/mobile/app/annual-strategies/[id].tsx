@@ -191,7 +191,7 @@ export default function GoalDetailScreen() {
 
   if (isLoading || !goal) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loading}>
           <Text style={styles.loadingText}>Loading…</Text>
         </View>
@@ -203,7 +203,7 @@ export default function GoalDetailScreen() {
   const statusStyle = STATUS_STYLE[goal.status] ?? STATUS_STYLE.not_started;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>

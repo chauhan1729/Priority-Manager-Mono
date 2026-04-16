@@ -87,7 +87,7 @@ export default function ProjectDetailScreen() {
 
   if (projectLoading || !project) {
     return (
-      <SafeAreaView style={styles.container} edges={['top']}>
+      <SafeAreaView style={styles.container} edges={['bottom']}>
         <View style={styles.loading}>
           <Text style={styles.loadingText}>Loading…</Text>
         </View>
@@ -98,7 +98,7 @@ export default function ProjectDetailScreen() {
   const status = STATUS_STYLE[project.status] ?? STATUS_STYLE.planned;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>

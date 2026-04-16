@@ -155,15 +155,8 @@ export default function SettingsScreen() {
   // ---------------------------------------------------------------------------
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backBtnText}>‹ Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={styles.backBtn} />
-      </View>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Back to previous screen (TopBar shows title) */}
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
 

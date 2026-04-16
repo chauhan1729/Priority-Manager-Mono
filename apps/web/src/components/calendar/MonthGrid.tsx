@@ -72,6 +72,7 @@ interface Props {
   awayEntries: YearEntry[];
   contactMap: Map<string, Contact>;
   todayISO: string;
+  selectedDay?: string;
   onDayClick: (date: string) => void;
   onEventClick: (event: CalendarDayEvent) => void;
 }
@@ -85,6 +86,7 @@ export function MonthGrid({
   eventsByDate,
   awayEntries,
   todayISO,
+  selectedDay,
   onDayClick,
   onEventClick,
 }: Props) {
@@ -141,6 +143,7 @@ export function MonthGrid({
           const isToday = cell.date === todayISO;
           const isPast = cell.date < todayISO;
           const isAway = isDateInAwayPeriod(cell.date, awayEntries);
+          const isSelected = selectedDay === cell.date;
           const events = eventsByDate.get(cell.date) ?? [];
           const visibleEvents = events.slice(0, 3);
           const overflow = events.length - visibleEvents.length;
@@ -150,8 +153,8 @@ export function MonthGrid({
               key={cell.date}
               onClick={() => onDayClick(cell.date!)}
               className={[
-                "min-h-[80px] md:min-h-[100px] border-b border-r border-blue-50 p-1 cursor-pointer transition",
-                isAway ? "bg-purple-50/30" : "hover:bg-blue-50/30",
+                "min-h-[48px] sm:min-h-[80px] md:min-h-[100px] border-b border-r border-blue-50 p-1 cursor-pointer transition",
+                isSelected && !isToday ? "bg-blue-50/60" : isAway ? "bg-purple-50/30" : "hover:bg-blue-50/30",
                 isPast && !isToday ? "opacity-70" : "",
               ].join(" ")}
             >
@@ -168,12 +171,22 @@ export function MonthGrid({
                   {cell.day}
                 </span>
                 {isAway && (
-                  <span className="text-[9px] text-purple-500 font-medium">Away</span>
+                  <span className="hidden sm:block text-[9px] text-purple-500 font-medium">Away</span>
                 )}
               </div>
 
-              {/* Event chips */}
-              <div className="space-y-0.5">
+              {/* Dot indicator for xs screens (shows if events exist) */}
+              {events.length > 0 && (
+                <div className="sm:hidden flex gap-0.5 flex-wrap mt-0.5">
+                  {events.slice(0, 3).map((event, i) => {
+                    const style = getEventChipStyle(event);
+                    return <span key={i} className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />;
+                  })}
+                </div>
+              )}
+
+              {/* Event chips (hidden on xs, shown sm+) */}
+              <div className="hidden sm:block space-y-0.5">
                 {visibleEvents.map((event, evIdx) => {
                   const style = getEventChipStyle(event);
                   const label = getEventLabel(event);

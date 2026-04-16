@@ -17,6 +17,7 @@ import { DailyTimeline } from '../../src/components/daily-plan/DailyTimeline';
 import { ScheduleModal } from '../../src/components/daily-plan/ScheduleModal';
 import { ScheduleBlockModal } from '../../src/components/daily-plan/ScheduleBlockModal';
 import type { ScheduleBlockInfo } from '../../src/components/daily-plan/ScheduleBlockModal';
+import { SlotScheduleModal } from '../../src/components/daily-plan/SlotScheduleModal';
 import { PostponeModal } from '../../src/components/daily-plan/PostponeModal';
 import { Badge } from '../../src/components/ui/Badge';
 import { SectionHeader } from '../../src/components/ui/SectionHeader';
@@ -36,10 +37,14 @@ export default function DailyPlanScreen() {
   const [scheduleTarget, setScheduleTarget] = useState<Activity | null>(null);
   const [activeBlock, setActiveBlock] = useState<ScheduleBlockInfo | null>(null);
   const [postponeActivityId, setPostponeActivityId] = useState<string | null>(null);
+  const [slotStartISO, setSlotStartISO] = useState<string | null>(null);
   const [carryCollapsed, setCarryCollapsed] = useState(false);
   const [view, setView] = useState<'timeline' | 'list'>('timeline');
 
+  const today = todayISO();
   const previousDate = addDays(selectedDate, -1);
+  const canSchedule = selectedDate >= today;
+
   const { toastProps, show: showToast } = useToast();
 
   // Data
@@ -66,6 +71,9 @@ export default function DailyPlanScreen() {
   const unscheduled = activities.filter(
     (a) => !a.archived && a.status !== 'completed' && a.status !== 'cancelled' && !scheduledActivityIds.has(a.id)
   );
+
+  // A-priority gate: if any A-priority activity is unscheduled, block others from scheduling
+  const hasUnscheduledA = unscheduled.some((a) => a.priority === 'A');
 
   // Capacity
   const totalScheduledMin = instances.reduce((sum: number, i: any) => sum + (i.locked_minutes ?? 0), 0);
@@ -101,8 +109,38 @@ export default function DailyPlanScreen() {
     );
   }
 
+  function handleSchedulePress(activity: Activity) {
+    if (hasUnscheduledA && activity.priority !== 'A') {
+      showToast('Schedule your A-priority activities first', 'error');
+      return;
+    }
+    setScheduleTarget(activity);
+  }
+
+  // Carry-forward panel (shared between timeline + list views)
+  const carryPanel = prevIncomplete.length > 0 ? (
+    <View style={styles.carryPanel}>
+      <TouchableOpacity
+        style={styles.carryHeader}
+        onPress={() => setCarryCollapsed((v) => !v)}
+      >
+        <Text style={styles.carryTitle}>
+          {carryCollapsed ? '▸' : '▾'} Carry Forward ({prevIncomplete.length})
+        </Text>
+      </TouchableOpacity>
+      {!carryCollapsed && prevIncomplete.map((a) => (
+        <View key={a.id} style={styles.carryItem}>
+          <Text style={styles.carryItemTitle} numberOfLines={1}>{a.title}</Text>
+          <TouchableOpacity style={styles.carryBtn} onPress={() => handleCarryForward(a)}>
+            <Text style={styles.carryBtnText}>→ Today</Text>
+          </TouchableOpacity>
+        </View>
+      ))}
+    </View>
+  ) : null;
+
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Date navigation header */}
       <View style={styles.header}>
         <View style={styles.dateNav}>
@@ -115,8 +153,8 @@ export default function DailyPlanScreen() {
           </TouchableOpacity>
         </View>
         <View style={styles.headerRight}>
-          {selectedDate !== todayISO() && (
-            <TouchableOpacity onPress={() => setSelectedDate(todayISO())}>
+          {selectedDate !== today && (
+            <TouchableOpacity onPress={() => setSelectedDate(today)}>
               <Text style={styles.todayLink}>Today</Text>
             </TouchableOpacity>
           )}
@@ -127,37 +165,29 @@ export default function DailyPlanScreen() {
         </View>
       </View>
 
-      {/* Capacity bar */}
+      {/* Capacity bar: hours + item counts */}
       <View style={styles.capacityBar}>
         <Text style={styles.capacityText}>
           {totalScheduledHours}h scheduled · {totalActivityHours}h planned
         </Text>
+        <Text style={styles.countText}>
+          {instances.length} blocks · {unscheduled.length} unscheduled
+        </Text>
       </View>
+
+      {/* A-priority gate banner (when applicable, in both views) */}
+      {hasUnscheduledA && (
+        <View style={styles.aPriorityBanner}>
+          <Text style={styles.aPriorityText}>
+            Schedule your A-priority activities first before scheduling others.
+          </Text>
+        </View>
+      )}
 
       {view === 'timeline' ? (
         /* ---- Timeline view ---- */
         <View style={styles.timelineContainer}>
-          {/* Carry-forward panel above timeline */}
-          {prevIncomplete.length > 0 && (
-            <View style={styles.carryPanel}>
-              <TouchableOpacity
-                style={styles.carryHeader}
-                onPress={() => setCarryCollapsed((v) => !v)}
-              >
-                <Text style={styles.carryTitle}>
-                  {carryCollapsed ? '▸' : '▾'} Carry Forward ({prevIncomplete.length})
-                </Text>
-              </TouchableOpacity>
-              {!carryCollapsed && prevIncomplete.map((a) => (
-                <View key={a.id} style={styles.carryItem}>
-                  <Text style={styles.carryItemTitle} numberOfLines={1}>{a.title}</Text>
-                  <TouchableOpacity style={styles.carryBtn} onPress={() => handleCarryForward(a)}>
-                    <Text style={styles.carryBtnText}>→ Today</Text>
-                  </TouchableOpacity>
-                </View>
-              ))}
-            </View>
-          )}
+          {carryPanel}
 
           <DailyTimeline
             blocks={timelineBlocks}
@@ -165,6 +195,8 @@ export default function DailyPlanScreen() {
             projectMap={projectMap}
             contactMap={contactMap}
             onBlockPress={setActiveBlock}
+            canSchedule={canSchedule}
+            {...(canSchedule ? { onSlotPress: setSlotStartISO } : {})}
           />
         </View>
       ) : (
@@ -173,29 +205,10 @@ export default function DailyPlanScreen() {
           contentContainerStyle={styles.listContent}
           stickySectionHeadersEnabled={false}
           sections={[
-            { key: 'carry', label: '', data: [] },
             { key: 'unscheduled', label: 'Unscheduled', data: unscheduled },
             { key: 'scheduled', label: 'Scheduled', data: instances as any[] },
-          ].filter((s) => s.key === 'unscheduled' ? unscheduled.length > 0 : s.key === 'scheduled' ? instances.length > 0 : false)}
-          ListHeaderComponent={
-            prevIncomplete.length > 0 ? (
-              <View style={styles.carryPanel}>
-                <TouchableOpacity style={styles.carryHeader} onPress={() => setCarryCollapsed((v) => !v)}>
-                  <Text style={styles.carryTitle}>
-                    {carryCollapsed ? '▸' : '▾'} Carry Forward ({prevIncomplete.length})
-                  </Text>
-                </TouchableOpacity>
-                {!carryCollapsed && prevIncomplete.map((a) => (
-                  <View key={a.id} style={styles.carryItem}>
-                    <Text style={styles.carryItemTitle} numberOfLines={1}>{a.title}</Text>
-                    <TouchableOpacity style={styles.carryBtn} onPress={() => handleCarryForward(a)}>
-                      <Text style={styles.carryBtnText}>→ Today</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            ) : null
-          }
+          ].filter((s) => s.key === 'unscheduled' ? unscheduled.length > 0 : instances.length > 0)}
+          ListHeaderComponent={carryPanel}
           ListEmptyComponent={
             <EmptyState message="No activities planned for this day" />
           }
@@ -206,28 +219,40 @@ export default function DailyPlanScreen() {
           renderItem={({ item, section }) => {
             if (section.key === 'unscheduled') {
               const activity = item as Activity;
+              const isAPriorityBlocked = hasUnscheduledA && activity.priority !== 'A';
               return (
-                <TouchableOpacity
-                  style={styles.unscheduledItem}
-                  onPress={() => setScheduleTarget(activity)}
-                  activeOpacity={0.75}
-                >
+                <View style={styles.unscheduledItem}>
                   <View style={styles.unscheduledLeft}>
                     {activity.priority ? <Badge variant={activity.priority} /> : null}
-                    <Text style={styles.unscheduledTitle} numberOfLines={1}>{activity.title}</Text>
-                  </View>
-                  <View style={styles.unscheduledRight}>
-                    <Text style={styles.unscheduledMeta}>
-                      {(activity.remaining_minutes / 60).toFixed(1)}h remaining
-                    </Text>
-                    {activity.linked_project_id && projectMap.get(activity.linked_project_id) && (
-                      <Text style={styles.unscheduledProject} numberOfLines={1}>
-                        {projectMap.get(activity.linked_project_id)}
+                    <View style={styles.unscheduledInfo}>
+                      <Text style={styles.unscheduledTitle} numberOfLines={1}>{activity.title}</Text>
+                      <Text style={styles.unscheduledMeta}>
+                        {(activity.remaining_minutes / 60).toFixed(1)}h remaining
+                        {activity.linked_project_id && projectMap.get(activity.linked_project_id)
+                          ? ` · ${projectMap.get(activity.linked_project_id)}`
+                          : ''}
                       </Text>
-                    )}
+                    </View>
                   </View>
-                  <Text style={styles.scheduleChevron}>+</Text>
-                </TouchableOpacity>
+                  <View style={styles.unscheduledActions}>
+                    {/* Postpone button */}
+                    <TouchableOpacity
+                      style={styles.postponeBtn}
+                      onPress={() => setPostponeActivityId(activity.id)}
+                      hitSlop={6}
+                    >
+                      <Text style={styles.postponeBtnText}>📅</Text>
+                    </TouchableOpacity>
+                    {/* Schedule button */}
+                    <TouchableOpacity
+                      style={[styles.scheduleBtn, (isAPriorityBlocked || !canSchedule) && styles.scheduleBtnDim]}
+                      onPress={() => handleSchedulePress(activity)}
+                      disabled={isAPriorityBlocked || !canSchedule}
+                    >
+                      <Text style={styles.scheduleBtnText}>+</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
               );
             }
             // Scheduled instance rows
@@ -268,10 +293,21 @@ export default function DailyPlanScreen() {
         onSuccess={() => { setScheduleTarget(null); showToast('Added to timeline'); }}
       />
 
+      {/* Slot schedule modal (tap empty timeline area → pick activity + time) */}
+      <SlotScheduleModal
+        slotStartISO={slotStartISO}
+        unscheduledActivities={unscheduled}
+        projectMap={projectMap}
+        scheduleDate={selectedDate}
+        onClose={() => setSlotStartISO(null)}
+        onSuccess={() => { setSlotStartISO(null); showToast('Added to timeline'); }}
+      />
+
       {/* Block detail modal */}
       <ScheduleBlockModal
         block={activeBlock}
         onClose={() => setActiveBlock(null)}
+        onCompleted={() => showToast('🎉 Activity completed!')}
         onPostpone={(activityId) => {
           setActiveBlock(null);
           setPostponeActivityId(activityId);
@@ -337,7 +373,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   viewToggleText: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.blue[600] },
+  // Capacity bar
   capacityBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs + 2,
     backgroundColor: colors.blue[50],
@@ -345,6 +385,17 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.blue[100],
   },
   capacityText: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.blue[700] },
+  countText: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.blue[500] },
+  // A-priority gate banner
+  aPriorityBanner: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs + 2,
+    backgroundColor: colors.amber[50],
+    borderBottomWidth: 1,
+    borderBottomColor: colors.amber[200],
+  },
+  aPriorityText: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.amber[700] },
+  // Layout
   timelineContainer: { flex: 1 },
   listContent: { padding: spacing.lg, paddingBottom: 60 },
   // Carry-forward
@@ -359,11 +410,14 @@ const styles = StyleSheet.create({
   },
   carryHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
   carryTitle: { fontFamily: fontFamily.sans, fontSize: fontSize.sm, fontWeight: fontWeight.semibold, color: colors.blue[700] },
-  carryItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 4, borderTopWidth: 1, borderTopColor: colors.blue[100] },
+  carryItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingVertical: 4, borderTopWidth: 1, borderTopColor: colors.blue[100],
+  },
   carryItemTitle: { flex: 1, fontFamily: fontFamily.sans, fontSize: fontSize.sm, color: colors.ink.DEFAULT },
   carryBtn: { backgroundColor: colors.blue[600], borderRadius: borderRadius.sm, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   carryBtnText: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, fontWeight: fontWeight.semibold, color: '#FFFFFF' },
-  // Unscheduled item
+  // Unscheduled item (list view)
   unscheduledItem: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -375,13 +429,23 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     gap: spacing.sm,
   },
-  unscheduledLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  unscheduledTitle: { flex: 1, fontFamily: fontFamily.sans, fontSize: fontSize.base, color: colors.ink.DEFAULT },
-  unscheduledRight: { alignItems: 'flex-end' },
-  unscheduledMeta: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.ink.light },
-  unscheduledProject: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.blue[600] },
-  scheduleChevron: { fontSize: 20, color: colors.blue[400], fontWeight: '300' },
-  // Scheduled item
+  unscheduledLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minWidth: 0 },
+  unscheduledInfo: { flex: 1, minWidth: 0 },
+  unscheduledTitle: { fontFamily: fontFamily.sans, fontSize: fontSize.base, color: colors.ink.DEFAULT },
+  unscheduledMeta: { fontFamily: fontFamily.sans, fontSize: fontSize.xs, color: colors.ink.light, marginTop: 2 },
+  unscheduledActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 0 },
+  postponeBtn: {
+    width: 32, height: 32, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: colors.blue[100], borderRadius: borderRadius.sm, backgroundColor: '#FFFFFF',
+  },
+  postponeBtnText: { fontSize: 14 },
+  scheduleBtn: {
+    width: 32, height: 32, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: colors.blue[600], borderRadius: borderRadius.sm,
+  },
+  scheduleBtnDim: { opacity: 0.35 },
+  scheduleBtnText: { fontSize: 20, color: '#FFFFFF', fontWeight: '300', lineHeight: 28 },
+  // Scheduled item (list view)
   scheduledItem: {
     flexDirection: 'row',
     alignItems: 'center',

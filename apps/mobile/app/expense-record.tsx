@@ -176,10 +176,10 @@ export default function ExpenseRecordScreen() {
   // ---------------------------------------------------------------------------
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Action bar */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Expense Record</Text>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity
           style={styles.addBtn}
           onPress={() => {

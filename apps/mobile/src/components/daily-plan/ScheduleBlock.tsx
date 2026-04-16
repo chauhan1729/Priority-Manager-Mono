@@ -10,8 +10,8 @@ import { fontSize, fontFamily } from '../../theme/typography';
 // px per minute on the timeline
 export const PX_PER_MIN = 2;
 
-// Timeline start hour
-export const TIMELINE_START_HOUR = 6;
+// Timeline start hour (midnight — full 24-hour view, matching web)
+export const TIMELINE_START_HOUR = 0;
 
 export function minutesFromTimelineStart(isoDatetime: string): number {
   const d = new Date(isoDatetime);

@@ -199,7 +199,7 @@ export default function ActivitiesScreen() {
   // ---------------------------------------------------------------------------
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Date navigation header */}
       <View style={styles.header}>
         <View style={styles.dateNav}>

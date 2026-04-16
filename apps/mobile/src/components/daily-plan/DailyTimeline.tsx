@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ScheduleBlock, PX_PER_MIN, TIMELINE_START_HOUR, minutesFromTimelineStart } from './ScheduleBlock';
 import type { ScheduleBlockInfo } from './ScheduleBlockModal';
 import { colors } from '../../theme/colors';
@@ -7,7 +7,7 @@ import { spacing } from '../../theme/spacing';
 import { fontSize, fontFamily } from '../../theme/typography';
 import { todayISO } from '../../lib/dateUtils';
 
-const TIMELINE_END_HOUR = 23;
+const TIMELINE_END_HOUR = 24;
 const TOTAL_HOURS = TIMELINE_END_HOUR - TIMELINE_START_HOUR;
 const TOTAL_MINUTES = TOTAL_HOURS * 60;
 const TIMELINE_HEIGHT = TOTAL_MINUTES * PX_PER_MIN;
@@ -19,12 +19,12 @@ interface TimelineBlock {
   startAt: string;
   endAt: string;
   statusSnapshot: string | null;
-  priority?: string | null;
-  projectName?: string;
-  contactName?: string;
+  priority?: string | null | undefined;
+  projectName?: string | undefined;
+  contactName?: string | undefined;
   sourceType: string;
-  activityId?: string | null;
-  focusMinutes?: number | null;
+  activityId?: string | null | undefined;
+  focusMinutes?: number | null | undefined;
   scheduleDate: string;
 }
 
@@ -34,20 +34,22 @@ interface Props {
   projectMap: Map<string, string>;
   contactMap: Map<string, string>;
   onBlockPress: (info: ScheduleBlockInfo) => void;
+  onSlotPress?: (startTimeISO: string) => void;
+  canSchedule?: boolean;
 }
 
-export function DailyTimeline({ blocks, selectedDate, projectMap, contactMap, onBlockPress }: Props) {
+export function DailyTimeline({ blocks, selectedDate, projectMap, contactMap, onBlockPress, onSlotPress, canSchedule }: Props) {
   const scrollRef = useRef<ScrollView>(null);
   const isToday = selectedDate === todayISO();
 
-  // Auto-scroll to current time on load (today only)
+  // Auto-scroll: to current time on today, to 6 AM on other dates
   useEffect(() => {
-    if (!isToday) return;
-    const now = new Date();
-    const minutesFromStart = (now.getHours() - TIMELINE_START_HOUR) * 60 + now.getMinutes();
-    const targetY = Math.max(0, minutesFromStart * PX_PER_MIN - 80);
+    const scrollHour = isToday
+      ? (new Date().getHours() - TIMELINE_START_HOUR) + new Date().getMinutes() / 60
+      : 6 - TIMELINE_START_HOUR;
+    const targetY = Math.max(0, scrollHour * HOUR_HEIGHT - 80);
     setTimeout(() => scrollRef.current?.scrollTo({ y: targetY, animated: true }), 300);
-  }, [isToday]);
+  }, [isToday, selectedDate]);
 
   // Current time indicator position
   const now = new Date();
@@ -55,14 +57,30 @@ export function DailyTimeline({ blocks, selectedDate, projectMap, contactMap, on
   const currentTimeTop = currentMinFromStart * PX_PER_MIN;
   const showCurrentTime = isToday && currentMinFromStart >= 0 && currentMinFromStart <= TOTAL_MINUTES;
 
+  function handleSlotPress(locationY: number) {
+    if (!onSlotPress || !canSchedule) return;
+    // Convert Y position within the timeline to a snapped 15-min start time
+    const totalMinutes = locationY / PX_PER_MIN;
+    const snapped = Math.round(totalMinutes / 15) * 15;
+    const hours = Math.floor(snapped / 60) % 24;
+    const mins = snapped % 60;
+    const hh = String(hours).padStart(2, '0');
+    const mm = String(mins).padStart(2, '0');
+    onSlotPress(`${selectedDate}T${hh}:${mm}:00`);
+  }
+
   return (
     <ScrollView ref={scrollRef} style={styles.scroll} showsVerticalScrollIndicator={false}>
+      <Pressable onPress={(e) => handleSlotPress(e.nativeEvent.locationY)}>
       <View style={[styles.container, { height: TIMELINE_HEIGHT }]}>
         {/* Hour markers */}
         {Array.from({ length: TOTAL_HOURS + 1 }).map((_, i) => {
           const hour = TIMELINE_START_HOUR + i;
           const top = i * HOUR_HEIGHT;
-          const label = hour === 12 ? '12 PM' : hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
+          const label =
+            hour === 0 || hour === 24 ? '12 AM' :
+            hour === 12 ? '12 PM' :
+            hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
           return (
             <View key={hour} style={[styles.hourRow, { top }]}>
               <Text style={styles.hourLabel}>{label}</Text>
@@ -113,6 +131,7 @@ export function DailyTimeline({ blocks, selectedDate, projectMap, contactMap, on
           );
         })}
       </View>
+      </Pressable>
     </ScrollView>
   );
 }

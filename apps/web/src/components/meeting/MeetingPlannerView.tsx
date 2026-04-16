@@ -191,7 +191,7 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
       {/* Header */}
       <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
         {/* Row 1: Page title */}
-        <h1 className="font-handwriting text-2xl text-ink mb-2">Meeting Planner</h1>
+        <h1 className="hidden md:block font-handwriting text-2xl text-ink mb-2">Meeting Planner</h1>
 
         {/* Row 2: Attention note + Schedule button */}
         <div className="flex items-center justify-between gap-2">

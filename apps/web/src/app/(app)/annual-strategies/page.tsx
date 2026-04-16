@@ -42,7 +42,7 @@ export default async function AnnualStrategiesPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="border-b border-blue-100 px-8 py-5">
+      <header className="hidden md:block border-b border-blue-100 px-8 py-5">
         <h1 className="font-handwriting text-2xl text-ink">Annual Strategies</h1>
       </header>
       <div className="flex-1 overflow-y-auto">

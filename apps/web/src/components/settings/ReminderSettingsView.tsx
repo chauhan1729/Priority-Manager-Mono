@@ -127,9 +127,21 @@ interface Props {
 export function ReminderSettingsView({ prefs, timezone: initialTimezone }: Props) {
   const [_isPending, startTransition] = useTransition();
 
-  // Local form state — initialised from server props
-  const [form, setForm] = useState<ReminderPreferenceRow>(prefs ?? DEFAULTS);
-  const [timezone, setTimezone] = useState(initialTimezone);
+  // Local form state — merge saved prefs with DEFAULTS, falling back for any null/empty values
+  const [form, setForm] = useState<ReminderPreferenceRow>(() => {
+    if (!prefs) return DEFAULTS;
+    return {
+      eod_review_enabled: prefs.eod_review_enabled ?? DEFAULTS.eod_review_enabled,
+      eod_review_time: (prefs.eod_review_time as string | null) || DEFAULTS.eod_review_time,
+      meeting_reminder_minutes_before: prefs.meeting_reminder_minutes_before ?? DEFAULTS.meeting_reminder_minutes_before,
+      morning_summary_enabled: prefs.morning_summary_enabled ?? DEFAULTS.morning_summary_enabled,
+      morning_summary_time: (prefs.morning_summary_time as string | null) || DEFAULTS.morning_summary_time,
+      birthday_reminder_days_before: prefs.birthday_reminder_days_before ?? DEFAULTS.birthday_reminder_days_before,
+      travel_reminder_days_before: prefs.travel_reminder_days_before ?? DEFAULTS.travel_reminder_days_before,
+      renewal_reminder_days_before: prefs.renewal_reminder_days_before ?? DEFAULTS.renewal_reminder_days_before,
+    };
+  });
+  const [timezone, setTimezone] = useState(initialTimezone || "UTC");
 
   function setField<K extends keyof ReminderPreferenceRow>(key: K, value: ReminderPreferenceRow[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));

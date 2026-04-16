@@ -248,10 +248,10 @@ export default function MonthlyPrioritiesScreen() {
   // ---------------------------------------------------------------------------
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Action bar */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Monthly Priorities</Text>
+        <View style={{ flex: 1 }} />
         {isPast && (
           <TouchableOpacity
             style={styles.reviewBtn}

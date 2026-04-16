@@ -87,9 +87,9 @@ export function DailyTimeline({
   }
 
   function handleGridClick(e: React.MouseEvent<HTMLDivElement>) {
-    // Only fire if the click landed on the grid background (not a child block button)
-    if (e.target !== e.currentTarget) return;
     if (!canSchedule) return;
+    // Ignore clicks that originated inside a schedule block button
+    if ((e.target as HTMLElement).closest("button")) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const yPx = e.clientY - rect.top;
     onSlotClick(yToStartTime(yPx));

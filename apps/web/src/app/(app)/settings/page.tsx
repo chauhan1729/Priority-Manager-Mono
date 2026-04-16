@@ -18,7 +18,7 @@ export default async function SettingsPage() {
   return (
     <div className="px-6 py-8 md:px-8">
       <div className="mb-8">
-        <h1 className="font-handwriting text-2xl text-ink">Settings</h1>
+        <h1 className="hidden md:block font-handwriting text-2xl text-ink">Settings</h1>
         <p className="mt-1 text-sm text-ink-light">
           Configure notification preferences and reminders.
         </p>

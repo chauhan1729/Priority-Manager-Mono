@@ -77,9 +77,7 @@ export default async function ProjectPlannerPage() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto px-4 py-5 md:px-8">
-        <ProjectList projects={projectsWithMetrics} />
-      </div>
+      <ProjectList projects={projectsWithMetrics} />
     </div>
   );
 }

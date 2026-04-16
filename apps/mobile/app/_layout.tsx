@@ -15,6 +15,9 @@ import { SupabaseProvider } from '../src/lib/supabase/client';
 import { AuthProvider, useAuth } from '../src/components/providers/AuthProvider';
 import { SyncProvider, SyncIndicator } from '../src/components/providers/SyncProvider';
 import { NotificationProvider } from '../src/components/providers/NotificationProvider';
+import { DrawerProvider } from '../src/components/providers/DrawerProvider';
+import { AppDrawer } from '../src/components/layout/AppDrawer';
+import { TopBar } from '../src/components/layout/TopBar';
 
 // Keep splash visible until we are ready
 SplashScreen.preventAutoHideAsync();
@@ -86,11 +89,13 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <SupabaseProvider>
           <AuthProvider>
-            <SyncProvider>
-              <NotificationProvider>
-                <InnerLayout />
-              </NotificationProvider>
-            </SyncProvider>
+            <DrawerProvider>
+              <SyncProvider>
+                <NotificationProvider>
+                  <InnerLayout />
+                </NotificationProvider>
+              </SyncProvider>
+            </DrawerProvider>
           </AuthProvider>
         </SupabaseProvider>
       </QueryClientProvider>
@@ -115,7 +120,38 @@ function InnerLayout() {
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(auth)" />
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen
+          name="calendar"
+          options={{ headerShown: true, header: () => <TopBar title="Calendar" /> }}
+        />
+        <Stack.Screen
+          name="meeting-planner"
+          options={{ headerShown: true, header: () => <TopBar title="Meeting Planner" /> }}
+        />
+        <Stack.Screen
+          name="year-at-a-glance"
+          options={{ headerShown: true, header: () => <TopBar title="Year at a Glance" /> }}
+        />
+        <Stack.Screen name="annual-strategies" />
+        <Stack.Screen
+          name="monthly-priorities"
+          options={{ headerShown: true, header: () => <TopBar title="Monthly Priorities" /> }}
+        />
+        <Stack.Screen name="project-planner" />
+        <Stack.Screen
+          name="communication-planner"
+          options={{ headerShown: true, header: () => <TopBar title="Communication Planner" /> }}
+        />
+        <Stack.Screen
+          name="expense-record"
+          options={{ headerShown: true, header: () => <TopBar title="Expense Record" /> }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{ headerShown: true, header: () => <TopBar title="Settings" /> }}
+        />
       </Stack>
+      <AppDrawer />
       <SyncIndicator />
     </>
   );

@@ -9,16 +9,16 @@ import { FlashList } from '@shopify/flash-list';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { expandRecurringMeetings, isMeetingPast } from '@pm/domain';
 import type { Meeting } from '@pm/types';
-import { useMeetings } from '../../src/hooks/useMeetings';
-import { useContacts } from '../../src/hooks/useContacts';
-import { MeetingCard } from '../../src/components/meetings/MeetingCard';
-import { SkeletonList } from '../../src/components/ui';
-import { MeetingDetailScreen } from '../../src/components/meetings/MeetingDetailScreen';
-import { MeetingFormModal } from '../../src/components/meetings/MeetingFormModal';
-import { colors } from '../../src/theme/colors';
-import { borderRadius, spacing } from '../../src/theme/spacing';
-import { fontSize, fontFamily } from '../../src/theme/typography';
-import { todayISO, addDays } from '../../src/lib/dateUtils';
+import { useMeetings } from '../src/hooks/useMeetings';
+import { useContacts } from '../src/hooks/useContacts';
+import { MeetingCard } from '../src/components/meetings/MeetingCard';
+import { SkeletonList } from '../src/components/ui';
+import { MeetingDetailScreen } from '../src/components/meetings/MeetingDetailScreen';
+import { MeetingFormModal } from '../src/components/meetings/MeetingFormModal';
+import { colors } from '../src/theme/colors';
+import { borderRadius, spacing } from '../src/theme/spacing';
+import { fontSize, fontFamily } from '../src/theme/typography';
+import { todayISO, addDays } from '../src/lib/dateUtils';
 
 // ---- helpers ---------------------------------------------------------------
 
@@ -108,10 +108,10 @@ export default function MeetingPlannerScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
+    <SafeAreaView style={styles.container} edges={['bottom']}>
+      {/* Action bar */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Meetings</Text>
+        <View style={{ flex: 1 }} />
         <TouchableOpacity style={styles.addBtn} onPress={handleAddPress}>
           <Text style={styles.addBtnText}>+</Text>
         </TouchableOpacity>
