@@ -23,6 +23,8 @@ import {
   type ComputeRemindersParams,
   type ReminderSchedule,
 } from "@pm/domain";
+import type { ReminderPreference } from "@pm/types";
+
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { showToast } from "@/components/ui/Toaster";
@@ -42,15 +44,17 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (!user) return;
 
     // Fetch reminder preferences
-    const { data: prefs } = await supabase
+    const { data: prefsData } = await supabase
       .from("reminder_preferences")
       .select(
-        "eod_review_enabled, eod_review_time, meeting_reminder_minutes_before, morning_summary_enabled, morning_summary_time, birthday_reminder_days_before, travel_reminder_days_before, renewal_reminder_days_before",
+        "eod_review_enabled, eod_review_time, meeting_reminder_minutes_before, morning_summary_enabled, morning_summary_time, birthday_reminder_days_before, travel_reminder_days_before, renewal_reminder_days_before, activity_starting_enabled, activity_reminder_minutes_before, activity_overdue_enabled, event_reminder_minutes_before",
       )
       .eq("user_id", user.id)
       .maybeSingle();
 
-    if (!prefs) return;
+    if (!prefsData) return;
+    const prefs = prefsData as ReminderPreference;
+
 
     const now = new Date();
     const todayISO = now.toISOString().slice(0, 10);
@@ -65,7 +69,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       .not("fired_at", "is", null);
 
     // Parallel data fetches for reminder sources
-    const [meetingsResult, expensesResult, yearEntriesResult] = await Promise.all([
+    const [meetingsResult, expensesResult, yearEntriesResult, scheduleInstancesResult, activitiesResult, calendarEventsResult] = await Promise.all([
       supabase
         .from("meetings")
         .select("id, title, start_at, end_at, status, key_takeaways")
@@ -81,16 +85,37 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         .from("year_entries")
         .select("id, title, type, start_date")
         .eq("user_id", user.id),
+      supabase
+        .from("schedule_instances")
+        .select("id, source_type, source_activity_id, start_at, end_at, status_snapshot")
+        .eq("user_id", user.id)
+        .eq("schedule_date", todayISO),
+      supabase
+        .from("activities")
+        .select("id, title")
+        .eq("user_id", user.id)
+        .in("status", ["not_started", "working", "postponed"]),
+      supabase
+        .from("calendar_events")
+        .select("id, title, event_type, start_at")
+        .eq("user_id", user.id)
+        .gte("start_at", `${todayISO}T00:00:00Z`)
+        .lte("start_at", `${todayISO}T23:59:59Z`),
     ]);
+
 
     const params: ComputeRemindersParams = {
       prefs,
       meetings: meetingsResult.data ?? [],
       expenses: expensesResult.data ?? [],
       yearEntries: yearEntriesResult.data ?? [],
+      scheduleInstances: scheduleInstancesResult.data ?? [],
+      activities: activitiesResult.data ?? [],
+      calendarEvents: calendarEventsResult.data ?? [],
       todayISO,
       now,
     };
+
 
     const allReminders = computeAllReminders(params);
 

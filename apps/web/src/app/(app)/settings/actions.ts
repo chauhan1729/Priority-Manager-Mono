@@ -17,6 +17,10 @@ export interface UpdateReminderPreferencesData {
   birthday_reminder_days_before?: number;
   travel_reminder_days_before?: number;
   renewal_reminder_days_before?: number;
+  activity_starting_enabled?: boolean;
+  activity_reminder_minutes_before?: number;
+  activity_overdue_enabled?: boolean;
+  event_reminder_minutes_before?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,11 +74,16 @@ export async function updateReminderPreferences(
   }
 
   // Validate numeric fields
-  if (
-    data.meeting_reminder_minutes_before !== undefined &&
-    (data.meeting_reminder_minutes_before < 0 || data.meeting_reminder_minutes_before > 120)
-  ) {
-    return { error: "meeting_reminder_minutes_before must be 0–120" };
+  const minuteFields = [
+    "meeting_reminder_minutes_before",
+    "activity_reminder_minutes_before",
+    "event_reminder_minutes_before",
+  ] as const;
+  for (const field of minuteFields) {
+    const val = data[field];
+    if (val !== undefined && (val < 0 || val > 120)) {
+      return { error: `${field} must be 0–120` };
+    }
   }
 
   const daysFields = [
