@@ -485,6 +485,22 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* Developer */}
+        <SectionHeader title="Developer" />
+
+        <View style={styles.group}>
+          <TouchableOpacity
+            style={styles.plainRow}
+            onPress={() => router.push('/notification-test' as never)}
+          >
+            <View style={styles.labelCol}>
+              <Text style={styles.rowLabel}>Test Notifications</Text>
+              <Text style={styles.rowHelp}>Send a test notification for each reminder type.</Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Account */}
         <SectionHeader title="Account" />
 

@@ -192,6 +192,92 @@ async function scheduleOne(
 }
 
 // ---------------------------------------------------------------------------
+// Test helper
+// ---------------------------------------------------------------------------
+
+const TEST_CASES: Record<string, { title: string; body: string }> = {
+  activity_starting: {
+    title: 'Deep Work: Build feature X',
+    body: 'Focus and complete this cycle, or acknowledge, take responsibility, and move it to another time.',
+  },
+  activity_overdue: {
+    title: 'Deep Work: Build feature X',
+    body: 'Block ended — add an update so progress isn\'t lost and can be tracked.',
+  },
+  meeting_upcoming: {
+    title: 'Weekly Sync',
+    body: 'Meeting in 15 min. Show up fully, or reschedule and own it.',
+  },
+  meeting_passed: {
+    title: 'Weekly Sync',
+    body: 'Meeting done — add takeaways and update status so nothing is lost.',
+  },
+  event_upcoming: {
+    title: 'Doctor Appointment',
+    body: 'Focus and show up fully, or acknowledge, take responsibility, and reschedule.',
+  },
+  eod_review: {
+    title: 'End of Day Review',
+    body: 'Log updates on what\'s done and what\'s not — don\'t let progress go untracked.',
+  },
+  morning_summary: {
+    title: 'Good morning!',
+    body: 'Review today\'s plan. Commit to what you\'ll focus on and complete.',
+  },
+  birthday: {
+    title: 'Birthday: Alex Johnson',
+    body: 'Today is Alex Johnson\'s birthday — reach out and make it count.',
+  },
+  travel: {
+    title: 'Trip to London',
+    body: '1 day away — prepare ahead or reschedule and own it.',
+  },
+  renewal: {
+    title: 'Notion',
+    body: 'Renewal in 3 days. Handle it or reschedule and own it.',
+  },
+};
+
+/**
+ * Schedules a test notification for the given reminder type to fire in
+ * `delaySeconds` seconds (default 5). Returns the notification identifier
+ * or null if notifications are unavailable.
+ */
+export async function sendTestNotification(
+  type: string,
+  delaySeconds = 5,
+): Promise<string | null> {
+  const N = getNotifications();
+  if (!N) return null;
+
+  const content = TEST_CASES[type] ?? {
+    title: `Test: ${type}`,
+    body: 'This is a test notification.',
+  };
+
+  const fireAt = new Date(Date.now() + delaySeconds * 1000);
+
+  try {
+    const id = await N.scheduleNotificationAsync({
+      content: {
+        title: content.title,
+        body: content.body,
+        data: { type, source_id: 'test' },
+      },
+      trigger: {
+        type: N.SchedulableTriggerInputTypes.DATE,
+        date: fireAt,
+        channelId: CHANNEL_ID,
+      },
+    });
+    return id;
+  } catch (err) {
+    console.warn('[notifications] sendTestNotification failed:', type, err);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tap listener
 // ---------------------------------------------------------------------------
 

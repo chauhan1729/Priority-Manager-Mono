@@ -150,6 +150,10 @@ function InnerLayout() {
           name="settings"
           options={{ headerShown: true, header: () => <TopBar title="Settings" /> }}
         />
+        <Stack.Screen
+          name="notification-test"
+          options={{ headerShown: true, header: () => <TopBar title="Notification Test" /> }}
+        />
       </Stack>
       <AppDrawer />
       <SyncIndicator />
