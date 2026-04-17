@@ -1,4 +1,5 @@
 import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import type * as NotificationsType from 'expo-notifications';
 import type {
   Activity,
@@ -48,13 +49,17 @@ export async function requestNotificationPermission(): Promise<boolean> {
 // Notification handler config (called at app startup)
 // ---------------------------------------------------------------------------
 
+const CHANNEL_ID = 'default';
+
 /**
- * Configure expo-notifications to show banners while the app is in foreground.
+ * Configure expo-notifications to show banners while the app is in foreground
+ * and ensure the Android notification channel exists.
  * No-op in Expo Go.
  */
 export function configureNotificationHandler(): void {
   const N = getNotifications();
   if (!N) return;
+
   N.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -62,6 +67,17 @@ export function configureNotificationHandler(): void {
       shouldSetBadge: false,
     }),
   });
+
+  // Android 8+ requires an explicit channel — create it once at startup.
+  if (Platform.OS === 'android') {
+    N.setNotificationChannelAsync(CHANNEL_ID, {
+      name: 'Priority Manager',
+      importance: N.AndroidImportance.HIGH,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#2563EB',
+      sound: 'default',
+    }).catch(() => {});
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -166,10 +182,12 @@ async function scheduleOne(
       trigger: {
         type: N.SchedulableTriggerInputTypes.DATE,
         date: reminder.scheduled_for,
+        channelId: CHANNEL_ID,
       },
     });
-  } catch {
-    // Non-fatal: a single reminder failing shouldn't break the rest
+  } catch (err) {
+    // Log so failures are visible during debugging
+    console.warn('[notifications] scheduleOne failed:', reminder.type, err);
   }
 }
 
