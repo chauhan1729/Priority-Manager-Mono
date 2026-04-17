@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase/client';
 import { useAuth } from '../src/components/providers/AuthProvider';
@@ -21,7 +22,13 @@ import {
   useUpdateProfile,
   useUpdateReminderPreferences,
 } from '../src/hooks/useSettings';
+import { useNotifications } from '../src/components/providers/NotificationProvider';
 import { TimePickerField } from '../src/components/ui/TimePickerField';
+import {
+  getNotificationSound,
+  NOTIFICATION_SOUND_KEY,
+  type NotificationSound,
+} from '../src/lib/notifications/mobile-notifications';
 import { colors } from '../src/theme/colors';
 import { borderRadius, spacing } from '../src/theme/spacing';
 import { fontSize, fontFamily } from '../src/theme/typography';
@@ -29,6 +36,12 @@ import { fontSize, fontFamily } from '../src/theme/typography';
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+const NOTIFICATION_SOUND_OPTIONS: NotificationSound[] = ['default', 'none'];
+const NOTIFICATION_SOUND_LABELS: Record<NotificationSound, string> = {
+  default: 'Default',
+  none: 'Silent',
+};
 
 const MEETING_REMINDER_OPTIONS = [0, 5, 10, 15, 30, 60];
 const ACTIVITY_REMINDER_OPTIONS = [0, 2, 5, 10, 15, 30];
@@ -142,6 +155,7 @@ export default function SettingsScreen() {
   const { user: authUser } = useAuth();
   const { data: prefs, isLoading: prefsLoading } = useReminderPreferences();
   const { data: profile, isLoading: profileLoading } = useProfile();
+  const { reschedule } = useNotifications();
 
   const updatePrefs = useUpdateReminderPreferences();
   const updateProfile = useUpdateProfile();
@@ -160,6 +174,9 @@ export default function SettingsScreen() {
   const [activityOverdueEnabled, setActivityOverdueEnabled] = useState(true);
   const [eventMinutes, setEventMinutes] = useState(15);
   const [timezone, setTimezone] = useState('UTC');
+  const [notificationSound, setNotificationSound] = useState<NotificationSound>('default');
+  // Track the value last persisted to AsyncStorage so dirty check works.
+  const savedSoundRef = useRef<NotificationSound>('default');
 
   // Timezone picker UI state
   const [tzPickerVisible, setTzPickerVisible] = useState(false);
@@ -188,6 +205,14 @@ export default function SettingsScreen() {
     if (profile?.timezone) setTimezone(profile.timezone);
   }, [profile]);
 
+  // Load notification sound preference from device storage on mount.
+  useEffect(() => {
+    getNotificationSound().then((s) => {
+      setNotificationSound(s);
+      savedSoundRef.current = s;
+    });
+  }, []);
+
   // ---------------------------------------------------------------------------
   // Dirty-state + save
   // ---------------------------------------------------------------------------
@@ -210,7 +235,8 @@ export default function SettingsScreen() {
       activityMinutes !== prefs.activity_reminder_minutes_before ||
       activityOverdueEnabled !== prefs.activity_overdue_enabled ||
       eventMinutes !== prefs.event_reminder_minutes_before ||
-      timezone !== profile.timezone
+      timezone !== profile.timezone ||
+      notificationSound !== savedSoundRef.current
     );
   }, [
     prefs, profile,
@@ -218,7 +244,7 @@ export default function SettingsScreen() {
     eodEnabled, eodTime,
     meetingMinutes, birthdayDays, travelDays, renewalDays,
     activityStartingEnabled, activityMinutes, activityOverdueEnabled, eventMinutes,
-    timezone,
+    timezone, notificationSound,
   ]);
 
   const saving = updatePrefs.isPending || updateProfile.isPending;
@@ -244,7 +270,11 @@ export default function SettingsScreen() {
           timezone,
           eod_review_time: eodTime,
         }),
+        AsyncStorage.setItem(NOTIFICATION_SOUND_KEY, notificationSound),
       ]);
+      savedSoundRef.current = notificationSound;
+      // Re-schedule all notifications so they use the new sound channel.
+      reschedule().catch(() => {});
       Alert.alert('Saved', 'Your settings have been updated.');
     } catch (e) {
       Alert.alert('Save failed', e instanceof Error ? e.message : 'Please try again.');
@@ -266,6 +296,7 @@ export default function SettingsScreen() {
     setActivityOverdueEnabled(prefs.activity_overdue_enabled ?? true);
     setEventMinutes(prefs.event_reminder_minutes_before ?? 15);
     setTimezone(profile.timezone);
+    setNotificationSound(savedSoundRef.current);
   };
 
   // ---------------------------------------------------------------------------
@@ -464,6 +495,18 @@ export default function SettingsScreen() {
           />
         </View>
 
+        {/* Notification Sound */}
+        <View style={styles.group}>
+          <Text style={styles.groupLabel}>Notification Sound</Text>
+          <Text style={styles.rowHelp}>Sound played when a reminder fires.</Text>
+          <OptionPickerRow
+            options={NOTIFICATION_SOUND_OPTIONS}
+            value={notificationSound}
+            format={(v) => NOTIFICATION_SOUND_LABELS[v]}
+            onSelect={setNotificationSound}
+          />
+        </View>
+
         <Text style={styles.sectionFooter}>
           Birthdays and travel driven from Year at a Glance. Renewals driven from recurring expenses.
         </Text>
@@ -619,7 +662,7 @@ function formatDaysBefore(v: number): string {
   return `${v} day${v > 1 ? 's' : ''} before`;
 }
 
-function OptionPickerRow<T extends number>({
+function OptionPickerRow<T extends string | number>({
   options,
   value,
   format,

@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import type * as NotificationsType from 'expo-notifications';
@@ -49,10 +50,40 @@ export async function requestNotificationPermission(): Promise<boolean> {
 // Notification handler config (called at app startup)
 // ---------------------------------------------------------------------------
 
-// Channel ID — increment the suffix if channel settings ever need to change.
+// ---------------------------------------------------------------------------
+// Notification sound preference (stored locally per device)
+// ---------------------------------------------------------------------------
+
+export type NotificationSound = 'default' | 'none';
+export const NOTIFICATION_SOUND_KEY = '@pm/notification_sound';
+
+export async function getNotificationSound(): Promise<NotificationSound> {
+  try {
+    const val = await AsyncStorage.getItem(NOTIFICATION_SOUND_KEY);
+    return val === 'none' ? 'none' : 'default';
+  } catch {
+    return 'default';
+  }
+}
+
+export async function setNotificationSound(sound: NotificationSound): Promise<void> {
+  await AsyncStorage.setItem(NOTIFICATION_SOUND_KEY, sound);
+}
+
+// ---------------------------------------------------------------------------
+// Channel IDs — one per sound variant.
 // Android caches channel config after first creation and ignores updates,
 // so a new ID is the only reliable way to pick up changed settings.
-const CHANNEL_ID = 'pm_reminders_v3';
+// ---------------------------------------------------------------------------
+
+// Channel with system default sound (sound field omitted → Android default)
+const CHANNEL_ID_SOUND = 'pm_reminders_v3';
+// Silent channel (sound: null → channel.setSound(null, null) on Android)
+const CHANNEL_ID_SILENT = 'pm_reminders_silent_v1';
+
+function resolveChannelId(sound: NotificationSound): string {
+  return sound === 'none' ? CHANNEL_ID_SILENT : CHANNEL_ID_SOUND;
+}
 
 /**
  * Configure expo-notifications foreground handler. Call once at startup.
@@ -80,16 +111,22 @@ export async function ensureNotificationChannel(): Promise<void> {
   const N = getNotifications();
   if (!N || Platform.OS !== 'android') return;
   try {
-    await N.setNotificationChannelAsync(CHANNEL_ID, {
+    // Default-sound channel — sound omitted so Android uses system default.
+    await N.setNotificationChannelAsync(CHANNEL_ID_SOUND, {
       name: 'Priority Manager',
       importance: N.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#2563EB',
       enableVibrate: true,
-      // sound is intentionally omitted — MAX importance channels use the
-      // device default notification sound. Passing sound: true (boolean)
-      // would be coerced to the string "true" and treated as a missing
-      // custom sound file, resulting in a silent channel.
+    });
+    // Silent channel — sound: null tells Android to call setSound(null, null).
+    await N.setNotificationChannelAsync(CHANNEL_ID_SILENT, {
+      name: 'Priority Manager (Silent)',
+      importance: N.AndroidImportance.MAX,
+      vibrationPattern: [0, 250, 250, 250],
+      lightColor: '#2563EB',
+      enableVibrate: true,
+      sound: null,
     });
   } catch (err) {
     console.warn('[notifications] channel setup failed:', err);
@@ -133,8 +170,11 @@ export async function scheduleAllReminders(
   const N = getNotifications();
   if (!N) return;
 
-  // Ensure the channel exists before any notification is dispatched.
+  // Ensure both channels exist before any notification is dispatched.
   await ensureNotificationChannel();
+
+  const sound = await getNotificationSound();
+  const channelId = resolveChannelId(sound);
 
   const now = new Date();
   const todayISO = now.toISOString().slice(0, 10);
@@ -181,12 +221,13 @@ export async function scheduleAllReminders(
   await N.cancelAllScheduledNotificationsAsync();
 
   const future = allReminders.filter((r) => r.scheduled_for > now);
-  await Promise.all(future.map((r) => scheduleOne(N, r)));
+  await Promise.all(future.map((r) => scheduleOne(N, r, channelId)));
 }
 
 async function scheduleOne(
   N: typeof NotificationsType,
   reminder: ReminderSchedule,
+  channelId: string,
 ): Promise<void> {
   try {
     await N.scheduleNotificationAsync({
@@ -202,7 +243,7 @@ async function scheduleOne(
       trigger: {
         type: N.SchedulableTriggerInputTypes.DATE,
         date: reminder.scheduled_for,
-        channelId: CHANNEL_ID,
+        channelId,
       },
     });
   } catch (err) {
@@ -275,6 +316,9 @@ export async function sendTestNotification(
   };
 
   const fireAt = new Date(Date.now() + delaySeconds * 1000);
+  await ensureNotificationChannel();
+  const sound = await getNotificationSound();
+  const channelId = resolveChannelId(sound);
 
   try {
     const id = await N.scheduleNotificationAsync({
@@ -287,7 +331,7 @@ export async function sendTestNotification(
       trigger: {
         type: N.SchedulableTriggerInputTypes.DATE,
         date: fireAt,
-        channelId: CHANNEL_ID,
+        channelId,
       },
     });
     return id;

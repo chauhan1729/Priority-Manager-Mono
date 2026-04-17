@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -26,6 +26,22 @@ import {
 configureNotificationHandler();
 
 // ---------------------------------------------------------------------------
+// Context
+// ---------------------------------------------------------------------------
+
+type NotificationContextValue = {
+  reschedule: () => Promise<void>;
+};
+
+const NotificationContext = createContext<NotificationContextValue>({
+  reschedule: async () => {},
+});
+
+export function useNotifications(): NotificationContextValue {
+  return useContext(NotificationContext);
+}
+
+// ---------------------------------------------------------------------------
 // Provider
 // ---------------------------------------------------------------------------
 
@@ -46,7 +62,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, [user]);
 
   // Re-schedule helper — pulls fresh data and re-runs the scheduler.
-  async function rescheduleNow() {
+  const rescheduleNow = useCallback(async () => {
     if (!user || !prefs) return;
     try {
       const now = new Date();
@@ -107,7 +123,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } catch {
       // Non-fatal
     }
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, prefs]);
 
   // Schedule whenever prefs or user change
   useEffect(() => {
@@ -169,5 +186,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     return () => listener.remove();
   }, []);
 
-  return <>{children}</>;
+  return (
+    <NotificationContext.Provider value={{ reschedule: rescheduleNow }}>
+      {children}
+    </NotificationContext.Provider>
+  );
 }
