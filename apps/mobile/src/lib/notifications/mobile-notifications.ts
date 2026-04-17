@@ -75,7 +75,6 @@ export function configureNotificationHandler(): void {
       importance: N.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#2563EB',
-      sound: 'default',
     }).catch(() => {});
   }
 }
