@@ -6,12 +6,15 @@
     "orientation": "portrait",
     "scheme": "priority-manager",
     "userInterfaceStyle": "light",
+    "icon": "./assets/icon.png",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.antigravity.prioritymanager"
+      "bundleIdentifier": "com.antigravity.prioritymanager",
+      "icon": "./assets/icon.png"
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FAFAF8"
       },
       "package": "com.antigravity.prioritymanager"
