@@ -55,14 +55,12 @@ export async function requestNotificationPermission(): Promise<boolean> {
 const CHANNEL_ID = 'pm_reminders_v1';
 
 /**
- * Configure expo-notifications to show banners while the app is in foreground
- * and ensure the Android notification channel exists.
+ * Configure expo-notifications foreground handler. Call once at startup.
  * No-op in Expo Go.
  */
 export function configureNotificationHandler(): void {
   const N = getNotifications();
   if (!N) return;
-
   N.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowAlert: true,
@@ -70,16 +68,28 @@ export function configureNotificationHandler(): void {
       shouldSetBadge: false,
     }),
   });
+}
 
-  // Android 8+ requires an explicit channel — create it once at startup.
-  if (Platform.OS === 'android') {
-    N.setNotificationChannelAsync(CHANNEL_ID, {
+/**
+ * Creates (or verifies) the notification channel on Android 8+.
+ * Must be awaited before scheduling any notifications so the channel
+ * exists when the first notification is dispatched.
+ * No-op on iOS / Expo Go.
+ */
+export async function ensureNotificationChannel(): Promise<void> {
+  const N = getNotifications();
+  if (!N || Platform.OS !== 'android') return;
+  try {
+    await N.setNotificationChannelAsync(CHANNEL_ID, {
       name: 'Priority Manager',
-      importance: N.AndroidImportance.HIGH,
+      importance: N.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#2563EB',
       sound: true,
-    }).catch(() => {});
+      enableVibrate: true,
+    });
+  } catch (err) {
+    console.warn('[notifications] channel setup failed:', err);
   }
 }
 
@@ -120,6 +130,9 @@ export async function scheduleAllReminders(
   const N = getNotifications();
   if (!N) return;
 
+  // Ensure the channel exists before any notification is dispatched.
+  await ensureNotificationChannel();
+
   const now = new Date();
   const todayISO = now.toISOString().slice(0, 10);
 
@@ -149,8 +162,8 @@ export async function scheduleAllReminders(
           type: 'meeting_upcoming' as const,
           source_id: m.id,
           scheduled_for: reminderTime,
-          title: `Upcoming: ${m.title}`,
-          body: `Starts in ${minutesBefore} minute${minutesBefore === 1 ? '' : 's'}.`,
+          title: m.title,
+          body: `Meeting in ${minutesBefore} min. Show up fully, or reschedule and own it.`,
         }];
       })
     : [];
@@ -177,6 +190,7 @@ async function scheduleOne(
       content: {
         title: reminder.title,
         body: reminder.body,
+        sound: true,
         data: {
           type: reminder.type,
           source_id: reminder.source_id,
@@ -189,7 +203,6 @@ async function scheduleOne(
       },
     });
   } catch (err) {
-    // Log so failures are visible during debugging
     console.warn('[notifications] scheduleOne failed:', reminder.type, err);
   }
 }
@@ -265,6 +278,7 @@ export async function sendTestNotification(
       content: {
         title: content.title,
         body: content.body,
+        sound: true,
         data: { type, source_id: 'test' },
       },
       trigger: {
