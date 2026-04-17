@@ -73,7 +73,7 @@ export function computeEodReminder(
     source_id: null,
     scheduled_for: buildDateTimeFromTime(prefs.eod_review_time, todayISO),
     title: "End of Day Review",
-    body: "Review unfinished activities, update statuses, and plan for tomorrow.",
+    body: "Log updates on what's done and what's not — don't let progress go untracked.",
   };
 }
 
@@ -95,7 +95,7 @@ export function computeMorningSummaryReminder(
     source_id: null,
     scheduled_for: buildDateTimeFromTime(prefs.morning_summary_time, todayISO),
     title: "Good morning!",
-    body: "Check today's schedule, priorities, and activities.",
+    body: "Review today's plan. Commit to what you'll focus on and complete.",
   };
 }
 
@@ -126,8 +126,8 @@ export function computeMeetingUpcomingReminders(
         type: "meeting_upcoming" as ReminderType,
         source_id: m.id,
         scheduled_for: reminderTime,
-        title: `Upcoming: ${m.title}`,
-        body: `Starts in ${minutesBefore} minutes.`,
+        title: m.title,
+        body: `Meeting in ${minutesBefore} min. Show up fully, or reschedule and own it.`,
       },
     ];
   });
@@ -154,10 +154,10 @@ export function computeMeetingPassedReminders(
         type: "meeting_passed" as ReminderType,
         source_id: m.id,
         scheduled_for: new Date(m.end_at),
-        title: `Meeting ended: ${m.title}`,
+        title: m.title,
         body: needsTakeaway
-          ? "Update meeting status and add key takeaways."
-          : "Update meeting status.",
+          ? "Meeting done — add takeaways and update status so nothing is lost."
+          : "Meeting done — update the status so nothing is lost.",
       },
     ];
   });
@@ -189,8 +189,8 @@ export function computeRenewalReminders(
         type: "renewal" as ReminderType,
         source_id: e.id,
         scheduled_for: buildDateTimeFromTime("09:00", todayISO),
-        title: `Upcoming renewal: ${e.title}`,
-        body: `Due in ${daysBefore} day${daysBefore === 1 ? "" : "s"}.`,
+        title: e.title,
+        body: `Renewal in ${daysBefore} day${daysBefore === 1 ? "" : "s"}. Handle it or reschedule and own it.`,
       },
     ];
   });
@@ -226,8 +226,8 @@ export function computeBirthdayReminders(
         title: `Birthday: ${entry.title}`,
         body:
           daysBefore === 0
-            ? `Today is ${entry.title}'s birthday!`
-            : `${entry.title}'s birthday is in ${daysBefore} day${daysBefore === 1 ? "" : "s"}.`,
+            ? `Today is ${entry.title}'s birthday — reach out and make it count.`
+            : `${entry.title}'s birthday in ${daysBefore} day${daysBefore === 1 ? "" : "s"} — plan something meaningful.`,
       },
     ];
   });
@@ -257,11 +257,11 @@ export function computeTravelReminders(
         type: "travel" as ReminderType,
         source_id: entry.id,
         scheduled_for: buildDateTimeFromTime("09:00", todayISO),
-        title: `Travel upcoming: ${entry.title}`,
+        title: entry.title,
         body:
           daysBefore === 0
-            ? `${entry.title} starts today.`
-            : `${entry.title} starts in ${daysBefore} day${daysBefore === 1 ? "" : "s"}.`,
+            ? "Travel starts today — focus on what needs to happen."
+            : `${daysBefore} day${daysBefore === 1 ? "" : "s"} away — prepare ahead or reschedule and own it.`,
       },
     ];
   });
@@ -299,8 +299,8 @@ export function computeActivityStartingReminders(
         type: "activity_starting" as ReminderType,
         source_id: i.id,
         scheduled_for: reminderTime,
-        title: `Starting soon: ${title}`,
-        body: `Scheduled block starts in ${minutesBefore} minute${minutesBefore === 1 ? "" : "s"}.`,
+        title,
+        body: "Focus and complete this cycle, or acknowledge, take responsibility, and move it to another time.",
       },
     ];
   });
@@ -338,8 +338,8 @@ export function computeActivityOverdueReminders(
         type: "activity_overdue" as ReminderType,
         source_id: i.id,
         scheduled_for: endAt,
-        title: `Block ended: ${title}`,
-        body: "Update the status of this block.",
+        title,
+        body: "Block ended — add an update so progress isn't lost and can be tracked.",
       },
     ];
   });
@@ -370,8 +370,8 @@ export function computeEventUpcomingReminders(
         type: "event_upcoming" as ReminderType,
         source_id: e.id,
         scheduled_for: reminderTime,
-        title: `Upcoming: ${e.title}`,
-        body: `Starts in ${minutesBefore} minute${minutesBefore === 1 ? "" : "s"}.`,
+        title: e.title,
+        body: "Focus and show up fully, or acknowledge, take responsibility, and reschedule.",
       },
     ];
   });
