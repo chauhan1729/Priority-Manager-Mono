@@ -6,10 +6,6 @@
     "orientation": "portrait",
     "scheme": "priority-manager",
     "userInterfaceStyle": "light",
-    "splash": {
-      "resizeMode": "contain",
-      "backgroundColor": "#FAFAF8"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.antigravity.prioritymanager"
@@ -25,6 +21,13 @@
     },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#FAFAF8",
+          "resizeMode": "contain"
+        }
+      ],
       "expo-secure-store",
       "expo-font",
       "expo-notifications",
@@ -32,6 +35,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "98888eed-f0ad-4e61-bbfa-d4ce5484b89e"
+      }
+    },
+    "owner": "kahuna1729"
   }
 }
