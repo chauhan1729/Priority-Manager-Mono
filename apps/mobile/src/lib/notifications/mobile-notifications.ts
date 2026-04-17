@@ -52,7 +52,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 // Channel ID — increment the suffix if channel settings ever need to change.
 // Android caches channel config after first creation and ignores updates,
 // so a new ID is the only reliable way to pick up changed settings.
-const CHANNEL_ID = 'pm_reminders_v2';
+const CHANNEL_ID = 'pm_reminders_v3';
 
 /**
  * Configure expo-notifications foreground handler. Call once at startup.
@@ -85,8 +85,11 @@ export async function ensureNotificationChannel(): Promise<void> {
       importance: N.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
       lightColor: '#2563EB',
-      sound: true,
       enableVibrate: true,
+      // sound is intentionally omitted — MAX importance channels use the
+      // device default notification sound. Passing sound: true (boolean)
+      // would be coerced to the string "true" and treated as a missing
+      // custom sound file, resulting in a silent channel.
     });
   } catch (err) {
     console.warn('[notifications] channel setup failed:', err);
