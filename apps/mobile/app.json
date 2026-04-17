@@ -39,7 +39,7 @@
         {
           "icon": "./assets/icon.png",
           "color": "#2563EB",
-          "defaultChannel": "pm_reminders_v1",
+          "defaultChannel": "pm_reminders_v2",
           "androidMode": "default"
         }
       ],

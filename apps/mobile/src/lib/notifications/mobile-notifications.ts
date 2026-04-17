@@ -52,7 +52,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 // Channel ID — increment the suffix if channel settings ever need to change.
 // Android caches channel config after first creation and ignores updates,
 // so a new ID is the only reliable way to pick up changed settings.
-const CHANNEL_ID = 'pm_reminders_v1';
+const CHANNEL_ID = 'pm_reminders_v2';
 
 /**
  * Configure expo-notifications foreground handler. Call once at startup.
