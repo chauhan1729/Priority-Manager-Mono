@@ -40,7 +40,14 @@
           "icon": "./assets/icon.png",
           "color": "#2563EB",
           "defaultChannel": "pm_reminders_v3",
-          "androidMode": "default"
+          "androidMode": "default",
+          "sounds": [
+            "./assets/sounds/ding.wav",
+            "./assets/sounds/chime.wav",
+            "./assets/sounds/ping.wav",
+            "./assets/sounds/alert.wav",
+            "./assets/sounds/gentle.wav"
+          ]
         }
       ],
       "@react-native-community/datetimepicker"

@@ -54,13 +54,28 @@ export async function requestNotificationPermission(): Promise<boolean> {
 // Notification sound preference (stored locally per device)
 // ---------------------------------------------------------------------------
 
-export type NotificationSound = 'default' | 'none';
+// ---------------------------------------------------------------------------
+// Sound preference
+// ---------------------------------------------------------------------------
+
+export type NotificationSound = 'default' | 'ding' | 'chime' | 'ping' | 'alert' | 'gentle' | 'none';
 export const NOTIFICATION_SOUND_KEY = '@pm/notification_sound';
+
+export const NOTIFICATION_SOUND_LABELS: Record<NotificationSound, string> = {
+  default: 'Default',
+  ding:    'Ding',
+  chime:   'Chime',
+  ping:    'Ping',
+  alert:   'Alert',
+  gentle:  'Gentle',
+  none:    'Silent',
+};
 
 export async function getNotificationSound(): Promise<NotificationSound> {
   try {
     const val = await AsyncStorage.getItem(NOTIFICATION_SOUND_KEY);
-    return val === 'none' ? 'none' : 'default';
+    if (val && val in NOTIFICATION_SOUND_LABELS) return val as NotificationSound;
+    return 'default';
   } catch {
     return 'default';
   }
@@ -71,18 +86,42 @@ export async function setNotificationSound(sound: NotificationSound): Promise<vo
 }
 
 // ---------------------------------------------------------------------------
-// Channel IDs — one per sound variant.
+// Channel config — one Android channel per sound variant.
 // Android caches channel config after first creation and ignores updates,
-// so a new ID is the only reliable way to pick up changed settings.
+// so each sound gets a distinct, immutable channel ID.
+// sound field: undefined = omit (system default), null = silent, string = custom file.
 // ---------------------------------------------------------------------------
 
-// Channel with system default sound (sound field omitted → Android default)
-const CHANNEL_ID_SOUND = 'pm_reminders_v3';
-// Silent channel (sound: null → channel.setSound(null, null) on Android)
-const CHANNEL_ID_SILENT = 'pm_reminders_silent_v1';
+type ChannelConfig = {
+  id: string;
+  name: string;
+  soundFile?: string | null;
+};
+
+const CHANNEL_CONFIGS: Record<NotificationSound, ChannelConfig> = {
+  default: { id: 'pm_reminders_v3',          name: 'Priority Manager' },
+  ding:    { id: 'pm_reminders_ding_v1',      name: 'Priority Manager (Ding)',    soundFile: 'ding' },
+  chime:   { id: 'pm_reminders_chime_v1',     name: 'Priority Manager (Chime)',   soundFile: 'chime' },
+  ping:    { id: 'pm_reminders_ping_v1',      name: 'Priority Manager (Ping)',    soundFile: 'ping' },
+  alert:   { id: 'pm_reminders_alert_v1',     name: 'Priority Manager (Alert)',   soundFile: 'alert' },
+  gentle:  { id: 'pm_reminders_gentle_v1',    name: 'Priority Manager (Gentle)',  soundFile: 'gentle' },
+  none:    { id: 'pm_reminders_silent_v1',    name: 'Priority Manager (Silent)',  soundFile: null },
+};
 
 function resolveChannelId(sound: NotificationSound): string {
-  return sound === 'none' ? CHANNEL_ID_SILENT : CHANNEL_ID_SOUND;
+  return CHANNEL_CONFIGS[sound].id;
+}
+
+/**
+ * Content-level sound value.
+ * Android: channel controls the actual sound; true = honour the channel.
+ * iOS: this is the only mechanism; false = silent, true = system default,
+ *      string = bundled custom sound file (filename with extension).
+ */
+function contentSound(sound: NotificationSound): boolean | string {
+  if (sound === 'none') return false;
+  if (sound === 'default') return true;
+  return `${sound}.wav`;
 }
 
 /**
@@ -111,23 +150,24 @@ export async function ensureNotificationChannel(): Promise<void> {
   const N = getNotifications();
   if (!N || Platform.OS !== 'android') return;
   try {
-    // Default-sound channel — sound omitted so Android uses system default.
-    await N.setNotificationChannelAsync(CHANNEL_ID_SOUND, {
-      name: 'Priority Manager',
-      importance: N.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#2563EB',
-      enableVibrate: true,
-    });
-    // Silent channel — sound: null tells Android to call setSound(null, null).
-    await N.setNotificationChannelAsync(CHANNEL_ID_SILENT, {
-      name: 'Priority Manager (Silent)',
-      importance: N.AndroidImportance.MAX,
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#2563EB',
-      enableVibrate: true,
-      sound: null,
-    });
+    for (const cfg of Object.values(CHANNEL_CONFIGS)) {
+      // Build the channel input. For 'default', soundFile is undefined so we
+      // omit the field entirely — Android then uses the system default sound.
+      // For 'none', soundFile is null → setSound(null, null) = silent channel.
+      // For custom sounds, soundFile is the filename (no extension).
+      const base = {
+        name: cfg.name,
+        importance: N.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250] as number[],
+        lightColor: '#2563EB',
+        enableVibrate: true,
+      };
+      const channelInput =
+        cfg.soundFile !== undefined
+          ? { ...base, sound: cfg.soundFile }
+          : base;
+      await N.setNotificationChannelAsync(cfg.id, channelInput);
+    }
   } catch (err) {
     console.warn('[notifications] channel setup failed:', err);
   }
@@ -221,20 +261,21 @@ export async function scheduleAllReminders(
   await N.cancelAllScheduledNotificationsAsync();
 
   const future = allReminders.filter((r) => r.scheduled_for > now);
-  await Promise.all(future.map((r) => scheduleOne(N, r, channelId)));
+  await Promise.all(future.map((r) => scheduleOne(N, r, channelId, sound)));
 }
 
 async function scheduleOne(
   N: typeof NotificationsType,
   reminder: ReminderSchedule,
   channelId: string,
+  sound: NotificationSound,
 ): Promise<void> {
   try {
     await N.scheduleNotificationAsync({
       content: {
         title: reminder.title,
         body: reminder.body,
-        sound: true,
+        sound: contentSound(sound),
         data: {
           type: reminder.type,
           source_id: reminder.source_id,
@@ -325,7 +366,7 @@ export async function sendTestNotification(
       content: {
         title: content.title,
         body: content.body,
-        sound: true,
+        sound: contentSound(sound),
         data: { type, source_id: 'test' },
       },
       trigger: {

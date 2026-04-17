@@ -27,6 +27,7 @@ import { TimePickerField } from '../src/components/ui/TimePickerField';
 import {
   getNotificationSound,
   NOTIFICATION_SOUND_KEY,
+  NOTIFICATION_SOUND_LABELS,
   type NotificationSound,
 } from '../src/lib/notifications/mobile-notifications';
 import { colors } from '../src/theme/colors';
@@ -37,11 +38,9 @@ import { fontSize, fontFamily } from '../src/theme/typography';
 // Constants
 // ---------------------------------------------------------------------------
 
-const NOTIFICATION_SOUND_OPTIONS: NotificationSound[] = ['default', 'none'];
-const NOTIFICATION_SOUND_LABELS: Record<NotificationSound, string> = {
-  default: 'Default',
-  none: 'Silent',
-};
+const NOTIFICATION_SOUND_OPTIONS: NotificationSound[] = [
+  'default', 'ding', 'chime', 'ping', 'alert', 'gentle', 'none',
+];
 
 const MEETING_REMINDER_OPTIONS = [0, 5, 10, 15, 30, 60];
 const ACTIVITY_REMINDER_OPTIONS = [0, 2, 5, 10, 15, 30];
