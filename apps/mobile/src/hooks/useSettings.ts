@@ -50,7 +50,9 @@ export function useReminderPreferences() {
         .eq('user_id', user!.id)
         .maybeSingle();
       if (error) throw error;
-      return data as ReminderPreference | null;
+      // Merge defaults so prefs is never null — new users get sensible defaults
+      // without needing a DB row first.
+      return { ...REMINDER_PREF_DEFAULTS, ...(data ?? {}) } as ReminderPreference;
     },
     enabled: !!user,
   });

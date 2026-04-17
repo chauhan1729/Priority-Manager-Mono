@@ -328,9 +328,9 @@ export function computeActivityOverdueReminders(
     if (i.source_type !== "activity" || !i.source_activity_id) return [];
     if (i.status_snapshot !== "upcoming" && i.status_snapshot !== "working") return [];
     const endAt = new Date(i.end_at);
-    // Fire once end has passed. Schedule at end_at itself; the scheduler will
-    // filter out past-only reminders before dispatch.
-    if (endAt > now) return [];
+    // Schedule the reminder at endAt for all non-terminal instances.
+    // Mobile: future.filter keeps only endAt > now (schedules ahead of time).
+    // Web: fireNewOverdueReminders fires when scheduled_for <= now (catches it after end).
     const title = activityTitleById.get(i.source_activity_id);
     if (!title) return [];
     return [

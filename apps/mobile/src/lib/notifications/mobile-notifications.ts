@@ -116,9 +116,36 @@ export async function scheduleAllReminders(
     now,
   });
 
+  // computeMeetingUpcomingReminders is designed for web polling (fires only within
+  // the [reminderTime, startAt) window). For local notification scheduling we need
+  // to schedule AHEAD of that window, so compute meeting reminders separately here.
+  const minutesBefore = prefs.meeting_reminder_minutes_before;
+  const meetingScheduleReminders = minutesBefore > 0
+    ? meetings.flatMap((m) => {
+        if (m.status !== 'upcoming') return [];
+        const startAt = new Date(m.start_at);
+        const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
+        if (reminderTime <= now) return [];
+        return [{
+          type: 'meeting_upcoming' as const,
+          source_id: m.id,
+          scheduled_for: reminderTime,
+          title: `Upcoming: ${m.title}`,
+          body: `Starts in ${minutesBefore} minute${minutesBefore === 1 ? '' : 's'}.`,
+        }];
+      })
+    : [];
+
+  // Merge: exclude any meeting_upcoming from computeAllReminders (empty for future
+  // meetings anyway) and add the correctly forward-scheduled ones.
+  const allReminders = [
+    ...reminders.filter((r) => r.type !== 'meeting_upcoming'),
+    ...meetingScheduleReminders,
+  ];
+
   await N.cancelAllScheduledNotificationsAsync();
 
-  const future = reminders.filter((r) => r.scheduled_for > now);
+  const future = allReminders.filter((r) => r.scheduled_for > now);
   await Promise.all(future.map((r) => scheduleOne(N, r)));
 }
 
