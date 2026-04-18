@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   Alert,
@@ -59,11 +59,10 @@ function ActivityCardBase({
   onPostponed,
 }: Props) {
   const sheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ['45%'], []);
+  const snapPoints = useMemo(() => ['58%'], []);
 
   const contactSheetRef = useRef<BottomSheet>(null);
   const contactSnapPoints = useMemo(() => ['60%'], []);
-  const [delegatePending, setDelegatePending] = useState(false);
 
   const updateStatus = useUpdateActivityStatus();
   const deleteActivity = useDeleteActivity();
@@ -85,7 +84,6 @@ function ActivityCardBase({
     // Web parity: changing status to "delegated" when not already in the delegated
     // section opens a contact picker before committing the change.
     if (status === 'delegated' && activity.section_type !== 'delegated') {
-      setDelegatePending(true);
       contactSheetRef.current?.expand();
       return;
     }
@@ -100,7 +98,6 @@ function ActivityCardBase({
 
   function handleDelegateSelect(contactId: string) {
     contactSheetRef.current?.close();
-    setDelegatePending(false);
     Haptics.selectionAsync();
     delegateActivity.mutate(
       { activityId: activity.id, contactId },
@@ -324,7 +321,6 @@ function ActivityCardBase({
         index={-1}
         snapPoints={contactSnapPoints}
         enablePanDownToClose
-        onClose={() => setDelegatePending(false)}
         backdropComponent={renderBackdrop}
         backgroundStyle={styles.sheet}
         handleIndicatorStyle={styles.handle}

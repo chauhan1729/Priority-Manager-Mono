@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { router, useLocalSearchParams } from 'expo-router';
 import { getProjectMetrics, isProjectAtRisk } from '@pm/domain';
 import type { Activity, ProjectStatus } from '@pm/types';
-import { useProjectById, useMilestones, useResources, useDeleteProject } from '../../src/hooks/useProjects';
+import { useProjectById, useMilestones, useResources, useDeleteProject, useUpdateProject } from '../../src/hooks/useProjects';
 import { useActivitiesForProject } from '../../src/hooks/useActivities';
 import { supabase } from '../../src/lib/supabase/client';
 import {
@@ -49,6 +50,14 @@ function formatMediumDate(iso: string | null): string {
   });
 }
 
+const PROJECT_STATUS_OPTIONS: { value: ProjectStatus; label: string }[] = [
+  { value: 'planned',     label: 'Planned' },
+  { value: 'in_progress', label: 'In Progress' },
+  { value: 'on_hold',     label: 'On Hold' },
+  { value: 'completed',   label: 'Completed' },
+  { value: 'cancelled',   label: 'Cancelled' },
+];
+
 const STATUS_STYLE: Record<ProjectStatus, { bg: string; text: string; label: string }> = {
   planned:     { bg: colors.gray[100],  text: colors.gray[600],  label: 'Planned' },
   in_progress: { bg: colors.blue[100],  text: colors.blue[700],  label: 'In Progress' },
@@ -65,12 +74,14 @@ export default function ProjectDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [activeTab, setActiveTab] = useState<Tab>('activities');
   const [editFormVisible, setEditFormVisible] = useState(false);
+  const [statusPickerVisible, setStatusPickerVisible] = useState(false);
 
   const { data: project, isLoading: projectLoading } = useProjectById(id ?? '');
   const { data: rawActivities = [] } = useActivitiesForProject(id ?? '');
   const { data: milestones = [] } = useMilestones(id ?? '');
   const { data: resources = [] } = useResources(id ?? '');
   const deleteMutation = useDeleteProject();
+  const updateProject = useUpdateProject();
 
   const activities = rawActivities as Activity[];
 
@@ -182,9 +193,13 @@ export default function ProjectDetailScreen() {
         <View style={styles.headerCenter}>
           <View style={styles.headerTitleRow}>
             <Text style={styles.headerTitle} numberOfLines={1}>{project.name}</Text>
-            <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-              <Text style={[styles.statusText, { color: status.text }]}>{status.label}</Text>
-            </View>
+            <TouchableOpacity
+              style={[styles.statusBadge, { backgroundColor: status.bg }]}
+              onPress={() => setStatusPickerVisible(true)}
+              hitSlop={8}
+            >
+              <Text style={[styles.statusText, { color: status.text }]}>{status.label} ›</Text>
+            </TouchableOpacity>
           </View>
           {hasDateRange && (
             <Text style={styles.headerSubline} numberOfLines={1}>
@@ -317,6 +332,55 @@ export default function ProjectDetailScreen() {
         editProject={project}
         onClose={() => setEditFormVisible(false)}
       />
+
+      {/* Status picker modal */}
+      <Modal
+        visible={statusPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setStatusPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setStatusPickerVisible(false)}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Project Status</Text>
+            {PROJECT_STATUS_OPTIONS.map((opt) => {
+              const s = STATUS_STYLE[opt.value];
+              const isActive = project.status === opt.value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[styles.statusPickerRow, isActive && styles.statusPickerRowActive]}
+                  onPress={() => {
+                    setStatusPickerVisible(false);
+                    updateProject.mutate({
+                      id: project.id,
+                      name: project.name,
+                      description: project.description,
+                      status: opt.value,
+                      start_date: project.start_date,
+                      target_end_date: project.target_end_date,
+                    });
+                  }}
+                >
+                  <View style={[styles.statusDot, { backgroundColor: s.text }]} />
+                  <Text style={styles.statusPickerLabel}>{opt.label}</Text>
+                  {isActive && <Text style={styles.statusPickerCheck}>✓</Text>}
+                </TouchableOpacity>
+              );
+            })}
+            <TouchableOpacity
+              style={styles.modalCancelBtn}
+              onPress={() => setStatusPickerVisible(false)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -565,4 +629,67 @@ const styles = StyleSheet.create({
   // Tab content
   tabContent: { flex: 1 },
   tabContentInner: { flexGrow: 1 },
+
+  // Status picker modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+  },
+  modalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.xl,
+    padding: spacing.lg,
+    width: '100%',
+    maxWidth: 380,
+    gap: spacing.xs,
+  },
+  modalTitle: {
+    fontFamily: fontFamily.handwriting,
+    fontSize: fontSize.xl,
+    color: colors.ink.DEFAULT,
+    marginBottom: spacing.sm,
+  },
+  statusPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm + 2,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.md,
+    gap: spacing.sm,
+  },
+  statusPickerRowActive: {
+    backgroundColor: colors.blue[50],
+  },
+  statusDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  statusPickerLabel: {
+    flex: 1,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    color: colors.ink.DEFAULT,
+  },
+  statusPickerCheck: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    color: colors.blue[600],
+    fontWeight: '700',
+  },
+  modalCancelBtn: {
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: colors.gray[100],
+  },
+  modalCancelText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    color: colors.ink.light,
+  },
 });

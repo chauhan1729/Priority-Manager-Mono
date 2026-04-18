@@ -1,9 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActionSheetIOS,
   Alert,
   Modal,
-  Platform,
   RefreshControl,
   SectionList,
   StyleSheet,
@@ -108,6 +106,7 @@ export default function ActivitiesScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showArchived, setShowArchived] = useState(false);
   const [bulkMoveVisible, setBulkMoveVisible] = useState(false);
+  const [bulkStatusVisible, setBulkStatusVisible] = useState(false);
   const [bulkMoveDate, setBulkMoveDate] = useState<Date>(() => {
     const d = new Date();
     d.setDate(d.getDate() + 1);
@@ -276,32 +275,7 @@ export default function ActivitiesScreen() {
 
   function handleBulkStatus() {
     if (selectedIds.size === 0) return;
-    if (Platform.OS === 'ios') {
-      ActionSheetIOS.showActionSheetWithOptions(
-        {
-          title: 'Set status for selected',
-          options: [...STATUS_OPTIONS.map((s) => s.label), 'Cancel'],
-          cancelButtonIndex: STATUS_OPTIONS.length,
-        },
-        (idx) => {
-          if (idx < STATUS_OPTIONS.length) {
-            applyBulkStatus(STATUS_OPTIONS[idx]!.value);
-          }
-        },
-      );
-    } else {
-      Alert.alert(
-        'Set status',
-        'Set all selected to:',
-        [
-          ...STATUS_OPTIONS.map((s) => ({
-            text: s.label,
-            onPress: () => applyBulkStatus(s.value),
-          })),
-          { text: 'Cancel', style: 'cancel' as const },
-        ],
-      );
-    }
+    setBulkStatusVisible(true);
   }
 
   const canBulkArchive = useMemo(() => {
@@ -687,6 +661,45 @@ export default function ActivitiesScreen() {
         </View>
       </Modal>
 
+      {/* Bulk status picker modal */}
+      <Modal
+        visible={bulkStatusVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBulkStatusVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setBulkStatusVisible(false)}
+        >
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>
+              Set status — {selectedIds.size} {selectedIds.size === 1 ? 'activity' : 'activities'}
+            </Text>
+            {STATUS_OPTIONS.map((opt) => (
+              <TouchableOpacity
+                key={opt.value}
+                style={styles.statusPickerRow}
+                onPress={() => {
+                  setBulkStatusVisible(false);
+                  applyBulkStatus(opt.value);
+                }}
+              >
+                <Badge variant={opt.value} />
+                <Text style={styles.statusPickerLabel}>{opt.label}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={styles.modalCancel}
+              onPress={() => setBulkStatusVisible(false)}
+            >
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
       {/* FAB (hidden in bulk mode) */}
       {!bulkMode && (
         <TouchableOpacity style={styles.fab} onPress={() => setShowAdd(true)} activeOpacity={0.85}>
@@ -1060,6 +1073,21 @@ const styles = StyleSheet.create({
     fontSize: fontSize.base,
     fontWeight: fontWeight.semibold,
     color: '#FFFFFF',
+  },
+  // Status picker modal rows
+  statusPickerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.blue[50],
+    gap: spacing.sm,
+  },
+  statusPickerLabel: {
+    flex: 1,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.base,
+    color: colors.ink.DEFAULT,
   },
   // FAB
   fab: {

@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { isMeetingPast } from '@pm/domain';
 import type { Contact, ContactCategory } from '@pm/types';
@@ -129,6 +130,7 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
         presentationStyle="pageSheet"
         onRequestClose={onClose}
       >
+        <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }} edges={['top']}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose}>
@@ -215,7 +217,7 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
               onPress={() => setDelegatedFormVisible(true)}
             >
               <Text style={[styles.actionBtnText, styles.actionBtnTextSecondary]}>
-                + Add Delegated Task
+                Delegate Task
               </Text>
             </TouchableOpacity>
           </View>
@@ -312,6 +314,7 @@ export function ContactDetailScreen({ contact, visible, onClose, onEdit }: Props
             </>
           )}
         </ScrollView>
+        </SafeAreaView>
       </Modal>
 
       {/* Schedule meeting — pre-selects current contact */}
