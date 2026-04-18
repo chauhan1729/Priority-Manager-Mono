@@ -46,10 +46,10 @@ export function DatePickerField({
         <DateTimePicker
           mode="date"
           value={value ?? new Date()}
-          minimumDate={minimumDate}
-          maximumDate={maximumDate}
+          {...(minimumDate ? { minimumDate } : {})}
+          {...(maximumDate ? { maximumDate } : {})}
           onChange={handleChange}
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display={Platform.OS === 'ios' ? 'inline' : 'calendar'}
         />
       ) : null}
     </View>

@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AnnualGoal, Project } from '@pm/types';
 import { useLinkProjectToGoal, useUnlinkProjectFromGoal } from '../../hooks/useAnnualGoals';
 import { useProjects } from '../../hooks/useProjects';
@@ -71,7 +72,7 @@ export function ProjectLinkModal({ visible, goal, linkedProjects, onClose }: Pro
       presentationStyle="formSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Link Projects</Text>
@@ -131,7 +132,7 @@ export function ProjectLinkModal({ visible, goal, linkedProjects, onClose }: Pro
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={styles.listContent}
         />
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }

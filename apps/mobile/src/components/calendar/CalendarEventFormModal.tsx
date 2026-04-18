@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { isCalendarEventPast, isDateInAwayPeriod } from '@pm/domain';
 import type { CalendarEvent, CalendarEventStatus, CalendarEventType, RecurrenceRule } from '@pm/types';
 import type { YearEntry } from '@pm/types';
@@ -231,6 +232,7 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -413,6 +415,7 @@ export function CalendarEventFormModal({ visible, initialDate, editEvent, yearEn
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

@@ -26,6 +26,29 @@ function makeRedirectUri() {
   return AuthSession.makeRedirectUri({ scheme: 'priority-manager' });
 }
 
+/**
+ * React Native's URL/URLSearchParams polyfill is incomplete — `.get()` is not
+ * reliably available. Supabase returns OAuth tokens in the URL hash fragment
+ * (e.g. "…#access_token=…&refresh_token=…"), so parse it ourselves.
+ */
+function parseTokensFromCallbackUrl(url: string): { accessToken?: string; refreshToken?: string } {
+  const hashIdx = url.indexOf('#');
+  const queryIdx = url.indexOf('?');
+  const raw =
+    hashIdx >= 0 ? url.slice(hashIdx + 1)
+    : queryIdx >= 0 ? url.slice(queryIdx + 1)
+    : '';
+  const out: { accessToken?: string; refreshToken?: string } = {};
+  for (const pair of raw.split('&')) {
+    const [k, v] = pair.split('=');
+    if (!k || !v) continue;
+    const value = decodeURIComponent(v);
+    if (k === 'access_token') out.accessToken = value;
+    else if (k === 'refresh_token') out.refreshToken = value;
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // Screen
 // ---------------------------------------------------------------------------
@@ -87,9 +110,7 @@ export default function LoginScreen() {
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type === 'success' && result.url) {
-        const params = new URL(result.url);
-        const accessToken = params.searchParams.get('access_token');
-        const refreshToken = params.searchParams.get('refresh_token');
+        const { accessToken, refreshToken } = parseTokensFromCallbackUrl(result.url);
         if (accessToken) {
           await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken ?? '' });
         }
@@ -116,9 +137,7 @@ export default function LoginScreen() {
 
       const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
       if (result.type === 'success' && result.url) {
-        const params = new URL(result.url);
-        const accessToken = params.searchParams.get('access_token');
-        const refreshToken = params.searchParams.get('refresh_token');
+        const { accessToken, refreshToken } = parseTokensFromCallbackUrl(result.url);
         if (accessToken) {
           await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken ?? '' });
         }

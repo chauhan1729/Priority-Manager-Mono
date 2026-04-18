@@ -377,6 +377,44 @@ export async function deleteMeeting(id: string): Promise<ActionResult> {
 }
 
 // ---------------------------------------------------------------------------
+// Create a one-time instance from a recurring meeting occurrence.
+// The recurring template is advanced to its next future occurrence so it stays
+// in the Upcoming tab for future instances.
+// ---------------------------------------------------------------------------
+
+export async function createRecurringMeetingInstance(
+  recurringMeetingId: string,
+  occurrenceDate: string,    // YYYY-MM-DD of the specific occurrence
+  occurrenceStartAt: string, // ISO datetime of the occurrence
+  occurrenceEndAt: string,   // ISO datetime of the occurrence
+  status: MeetingStatus,
+  archived: boolean = false,
+  keyTakeaways?: string | null,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated." };
+
+  // Delegate to the Postgres RPC so the one-time insert and the template
+  // advance run inside a single transaction. A partial failure (network drop,
+  // client crash) here cannot leave the series in a half-advanced state.
+  const { error } = await supabase.rpc("create_recurring_meeting_instance", {
+    p_recurring_id: recurringMeetingId,
+    p_occurrence_date: occurrenceDate,
+    p_occurrence_start_at: occurrenceStartAt,
+    p_occurrence_end_at: occurrenceEndAt,
+    p_status: status,
+    p_archived: archived,
+    p_key_takeaways: keyTakeaways ?? null,
+  });
+
+  if (error) return { error: error.message };
+
+  revalidateAll();
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // Archive meeting — sets archived = true, hides from main view.
 // ---------------------------------------------------------------------------
 

@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
-  FlatList,
   Modal,
   ScrollView,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ProjectResource, ResourceStatus, ResourceType } from '@pm/types';
 import {
   useCreateResource,
@@ -139,7 +139,7 @@ function ResourceFormModal({ visible, projectId, editResource, onClose }: FormMo
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={modal.container}>
+      <SafeAreaView style={modal.container} edges={['top', 'bottom']}>
         <View style={modal.header}>
           <TouchableOpacity onPress={onClose}><Text style={modal.cancel}>Cancel</Text></TouchableOpacity>
           <Text style={modal.title}>{isEdit ? 'Edit Resource' : 'New Resource'}</Text>
@@ -234,7 +234,7 @@ function ResourceFormModal({ visible, projectId, editResource, onClose }: FormMo
             />
           </View>
         </ScrollView>
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -366,18 +366,18 @@ export function ResourcesTab({ projectId, resources }: Props) {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={resources}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        scrollEnabled={false}
-        ListEmptyComponent={
+      {/* List rendered with .map() — see ActivitiesTab for rationale. */}
+      <View style={styles.listContent}>
+        {resources.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>No resources yet. Tap + Add to create one.</Text>
           </View>
-        }
-      />
+        ) : (
+          resources.map((item) => (
+            <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
+          ))
+        )}
+      </View>
 
       <ResourceFormModal
         visible={formVisible || !!editResource}

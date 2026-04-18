@@ -131,10 +131,9 @@ export function EditActivityModal({ activity, projects, onClose }: Props) {
               <label className="block text-xs font-medium text-ink-light mb-1">Priority</label>
               <select
                 name="priority"
-                defaultValue={activity.priority ?? ""}
+                defaultValue={activity.priority === "A" ? "A" : "B"}
                 className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
               >
-                <option value="">None</option>
                 <option value="A">A — Must do today</option>
                 <option value="B">B — Should do today</option>
               </select>

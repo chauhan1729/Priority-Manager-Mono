@@ -15,6 +15,7 @@ import {
   bulkArchiveActivities,
   bulkDeleteActivities,
   bulkMoveActivities,
+  bulkUpdateActivityPriority,
   bulkUpdateActivityStatus,
   carryForwardActivity,
   delegateActivity,
@@ -94,6 +95,7 @@ export function ActivitiesView({
   const [bulkTargetDate, setBulkTargetDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("completed");
+  const [bulkPriority, setBulkPriority] = useState<"A" | "B">("A");
 
   const projectMap = new Map(projects.map((p) => [p.id, p.name]));
   const contactMap = new Map(contacts.map((c) => [c.id, c.full_name]));
@@ -248,6 +250,21 @@ export function ActivitiesView({
     });
   }
 
+  function handleBulkPriorityChange() {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    startTransition(async () => {
+      const result = await bulkUpdateActivityPriority([...selectedIds], bulkPriority);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${count} ${count === 1 ? "activity" : "activities"} updated`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+    });
+  }
+
   function handleBulkArchive() {
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
@@ -366,7 +383,26 @@ export function ActivitiesView({
                 Move
               </button>
             </div>
-            {/* Row 2: Set status + Archive + Delete */}
+            {/* Row 2: Set priority */}
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs text-indigo-700 font-medium">Set priority:</label>
+              <select
+                value={bulkPriority}
+                onChange={(e) => setBulkPriority(e.target.value as "A" | "B")}
+                className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
+              >
+                <option value="A">A — Critical</option>
+                <option value="B">B — Important</option>
+              </select>
+              <button
+                onClick={handleBulkPriorityChange}
+                disabled={selectedIds.size === 0 || isPending}
+                className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+              >
+                Apply
+              </button>
+            </div>
+            {/* Row 3: Set status + Archive + Delete */}
             <div className="flex flex-wrap items-center gap-2">
               <label className="text-xs text-indigo-700 font-medium">Set status:</label>
               <select

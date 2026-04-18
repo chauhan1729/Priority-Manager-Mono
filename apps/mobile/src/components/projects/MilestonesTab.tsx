@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
-  FlatList,
   Modal,
   Platform,
   StyleSheet,
@@ -11,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { MilestoneStatus, ProjectMilestone } from '@pm/types';
 import {
   useCreateMilestone,
@@ -107,7 +107,7 @@ function MilestoneFormModal({ visible, projectId, editMilestone, onClose }: Form
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="formSheet" onRequestClose={onClose}>
-      <View style={modal.container}>
+      <SafeAreaView style={modal.container} edges={['top', 'bottom']}>
         <View style={modal.header}>
           <TouchableOpacity onPress={onClose}><Text style={modal.cancel}>Cancel</Text></TouchableOpacity>
           <Text style={modal.title}>{isEdit ? 'Edit Milestone' : 'New Milestone'}</Text>
@@ -156,7 +156,7 @@ function MilestoneFormModal({ visible, projectId, editMilestone, onClose }: Form
             </View>
           </View>
         )}
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -282,18 +282,18 @@ export function MilestonesTab({ projectId, milestones }: Props) {
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={milestones}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        scrollEnabled={false}
-        ListEmptyComponent={
+      {/* List rendered with .map() — see ActivitiesTab for rationale. */}
+      <View style={styles.listContent}>
+        {milestones.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>No milestones yet. Tap + Add to create one.</Text>
           </View>
-        }
-      />
+        ) : (
+          milestones.map((item) => (
+            <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
+          ))
+        )}
+      </View>
 
       <MilestoneFormModal
         visible={formVisible || !!editMilestone}

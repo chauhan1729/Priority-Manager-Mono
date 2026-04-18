@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Contact, ContactCategory } from '@pm/types';
 import {
   type CreateContactInput,
@@ -117,6 +118,7 @@ export function ContactFormModal({ visible, editContact, onClose }: Props) {
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -243,6 +245,7 @@ export function ContactFormModal({ visible, editContact, onClose }: Props) {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

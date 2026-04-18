@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { canCreateActivityOnDate } from '@pm/domain';
 import { useCreateActivity } from '../../hooks/useActivities';
 import { DatePickerField } from '../ui';
@@ -95,6 +96,7 @@ export function DelegatedActivityFormModal({ visible, contactId, contactName, on
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -208,6 +210,7 @@ export function DelegatedActivityFormModal({ visible, contactId, contactName, on
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

@@ -52,11 +52,13 @@ const STATUS_STYLES: Record<string, string> = {
 
 interface Props {
   meeting: Meeting;
+  occurrenceDate?: string | undefined; // set when viewing a specific occurrence of a recurring series
   contact: Contact | null;
   isPending: boolean;
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  onDeleteSeries?: (() => void) | undefined; // only for recurring meetings
   onArchive: () => void;
   onStatusUpdate: (status: MeetingStatus, keyTakeaways?: string | null) => void;
   onSaveTakeaways: (keyTakeaways: string) => void;
@@ -64,15 +66,18 @@ interface Props {
 
 export function MeetingDetailModal({
   meeting,
+  occurrenceDate,
   contact,
   isPending,
   onClose,
   onEdit,
   onDelete,
+  onDeleteSeries,
   onArchive,
   onStatusUpdate,
   onSaveTakeaways,
 }: Props) {
+  const isRecurringInstance = !!meeting.recurrence_rule && !!occurrenceDate;
   const isPast = isMeetingPast(meeting);
   const isRunning = isMeetingRunning(meeting);
   const needsUpdate = needsStatusUpdatePrompt(meeting);
@@ -138,11 +143,22 @@ export function MeetingDetailModal({
 
         {/* Scrollable content */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+          {/* Recurring instance notice */}
+          {isRecurringInstance && (
+            <section className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+              <p className="text-xs font-semibold text-blue-800 mb-0.5">↻ Recurring meeting</p>
+              <p className="text-[11px] text-blue-700">
+                You are viewing the occurrence on <strong>{formatDate(occurrenceDate!)}</strong>.
+                Any action here (complete, cancel, archive, delete) affects only this instance — the recurring series continues.
+              </p>
+            </section>
+          )}
+
           {/* Date / time / duration */}
           <section className="space-y-1">
             <p className="text-xs text-ink-light/60 font-semibold uppercase tracking-wide">When</p>
             <p className="text-sm text-ink">
-              {formatDate(meeting.date)}
+              {formatDate(occurrenceDate ?? meeting.date)}
             </p>
             <p className="text-sm text-ink-light">
               {formatTime(meeting.start_at)} – {formatTime(meeting.end_at)}{" "}
@@ -310,24 +326,59 @@ export function MeetingDetailModal({
           {/* Delete confirmation */}
           {confirmDelete && (
             <section className="rounded-xl border border-red-200 bg-red-50 p-3 space-y-2">
-              <p className="text-xs font-medium text-red-800">Delete this meeting permanently?</p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={onDelete}
-                  disabled={isPending}
-                  className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
-                >
-                  {isPending ? "Deleting…" : "Yes, delete"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setConfirmDelete(false)}
-                  className="text-xs text-ink-light hover:text-ink"
-                >
-                  Cancel
-                </button>
-              </div>
+              {isRecurringInstance ? (
+                <>
+                  <p className="text-xs font-medium text-red-800">Cancel or delete this recurring meeting?</p>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={onDelete}
+                      disabled={isPending}
+                      className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600 disabled:opacity-50"
+                    >
+                      {isPending ? "Cancelling…" : "Cancel this occurrence"}
+                    </button>
+                    {onDeleteSeries && (
+                      <button
+                        type="button"
+                        onClick={onDeleteSeries}
+                        disabled={isPending}
+                        className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-800 disabled:opacity-50"
+                      >
+                        {isPending ? "Deleting…" : "Delete entire series"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      className="text-xs text-ink-light hover:text-ink"
+                    >
+                      Keep
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-medium text-red-800">Delete this meeting permanently?</p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={onDelete}
+                      disabled={isPending}
+                      className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {isPending ? "Deleting…" : "Yes, delete"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmDelete(false)}
+                      className="text-xs text-ink-light hover:text-ink"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              )}
             </section>
           )}
         </div>
@@ -340,7 +391,7 @@ export function MeetingDetailModal({
               disabled={isPending}
               className="text-sm text-red-500 hover:text-red-700 hover:underline disabled:opacity-50"
             >
-              Delete
+              {isRecurringInstance ? "Cancel / Delete" : "Delete"}
             </button>
             {!meeting.archived && (
               <button
@@ -348,7 +399,7 @@ export function MeetingDetailModal({
                 disabled={isPending}
                 className="text-sm text-gray-500 hover:text-gray-700 hover:underline disabled:opacity-50"
               >
-                Archive
+                {isRecurringInstance ? "Archive occurrence" : "Archive"}
               </button>
             )}
           </div>

@@ -18,7 +18,7 @@ import {
   groupActivitiesBySection,
   MAX_A_PRIORITY_PER_DAY,
 } from '@pm/domain';
-import type { Activity, ActivitySection } from '@pm/types';
+import type { Activity, ActivitySection, ActivityStatus } from '@pm/types';
 import { DatePickerField } from '../../src/components/ui/DatePickerField';
 import { supabase } from '../../src/lib/supabase/client';
 import { useAuth } from '../../src/components/providers/AuthProvider';
@@ -71,7 +71,7 @@ function defaultFormValues(date: string): ActivityFormValues {
   return {
     title: '',
     section_type: 'work',
-    priority: null,
+    priority: 'B',
     activity_date: date,
     estimated_hours: '1',
     linked_project_id: null,
@@ -81,7 +81,7 @@ function defaultFormValues(date: string): ActivityFormValues {
   };
 }
 
-const STATUS_OPTIONS: { label: string; value: string }[] = [
+const STATUS_OPTIONS: { label: string; value: ActivityStatus }[] = [
   { label: 'Not Started', value: 'not_started' },
   { label: 'Working', value: 'working' },
   { label: 'Completed', value: 'completed' },
@@ -729,7 +729,7 @@ export default function ActivitiesScreen() {
             ? {
                 title: editActivity.title,
                 section_type: editActivity.section_type,
-                priority: editActivity.priority,
+                priority: editActivity.priority ?? 'B',
                 activity_date: editActivity.activity_date,
                 estimated_hours: (editActivity.estimated_minutes / 60).toFixed(1),
                 linked_project_id: editActivity.linked_project_id,

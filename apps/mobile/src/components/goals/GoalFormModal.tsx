@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { AnnualGoal, AnnualGoalSection, AnnualGoalStatus } from '@pm/types';
 import {
   type CreateAnnualGoalInput,
@@ -141,6 +142,7 @@ export function GoalFormModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -228,8 +230,13 @@ export function GoalFormModal({
           <View style={styles.section}>
             <DatePickerField
               label="Target Date (optional)"
-              value={targetDate}
-              onChange={setTargetDate}
+              value={targetDate ? new Date(`${targetDate}T12:00:00`) : null}
+              onChange={(d) => {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                setTargetDate(`${y}-${m}-${day}`);
+              }}
             />
           </View>
 
@@ -276,6 +283,7 @@ export function GoalFormModal({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

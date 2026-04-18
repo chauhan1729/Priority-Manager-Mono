@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Project, ProjectStatus } from '@pm/types';
 import {
   type CreateProjectInput,
@@ -119,6 +120,7 @@ export function ProjectFormModal({ visible, editProject, onClose }: Props) {
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -209,6 +211,7 @@ export function ProjectFormModal({ visible, editProject, onClose }: Props) {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

@@ -85,6 +85,11 @@ export default function MeetingPlannerScreen() {
 
   const [activeTab, setActiveTab] = useState<Tab>('upcoming');
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
+  const [selectedOccurrence, setSelectedOccurrence] = useState<{
+    date: string;
+    startAt: string;
+    endAt: string;
+  } | null>(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
   const [editMeeting, setEditMeeting] = useState<Meeting | null>(null);
@@ -124,13 +129,17 @@ export default function MeetingPlannerScreen() {
   const displayedMeetings =
     activeTab === 'upcoming' ? upcoming : activeTab === 'past' ? past : sortedArchived;
 
-  // Live-lookup selected meeting by id so detail reflects post-save state
+  // Live-lookup selected meeting by id so detail reflects post-save state.
+  // For recurring meetings, we want the base template (not the expanded occurrence),
+  // so prefer allMeetings lookup first, then fall back to the expanded lists.
   const selectedMeeting = useMemo(() => {
     if (!selectedMeetingId) return null;
     return (
-      [...upcoming, ...past, ...sortedArchived].find((m) => m.id === selectedMeetingId) ?? null
+      allMeetings.find((m) => m.id === selectedMeetingId) ??
+      [...upcoming, ...past, ...sortedArchived].find((m) => m.id === selectedMeetingId) ??
+      null
     );
-  }, [selectedMeetingId, upcoming, past, sortedArchived]);
+  }, [selectedMeetingId, allMeetings, upcoming, past, sortedArchived]);
 
   const selectedContact = selectedMeeting
     ? contactMap.get(selectedMeeting.linked_contact_id)
@@ -140,16 +149,29 @@ export default function MeetingPlannerScreen() {
 
   const handleCardPress = (meeting: Meeting) => {
     setSelectedMeetingId(meeting.id);
+    // For recurring occurrences (upcoming tab), record the specific occurrence date/times
+    // so per-instance actions can create a one-time record and advance the series.
+    if (meeting.recurrence_rule && activeTab === 'upcoming') {
+      setSelectedOccurrence({
+        date: meeting.date,
+        startAt: meeting.start_at,
+        endAt: meeting.end_at,
+      });
+    } else {
+      setSelectedOccurrence(null);
+    }
     setDetailVisible(true);
   };
 
   const handleDetailClose = () => {
     setDetailVisible(false);
     setSelectedMeetingId(null);
+    setSelectedOccurrence(null);
   };
 
   const handleDetailEdit = (meeting: Meeting) => {
     setDetailVisible(false);
+    setSelectedOccurrence(null);
     setEditMeeting(meeting);
     setFormVisible(true);
   };
@@ -287,6 +309,7 @@ export default function MeetingPlannerScreen() {
       {/* Detail screen */}
       <MeetingDetailScreen
         meeting={selectedMeeting}
+        occurrence={selectedOccurrence}
         contactName={selectedContact?.full_name}
         contactSubtitle={buildContactSubtitle(selectedContact)}
         contactEmail={selectedContact?.email ?? null}

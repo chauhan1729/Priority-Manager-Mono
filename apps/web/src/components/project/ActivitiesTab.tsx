@@ -12,7 +12,7 @@ import {
   updateActivityStatus,
   type ActionResult,
 } from "@/app/(app)/project-planner/actions";
-import { archiveActivity, bulkArchiveActivities, bulkDeleteActivities, bulkMoveActivities, bulkUpdateActivityStatus, updateActivity } from "@/app/(app)/activities/actions";
+import { archiveActivity, bulkArchiveActivities, bulkDeleteActivities, bulkMoveActivities, bulkUpdateActivityPriority, bulkUpdateActivityStatus, updateActivity } from "@/app/(app)/activities/actions";
 import { EditActivityModal } from "@/components/activities/EditActivityModal";
 import { showToast } from "@/components/ui/Toaster";
 
@@ -153,9 +153,9 @@ function AddActivityForm({ projectId, contacts, onSuccess, onCancel }: AddActivi
           <label className="block text-xs text-ink-light mb-1">Priority</label>
           <select
             name="priority"
+            defaultValue="B"
             className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
           >
-            <option value="">None</option>
             <option value="A">A — Must do</option>
             <option value="B">B — Should do</option>
           </select>
@@ -332,10 +332,9 @@ function BulkCreateForm({ projectId, onSuccess, onCancel }: BulkCreateFormProps)
         <label className="block text-xs text-ink-light mb-1">Priority (common for all)</label>
         <select
           name="priority"
-          defaultValue=""
+          defaultValue="B"
           className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
         >
-          <option value="">None</option>
           <option value="A">A — Must do</option>
           <option value="B">B — Should do</option>
         </select>
@@ -376,6 +375,7 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
   const [bulkTargetDate, setBulkTargetDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [bulkStatus, setBulkStatus] = useState("completed");
+  const [bulkPriority, setBulkPriority] = useState<"A" | "B">("A");
 
   const contactMap = new Map(contacts.map((c) => [c.id, c.full_name]));
 
@@ -471,6 +471,21 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
     });
   }
 
+  function handleBulkPriorityChange() {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    startTransition(async () => {
+      const result = await bulkUpdateActivityPriority([...selectedIds], bulkPriority);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(`${count} ${count === 1 ? "activity" : "activities"} updated`);
+        setSelectedIds(new Set());
+        setBulkMode(false);
+      }
+    });
+  }
+
   function handleBulkArchive() {
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
@@ -545,6 +560,26 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
               >
                 Move Selected
               </button>
+              {/* Set priority */}
+              <div className="flex items-center gap-1.5">
+                <label className="text-xs text-indigo-700 font-medium">Set priority:</label>
+                <select
+                  value={bulkPriority}
+                  onChange={(e) => setBulkPriority(e.target.value as "A" | "B")}
+                  className="rounded-lg border border-indigo-200 bg-white px-2 py-1 text-xs text-ink focus:border-indigo-400 focus:outline-none"
+                >
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                </select>
+                <button
+                  onClick={handleBulkPriorityChange}
+                  disabled={selectedIds.size === 0 || isPending}
+                  className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
+                >
+                  Apply
+                </button>
+              </div>
+
               {/* Set status */}
               <div className="flex items-center gap-1.5">
                 <label className="text-xs text-indigo-700 font-medium">Set status:</label>

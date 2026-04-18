@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { isMeetingPast } from '@pm/domain';
 import type { Meeting, MeetingRecurrenceRule, MeetingStatus } from '@pm/types';
 import {
@@ -95,7 +96,7 @@ function ContactPickerModal({ visible, contacts, selectedId, onSelect, onClose }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={cpStyles.container}>
+      <SafeAreaView style={cpStyles.container} edges={['top', 'bottom']}>
         <View style={cpStyles.header}>
           <TouchableOpacity onPress={onClose}>
             <Text style={cpStyles.cancel}>Cancel</Text>
@@ -135,7 +136,7 @@ function ContactPickerModal({ visible, contacts, selectedId, onSelect, onClose }
           }
           keyboardShouldPersistTaps="handled"
         />
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -369,6 +370,7 @@ export function MeetingFormModal({
         presentationStyle="pageSheet"
         onRequestClose={onClose}
       >
+        <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -583,6 +585,7 @@ export function MeetingFormModal({
             )}
           </ScrollView>
         </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       {/* Contact search (nested modal) */}

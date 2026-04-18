@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green[50],
   },
   btnError: {
-    borderColor: colors.red[300],
+    borderColor: colors.red[400],
     backgroundColor: colors.red[50],
   },
   btnText: {

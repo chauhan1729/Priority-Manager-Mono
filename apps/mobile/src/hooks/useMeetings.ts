@@ -463,6 +463,52 @@ export function useArchiveMeeting() {
   });
 }
 
+export interface CreateRecurringInstanceInput {
+  recurringMeetingId: string;
+  occurrenceDate: string;
+  occurrenceStartAt: string;
+  occurrenceEndAt: string;
+  status: MeetingStatus;
+  archived?: boolean;
+  keyTakeaways?: string | null;
+}
+
+/**
+ * Actions a single occurrence of a recurring meeting atomically.
+ *
+ * Delegates to the Postgres function `create_recurring_meeting_instance`, which
+ * runs the one-time insert and the template advance inside a single transaction.
+ * A partial failure here cannot leave the series in a half-advanced state.
+ */
+export function useCreateRecurringMeetingInstance() {
+  const { user } = useAuth();
+  const qc = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: CreateRecurringInstanceInput) => {
+      if (!user) throw new Error('Not authenticated.');
+
+      const { error } = await supabase.rpc('create_recurring_meeting_instance', {
+        p_recurring_id: input.recurringMeetingId,
+        p_occurrence_date: input.occurrenceDate,
+        p_occurrence_start_at: input.occurrenceStartAt,
+        p_occurrence_end_at: input.occurrenceEndAt,
+        p_status: input.status,
+        p_archived: input.archived ?? false,
+        p_key_takeaways: input.keyTakeaways ?? null,
+      });
+
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: meetingKeys.all });
+      qc.invalidateQueries({ queryKey: meetingKeys.archived });
+      qc.invalidateQueries({ queryKey: ['calendarEvents'] });
+      qc.invalidateQueries({ queryKey: ['scheduleInstances'] });
+    },
+  });
+}
+
 export function useUnarchiveMeeting() {
   const { user } = useAuth();
   const qc = useQueryClient();

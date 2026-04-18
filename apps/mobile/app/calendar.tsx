@@ -80,20 +80,21 @@ interface EventRowProps {
 function EventRow({ event, contactMap, onPress }: EventRowProps) {
   if (event.kind === 'calendar_event') {
     const ev = event.data;
-    const typeStyle = TYPE_COLOR[ev.event_type] ?? TYPE_COLOR.other;
+    const typeStyle = TYPE_COLOR[ev.event_type] ?? TYPE_COLOR.other!;
     const contactName = ev.linked_contact_id ? contactMap.get(ev.linked_contact_id) : null;
     const timeLabel = ev.start_at
       ? new Date(ev.start_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
       : 'All day';
     return (
       <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
+        <View style={[styles.eventAccent, { backgroundColor: typeStyle.text }]} />
         <Text style={styles.eventTime}>{timeLabel}</Text>
         <View style={styles.eventBody}>
           <Text style={styles.eventTitle} numberOfLines={1}>{ev.title}</Text>
           {contactName && <Text style={styles.eventMeta} numberOfLines={1}>{contactName}</Text>}
         </View>
-        <View style={[styles.typeBadge, { backgroundColor: typeStyle!.bg }]}>
-          <Text style={[styles.typeBadgeText, { color: typeStyle!.text }]}>
+        <View style={[styles.typeBadge, { backgroundColor: typeStyle.bg }]}>
+          <Text style={[styles.typeBadgeText, { color: typeStyle.text }]}>
             {TYPE_LABEL[ev.event_type] ?? ev.event_type}
           </Text>
         </View>
@@ -103,7 +104,7 @@ function EventRow({ event, contactMap, onPress }: EventRowProps) {
 
   if (event.kind === 'orphan_meeting') {
     const meeting = event.data;
-    const style = TYPE_COLOR.meeting!;
+    const typeStyle = TYPE_COLOR.meeting!;
     const contactName = contactMap.get(meeting.linked_contact_id) ?? null;
     const timeLabel = new Date(meeting.start_at).toLocaleTimeString(undefined, {
       hour: '2-digit',
@@ -111,13 +112,14 @@ function EventRow({ event, contactMap, onPress }: EventRowProps) {
     });
     return (
       <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
+        <View style={[styles.eventAccent, { backgroundColor: typeStyle.text }]} />
         <Text style={styles.eventTime}>{timeLabel}</Text>
         <View style={styles.eventBody}>
           <Text style={styles.eventTitle} numberOfLines={1}>{meeting.title}</Text>
           {contactName && <Text style={styles.eventMeta} numberOfLines={1}>{contactName}</Text>}
         </View>
-        <View style={[styles.typeBadge, { backgroundColor: style.bg }]}>
-          <Text style={[styles.typeBadgeText, { color: style.text }]}>Meeting</Text>
+        <View style={[styles.typeBadge, { backgroundColor: typeStyle.bg }]}>
+          <Text style={[styles.typeBadgeText, { color: typeStyle.text }]}>Meeting</Text>
         </View>
       </TouchableOpacity>
     );
@@ -125,15 +127,16 @@ function EventRow({ event, contactMap, onPress }: EventRowProps) {
 
   if (event.kind === 'birthday') {
     const entry = event.data;
-    const style = TYPE_COLOR.birthday!;
+    const typeStyle = TYPE_COLOR.birthday!;
     return (
       <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
+        <View style={[styles.eventAccent, { backgroundColor: typeStyle.text }]} />
         <Text style={styles.eventTime}>All day</Text>
         <View style={styles.eventBody}>
           <Text style={styles.eventTitle} numberOfLines={1}>🎂 {entry.title}</Text>
         </View>
-        <View style={[styles.typeBadge, { backgroundColor: style.bg }]}>
-          <Text style={[styles.typeBadgeText, { color: style.text }]}>Birthday</Text>
+        <View style={[styles.typeBadge, { backgroundColor: typeStyle.bg }]}>
+          <Text style={[styles.typeBadgeText, { color: typeStyle.text }]}>Birthday</Text>
         </View>
       </TouchableOpacity>
     );
@@ -141,17 +144,18 @@ function EventRow({ event, contactMap, onPress }: EventRowProps) {
 
   // away
   const entry = event.data;
-  const style = TYPE_COLOR[entry.type] ?? TYPE_COLOR.away!;
+  const typeStyle = TYPE_COLOR[entry.type] ?? TYPE_COLOR.away!;
   const spanLabel = event.spansFrom === event.spansTo ? '' : ` (through ${event.spansTo.slice(5)})`;
   return (
     <TouchableOpacity style={styles.eventRow} onPress={onPress} activeOpacity={0.7}>
+      <View style={[styles.eventAccent, { backgroundColor: typeStyle.text }]} />
       <Text style={styles.eventTime}>All day</Text>
       <View style={styles.eventBody}>
         <Text style={styles.eventTitle} numberOfLines={1}>✈ {entry.title}{spanLabel}</Text>
         {entry.location ? <Text style={styles.eventMeta} numberOfLines={1}>{entry.location}</Text> : null}
       </View>
-      <View style={[styles.typeBadge, { backgroundColor: style.bg }]}>
-        <Text style={[styles.typeBadgeText, { color: style.text }]}>
+      <View style={[styles.typeBadge, { backgroundColor: typeStyle.bg }]}>
+        <Text style={[styles.typeBadgeText, { color: typeStyle.text }]}>
           {TYPE_LABEL[entry.type] ?? entry.type}
         </Text>
       </View>
@@ -409,9 +413,6 @@ export default function CalendarScreen() {
         <TouchableOpacity style={styles.navBtn} onPress={goToNextMonth}>
           <Text style={styles.navArrow}>›</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.addBtn} onPress={handleAddPress}>
-          <Text style={styles.addBtnText}>+</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Month grid with swipe support */}
@@ -427,50 +428,54 @@ export default function CalendarScreen() {
         />
       </View>
 
-      {/* Divider */}
-      <View style={styles.divider} />
-
-      {/* Selected day header */}
-      <View style={styles.dayHeader}>
-        <Text style={styles.dayHeaderText}>
-          {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-          })}
-        </Text>
-        <Text style={styles.dayEventCount}>
-          {dayEvents.length === 0 ? 'No events' : `${dayEvents.length} event${dayEvents.length > 1 ? 's' : ''}`}
-        </Text>
-      </View>
-
-      {/* Day events list */}
-      <FlatList
-        data={dayEvents}
-        keyExtractor={(item, idx) =>
-          item.kind === 'calendar_event'
-            ? `ce-${item.data.id}`
-            : `${item.kind}-${item.data.id}-${idx}`
-        }
-        renderItem={({ item }) => (
-          <EventRow
-            event={item}
-            contactMap={contactMap}
-            onPress={() => handleDayEventPress(item)}
-          />
-        )}
-        ListEmptyComponent={
-          <View style={styles.emptyDay}>
-            <Text style={styles.emptyDayText}>No events on this day.</Text>
-            <TouchableOpacity onPress={handleAddPress}>
-              <Text style={styles.emptyDayLink}>Add an event</Text>
-            </TouchableOpacity>
+      {/* Day events card */}
+      <View style={styles.eventsCard}>
+        {/* Card header: day title + add button */}
+        <View style={styles.dayCardHeader}>
+          <View>
+            <Text style={styles.dayHeaderText}>
+              {new Date(selectedDate + 'T00:00:00').toLocaleDateString(undefined, {
+                weekday: 'long',
+                month: 'long',
+                day: 'numeric',
+              })}
+            </Text>
+            {dayEvents.length > 0 && (
+              <Text style={styles.dayEventCount}>
+                {dayEvents.length} event{dayEvents.length > 1 ? 's' : ''}
+              </Text>
+            )}
           </View>
-        }
-        ListFooterComponent={<MonthlyNotes monthKey={monthKey} />}
-        contentContainerStyle={styles.listContent}
-        style={styles.list}
-      />
+          <TouchableOpacity style={styles.addEventBtn} onPress={handleAddPress}>
+            <Text style={styles.addEventBtnText}>+ Add Event</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Events list */}
+        <FlatList
+          data={dayEvents}
+          keyExtractor={(item, idx) =>
+            item.kind === 'calendar_event'
+              ? `ce-${item.data.id}`
+              : `${item.kind}-${item.data.id}-${idx}`
+          }
+          renderItem={({ item }) => (
+            <EventRow
+              event={item}
+              contactMap={contactMap}
+              onPress={() => handleDayEventPress(item)}
+            />
+          )}
+          ListEmptyComponent={
+            <View style={styles.emptyDay}>
+              <Text style={styles.emptyDayText}>No events on this day.</Text>
+            </View>
+          }
+          ListFooterComponent={<MonthlyNotes monthKey={monthKey} />}
+          contentContainerStyle={styles.listContent}
+          style={styles.list}
+        />
+      </View>
 
       {/* Event detail sheet */}
       <EventDetailSheet
@@ -493,7 +498,7 @@ export default function CalendarScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FAFAF8' },
+  container: { flex: 1, backgroundColor: '#F5F5F0' },
 
   // Header
   header: {
@@ -506,13 +511,18 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.blue[100],
   },
   navBtn: {
-    padding: spacing.sm,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.blue[50],
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   navArrow: {
     fontFamily: fontFamily.sans,
-    fontSize: 24,
+    fontSize: 22,
     color: colors.blue[600],
-    lineHeight: 28,
+    lineHeight: 26,
   },
   monthLabelWrap: {
     flex: 1,
@@ -530,51 +540,60 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginTop: 2,
   },
-  addBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.blue[600],
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: spacing.sm,
-  },
-  addBtnText: {
-    color: '#FFFFFF',
-    fontSize: 22,
-    lineHeight: 26,
-    fontWeight: '300',
-  },
 
   // Grid
   gridWrapper: {
     backgroundColor: '#FFFFFF',
     paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.blue[50],
   },
 
-  divider: {
-    height: 1,
-    backgroundColor: colors.blue[100],
+  // Day events card
+  eventsCard: {
+    flex: 1,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+    borderRadius: borderRadius.xl,
+    borderWidth: 1,
+    borderColor: colors.blue[100],
+    backgroundColor: '#FFFFFF',
+    overflow: 'hidden',
   },
-
-  // Day section
-  dayHeader: {
+  dayCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.blue[50],
+    backgroundColor: colors.blue[50],
   },
   dayHeaderText: {
     fontFamily: fontFamily.sans,
-    fontSize: fontSize.base,
+    fontSize: fontSize.sm,
     fontWeight: '600',
     color: colors.ink.DEFAULT,
   },
   dayEventCount: {
     fontFamily: fontFamily.sans,
-    fontSize: fontSize.sm,
+    fontSize: fontSize.xs,
     color: colors.gray[400],
+    marginTop: 1,
+  },
+  addEventBtn: {
+    backgroundColor: colors.blue[600],
+    borderRadius: borderRadius.lg,
+    paddingHorizontal: spacing.sm + 2,
+    paddingVertical: 6,
+  },
+  addEventBtnText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: '#FFFFFF',
   },
 
   // List
@@ -585,17 +604,25 @@ const styles = StyleSheet.create({
   eventRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
+    paddingRight: spacing.md,
+    paddingVertical: spacing.sm + 2,
     borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
+    borderBottomColor: colors.blue[50],
     gap: spacing.sm,
+    backgroundColor: '#FFFFFF',
+  },
+  eventAccent: {
+    width: 3,
+    alignSelf: 'stretch',
+    borderRadius: 2,
+    marginLeft: spacing.sm - 2,
+    minHeight: 28,
   },
   eventTime: {
     fontFamily: fontFamily.sans,
     fontSize: 11,
     color: colors.gray[400],
-    width: 52,
+    width: 50,
   },
   eventBody: {
     flex: 1,
@@ -633,20 +660,13 @@ const styles = StyleSheet.create({
     fontFamily: fontFamily.sans,
     fontSize: fontSize.sm,
     color: colors.gray[400],
-    marginBottom: spacing.sm,
-  },
-  emptyDayLink: {
-    fontFamily: fontFamily.sans,
-    fontSize: fontSize.sm,
-    color: colors.blue[600],
-    fontWeight: '500',
   },
 
   // Monthly notes
   notesSection: {
-    margin: spacing.lg,
+    margin: spacing.md,
     padding: spacing.md,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.blue[50],
     borderRadius: borderRadius.lg,
     borderWidth: 1,
     borderColor: colors.blue[100],

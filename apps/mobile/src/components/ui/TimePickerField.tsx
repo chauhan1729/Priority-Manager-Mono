@@ -38,7 +38,7 @@ export function TimePickerField({ label, value, onChange, placeholder = 'Select 
           mode="time"
           value={value ?? new Date()}
           onChange={handleChange}
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display={Platform.OS === 'ios' ? 'spinner' : 'clock'}
         />
       ) : null}
     </View>

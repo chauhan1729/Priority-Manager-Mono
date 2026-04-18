@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useQuery } from '@tanstack/react-query';
 import type { MonthlyPriority } from '@pm/types';
 import { MP_STATUS_LABELS } from '@pm/domain';
@@ -147,7 +148,7 @@ export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose, 
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
+      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Month-End Review</Text>
@@ -245,7 +246,7 @@ export function MonthEndReviewModal({ visible, monthLabel, priorities, onClose, 
             </View>
           </>
         )}
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }

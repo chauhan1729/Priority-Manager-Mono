@@ -1,13 +1,15 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import * as Haptics from 'expo-haptics';
 import {
   Alert,
+  Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import type { Activity, Contact } from '@pm/types';
 import { Badge } from '../ui/Badge';
 import { colors } from '../../theme/colors';
@@ -58,11 +60,8 @@ function ActivityCardBase({
   onOpenProject,
   onPostponed,
 }: Props) {
-  const sheetRef = useRef<BottomSheet>(null);
-  const snapPoints = useMemo(() => ['58%'], []);
-
-  const contactSheetRef = useRef<BottomSheet>(null);
-  const contactSnapPoints = useMemo(() => ['60%'], []);
+  const [statusPickerVisible, setStatusPickerVisible] = React.useState(false);
+  const [contactPickerVisible, setContactPickerVisible] = React.useState(false);
 
   const updateStatus = useUpdateActivityStatus();
   const deleteActivity = useDeleteActivity();
@@ -75,16 +74,14 @@ function ActivityCardBase({
 
   function openStatusSheet() {
     if (bulkMode) return;
-    sheetRef.current?.expand();
+    setStatusPickerVisible(true);
   }
 
   function handleStatusSelect(status: string) {
-    sheetRef.current?.close();
+    setStatusPickerVisible(false);
 
-    // Web parity: changing status to "delegated" when not already in the delegated
-    // section opens a contact picker before committing the change.
     if (status === 'delegated' && activity.section_type !== 'delegated') {
-      contactSheetRef.current?.expand();
+      setContactPickerVisible(true);
       return;
     }
 
@@ -97,7 +94,7 @@ function ActivityCardBase({
   }
 
   function handleDelegateSelect(contactId: string) {
-    contactSheetRef.current?.close();
+    setContactPickerVisible(false);
     Haptics.selectionAsync();
     delegateActivity.mutate(
       { activityId: activity.id, contactId },
@@ -147,13 +144,6 @@ function ActivityCardBase({
     }
   }
 
-  const renderBackdrop = useCallback(
-    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} />
-    ),
-    []
-  );
-
   return (
     <>
       <TouchableOpacity
@@ -185,7 +175,6 @@ function ActivityCardBase({
             >
               {activity.title}
             </Text>
-            {/* Moved indicator */}
             {activity.moved_from_date ? (
               <Text style={styles.movedBadge}>↷ moved</Text>
             ) : null}
@@ -243,40 +232,35 @@ function ActivityCardBase({
 
         {/* Right: status badge + actions */}
         <View style={styles.right}>
-          <TouchableOpacity onPress={openStatusSheet}>
+          <TouchableOpacity onPress={openStatusSheet} hitSlop={8}>
             <Badge variant={activity.status} />
           </TouchableOpacity>
 
           <View style={styles.actions}>
-            {/* Quick complete */}
             {!isDone && (
               <TouchableOpacity onPress={handleQuickComplete} hitSlop={8} style={styles.actionBtn}>
                 <Text style={styles.completeIcon}>✓</Text>
               </TouchableOpacity>
             )}
 
-            {/* Postpone to tomorrow */}
             {!isDone && (
               <TouchableOpacity onPress={handlePostpone} hitSlop={8} style={styles.actionBtn}>
                 <Text style={styles.postponeIcon}>↷</Text>
               </TouchableOpacity>
             )}
 
-            {/* Edit (hidden for completed/cancelled — web parity) */}
             {!isDone ? (
               <TouchableOpacity onPress={() => onEdit(activity)} hitSlop={8} style={styles.actionBtn}>
                 <Text style={styles.actionIcon}>✎</Text>
               </TouchableOpacity>
             ) : null}
 
-            {/* Archive (for done activities) */}
             {isDone && !activity.archived && (
               <TouchableOpacity onPress={handleArchive} hitSlop={8} style={styles.actionBtn}>
                 <Text style={styles.archiveIcon}>⊘</Text>
               </TouchableOpacity>
             )}
 
-            {/* Delete */}
             <TouchableOpacity onPress={handleDelete} hitSlop={8} style={styles.actionBtn}>
               <Text style={[styles.actionIcon, styles.deleteIcon]}>✕</Text>
             </TouchableOpacity>
@@ -284,67 +268,75 @@ function ActivityCardBase({
         </View>
       </TouchableOpacity>
 
-      {/* Status picker bottom sheet */}
-      <BottomSheet
-        ref={sheetRef}
-        index={-1}
-        snapPoints={snapPoints}
-        enablePanDownToClose
-        backdropComponent={renderBackdrop}
-        backgroundStyle={styles.sheet}
-        handleIndicatorStyle={styles.handle}
+      {/* Status picker modal */}
+      <Modal
+        visible={statusPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setStatusPickerVisible(false)}
       >
-        <View style={styles.sheetContent}>
-          <Text style={styles.sheetTitle}>Update Status</Text>
-          {STATUS_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value}
-              style={[
-                styles.statusOption,
-                activity.status === opt.value && styles.statusOptionActive,
-              ]}
-              onPress={() => handleStatusSelect(opt.value)}
-            >
-              <Badge variant={opt.value} />
-              <Text style={styles.statusOptionLabel}>{opt.label}</Text>
-              {activity.status === opt.value ? (
-                <Text style={styles.checkmark}>✓</Text>
-              ) : null}
-            </TouchableOpacity>
-          ))}
-        </View>
-      </BottomSheet>
-
-      {/* Delegate contact picker bottom sheet */}
-      <BottomSheet
-        ref={contactSheetRef}
-        index={-1}
-        snapPoints={contactSnapPoints}
-        enablePanDownToClose
-        backdropComponent={renderBackdrop}
-        backgroundStyle={styles.sheet}
-        handleIndicatorStyle={styles.handle}
-      >
-        <View style={styles.sheetContent}>
-          <Text style={styles.sheetTitle}>Delegate to…</Text>
-          {!contacts || contacts.length === 0 ? (
-            <Text style={styles.emptyContacts}>
-              No contacts yet. Add contacts in the Communication Planner first.
-            </Text>
-          ) : (
-            contacts.map((c) => (
+        <TouchableWithoutFeedback onPress={() => setStatusPickerVisible(false)}>
+          <View style={styles.modalBackdrop} />
+        </TouchableWithoutFeedback>
+        <View style={styles.sheet}>
+          <View style={styles.handle} />
+          <View style={styles.sheetContent}>
+            <Text style={styles.sheetTitle}>Update Status</Text>
+            {STATUS_OPTIONS.map((opt) => (
               <TouchableOpacity
-                key={c.id}
-                style={styles.statusOption}
-                onPress={() => handleDelegateSelect(c.id)}
-                disabled={delegateActivity.isPending}
+                key={opt.value}
+                style={[
+                  styles.statusOption,
+                  activity.status === opt.value && styles.statusOptionActive,
+                ]}
+                onPress={() => handleStatusSelect(opt.value)}
               >
-                <Text style={styles.statusOptionLabel}>{c.full_name}</Text>
+                <Badge variant={opt.value} />
+                <Text style={styles.statusOptionLabel}>{opt.label}</Text>
+                {activity.status === opt.value ? (
+                  <Text style={styles.checkmark}>✓</Text>
+                ) : null}
               </TouchableOpacity>
-            ))
-          )}
+            ))}
+          </View>
         </View>
-      </BottomSheet>
+      </Modal>
+
+      {/* Delegate contact picker modal */}
+      <Modal
+        visible={contactPickerVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setContactPickerVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setContactPickerVisible(false)}>
+          <View style={styles.modalBackdrop} />
+        </TouchableWithoutFeedback>
+        <View style={styles.sheet}>
+          <View style={styles.handle} />
+          <View style={styles.sheetContent}>
+            <Text style={styles.sheetTitle}>Delegate to…</Text>
+            {!contacts || contacts.length === 0 ? (
+              <Text style={styles.emptyContacts}>
+                No contacts yet. Add contacts in the Communication Planner first.
+              </Text>
+            ) : (
+              <ScrollView>
+                {contacts.map((c) => (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={styles.statusOption}
+                    onPress={() => handleDelegateSelect(c.id)}
+                    disabled={delegateActivity.isPending}
+                  >
+                    <Text style={styles.statusOptionLabel}>{c.full_name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -510,20 +502,29 @@ const styles = StyleSheet.create({
   deleteIcon: {
     color: colors.red[400],
   },
-  // Status bottom sheet
+  // Modal bottom sheet
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+  },
   sheet: {
     backgroundColor: colors.paper,
     borderTopLeftRadius: borderRadius.xl,
     borderTopRightRadius: borderRadius.xl,
+    paddingBottom: spacing['3xl'],
   },
   handle: {
-    backgroundColor: colors.gray[300],
     width: 40,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.gray[300],
+    alignSelf: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   sheetContent: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.sm,
-    paddingBottom: spacing['3xl'],
     gap: spacing.xs,
   },
   sheetTitle: {

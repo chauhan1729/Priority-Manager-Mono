@@ -2,7 +2,6 @@ import React, { useMemo, useState } from 'react';
 import {
   ActionSheetIOS,
   Alert,
-  FlatList,
   Platform,
   StyleSheet,
   Text,
@@ -241,21 +240,23 @@ export function ActivitiesTab({ projectId, activities }: Props) {
         </TouchableOpacity>
       </View>
 
-      {/* Activity list */}
-      <FlatList
-        data={displayedActivities}
-        keyExtractor={(item) => item.id}
-        renderItem={renderItem}
-        contentContainerStyle={styles.listContent}
-        scrollEnabled={false}
-        ListEmptyComponent={
+      {/* Activity list — rendered with .map() instead of FlatList because this
+          component lives inside an outer ScrollView. A nested VirtualizedList
+          breaks windowing; since scrolling is disabled here anyway, there's no
+          virtualization benefit to preserve. */}
+      <View style={styles.listContent}>
+        {displayedActivities.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
               No {activeSubTab === 'archived' ? 'archived' : activeSubTab} activities.
             </Text>
           </View>
-        }
-      />
+        ) : (
+          displayedActivities.map((item) => (
+            <React.Fragment key={item.id}>{renderItem({ item })}</React.Fragment>
+          ))
+        )}
+      </View>
 
       <ProjectActivityFormModal
         visible={addFormVisible || !!editActivity}

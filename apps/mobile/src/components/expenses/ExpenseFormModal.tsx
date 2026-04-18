@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import type { Contact, Expense, ExpenseCategory, Project, YearEntry } from '@pm/types';
 import {
   EXPENSE_CATEGORIES,
@@ -252,6 +253,7 @@ export function ExpenseFormModal({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.root} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -558,6 +560,7 @@ export function ExpenseFormModal({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }

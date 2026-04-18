@@ -14,7 +14,7 @@ import { MAX_A_PRIORITY_PER_DAY } from '@pm/domain';
 import type { ActivityRecurrenceRule } from '@pm/types';
 
 export type SectionType = 'work' | 'outside' | 'unplanned' | 'delegated';
-export type PriorityValue = 'A' | 'B' | null;
+export type PriorityValue = 'A' | 'B';
 
 export interface ActivityFormValues {
   title: string;
@@ -44,8 +44,7 @@ const SECTION_OPTIONS: { label: string; value: SectionType }[] = [
   { label: 'Delegated', value: 'delegated' },
 ];
 
-const PRIORITY_OPTIONS: { label: string; value: string }[] = [
-  { label: 'None', value: 'none' },
+const PRIORITY_OPTIONS: { label: string; value: PriorityValue }[] = [
   { label: 'A', value: 'A' },
   { label: 'B', value: 'B' },
 ];
@@ -112,15 +111,14 @@ export function ActivityForm({ values, onChange, projectOptions, contactOptions,
         <View style={styles.segmented}>
           {PRIORITY_OPTIONS.map((opt) => {
             const disabled = opt.value === 'A' && aCapped && values.priority !== 'A';
-            const currentVal = values.priority ?? 'none';
             return (
               <TouchableOpacity
                 key={opt.value}
-                style={[styles.seg, currentVal === opt.value && styles.segActive, disabled && styles.segDisabled]}
-                onPress={() => !disabled && onChange({ priority: opt.value === 'none' ? null : (opt.value as PriorityValue) })}
+                style={[styles.seg, values.priority === opt.value && styles.segActive, disabled && styles.segDisabled]}
+                onPress={() => !disabled && onChange({ priority: opt.value })}
                 disabled={disabled}
               >
-                <Text style={[styles.segText, currentVal === opt.value && styles.segTextActive]}>
+                <Text style={[styles.segText, values.priority === opt.value && styles.segTextActive]}>
                   {opt.label}
                 </Text>
               </TouchableOpacity>

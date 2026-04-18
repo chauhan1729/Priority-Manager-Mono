@@ -11,6 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { canCreateActivityOnDate } from '@pm/domain';
 import type { Activity } from '@pm/types';
 import { useCreateProjectActivity } from '../../hooks/useProjects';
@@ -22,11 +23,9 @@ import { borderRadius, spacing } from '../../theme/spacing';
 import { fontSize, fontFamily } from '../../theme/typography';
 import { todayISO } from '../../lib/dateUtils';
 
-const PRIORITIES = [
-  { label: 'None', value: null },
-  { label: 'A',    value: 'A' },
-  { label: 'B',    value: 'B' },
-  { label: 'C',    value: 'C' },
+const PRIORITIES: { label: string; value: 'A' | 'B' }[] = [
+  { label: 'A', value: 'A' },
+  { label: 'B', value: 'B' },
 ];
 
 const HOURS_CHIPS = [
@@ -58,7 +57,7 @@ function ContactPickerModal({ visible, contacts, selectedId, onSelect, onClose }
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={onClose}>
-      <View style={cp.container}>
+      <SafeAreaView style={cp.container} edges={['top', 'bottom']}>
         <View style={cp.header}>
           <TouchableOpacity onPress={onClose}><Text style={cp.cancel}>Cancel</Text></TouchableOpacity>
           <Text style={cp.title}>Select Contact</Text>
@@ -91,7 +90,7 @@ function ContactPickerModal({ visible, contacts, selectedId, onSelect, onClose }
           )}
           keyboardShouldPersistTaps="handled"
         />
-      </View>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -154,7 +153,7 @@ export function ProjectActivityFormModal({ visible, projectId, editActivity, onC
   const [hours, setHours] = useState(1);
   const [isCustom, setIsCustom] = useState(false);
   const [customHours, setCustomHours] = useState('');
-  const [priority, setPriority] = useState<string | null>(null);
+  const [priority, setPriority] = useState<'A' | 'B'>('B');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [contactPickerVisible, setContactPickerVisible] = useState(false);
@@ -184,7 +183,7 @@ export function ProjectActivityFormModal({ visible, projectId, editActivity, onC
         setIsCustom(true);
         setCustomHours(String(h));
       }
-      setPriority(editActivity.priority ?? null);
+      setPriority((editActivity.priority === 'A' ? 'A' : 'B'));
       setNote(editActivity.note ?? '');
     } else {
       setTitle('');
@@ -195,7 +194,7 @@ export function ProjectActivityFormModal({ visible, projectId, editActivity, onC
       setHours(1);
       setIsCustom(false);
       setCustomHours('');
-      setPriority(null);
+      setPriority('B');
       setNote('');
     }
     setError(null);
@@ -265,6 +264,7 @@ export function ProjectActivityFormModal({ visible, projectId, editActivity, onC
         presentationStyle="pageSheet"
         onRequestClose={onClose}
       >
+        <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
         <KeyboardAvoidingView
           style={styles.flex}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -386,7 +386,7 @@ export function ProjectActivityFormModal({ visible, projectId, editActivity, onC
 
             {/* Priority */}
             <View style={styles.section}>
-              <Text style={styles.fieldLabel}>Priority (optional)</Text>
+              <Text style={styles.fieldLabel}>Priority</Text>
               <View style={styles.chipRow}>
                 {PRIORITIES.map((p) => {
                   const isSelected = priority === p.value;
@@ -420,6 +420,7 @@ export function ProjectActivityFormModal({ visible, projectId, editActivity, onC
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
+        </SafeAreaView>
       </Modal>
 
       <ContactPickerModal

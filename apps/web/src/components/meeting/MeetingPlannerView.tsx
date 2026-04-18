@@ -9,6 +9,7 @@ import { showToast } from "@/components/ui/Toaster";
 import {
   archiveMeeting,
   createMeeting,
+  createRecurringMeetingInstance,
   deleteMeeting,
   updateMeeting,
 } from "@/app/(app)/meeting-planner/actions";
@@ -24,6 +25,8 @@ interface Props {
 
 export function MeetingPlannerView({ meetings, contacts }: Props) {
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(null);
+  // Tracks the specific occurrence date/times when clicking a recurring instance
+  const [selectedOccurrence, setSelectedOccurrence] = useState<{ date: string; startAt: string; endAt: string } | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Meeting | null>(null);
   const [activeTab, setActiveTab] = useState<"upcoming" | "past" | "archived">("upcoming");
@@ -129,14 +132,28 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
 
   function handleStatusUpdate(status: MeetingStatus, keyTakeaways?: string | null) {
     if (!selectedMeeting) return;
-    const id = selectedMeeting.id;
     startTransition(async () => {
-      const result = await updateMeeting(id, { status, key_takeaways: keyTakeaways ?? null });
+      let result: { error: string } | { success: true } | undefined;
+      if (selectedMeeting.recurrence_rule && selectedOccurrence) {
+        // Recurring instance: create a one-time record, advance the series
+        result = await createRecurringMeetingInstance(
+          selectedMeeting.id,
+          selectedOccurrence.date,
+          selectedOccurrence.startAt,
+          selectedOccurrence.endAt,
+          status,
+          false,
+          keyTakeaways ?? null,
+        );
+      } else {
+        result = await updateMeeting(selectedMeeting.id, { status, key_takeaways: keyTakeaways ?? null });
+      }
       if (result && "error" in result) {
         showToast(result.error, "error");
       } else {
         showToast("Status updated");
         setSelectedMeetingId(null);
+        setSelectedOccurrence(null);
       }
     });
   }
@@ -156,28 +173,78 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
 
   function handleDelete() {
     if (!selectedMeeting) return;
+    startTransition(async () => {
+      let result: { error: string } | { success: true } | undefined;
+      if (selectedMeeting.recurrence_rule && selectedOccurrence) {
+        // Cancel this occurrence as a one-time record; advance the series
+        result = await createRecurringMeetingInstance(
+          selectedMeeting.id,
+          selectedOccurrence.date,
+          selectedOccurrence.startAt,
+          selectedOccurrence.endAt,
+          "cancelled",
+          false,
+          null,
+        );
+        if (result && "error" in result) {
+          showToast(result.error, "error");
+        } else {
+          showToast("Occurrence cancelled");
+          setSelectedMeetingId(null);
+          setSelectedOccurrence(null);
+        }
+      } else {
+        result = await deleteMeeting(selectedMeeting.id);
+        if (result && "error" in result) {
+          showToast(result.error, "error");
+        } else {
+          showToast("Meeting deleted");
+          setSelectedMeetingId(null);
+          setSelectedOccurrence(null);
+        }
+      }
+    });
+  }
+
+  function handleDeleteSeries() {
+    if (!selectedMeeting) return;
     const id = selectedMeeting.id;
     startTransition(async () => {
       const result = await deleteMeeting(id);
       if (result && "error" in result) {
         showToast(result.error, "error");
       } else {
-        showToast("Meeting deleted");
+        showToast("Recurring series deleted");
         setSelectedMeetingId(null);
+        setSelectedOccurrence(null);
       }
     });
   }
 
   function handleArchive() {
     if (!selectedMeeting) return;
-    const id = selectedMeeting.id;
     startTransition(async () => {
-      const result = await archiveMeeting(id);
+      let result: { error: string } | { success: true } | undefined;
+      if (selectedMeeting.recurrence_rule && selectedOccurrence) {
+        // Archive this occurrence as a one-time record; advance the series
+        result = await createRecurringMeetingInstance(
+          selectedMeeting.id,
+          selectedOccurrence.date,
+          selectedOccurrence.startAt,
+          selectedOccurrence.endAt,
+          selectedMeeting.status,
+          true,
+          null,
+        );
+      } else {
+        result = await archiveMeeting(selectedMeeting.id);
+      }
       if (result && "error" in result) {
         showToast(result.error, "error");
       } else {
         showToast("Meeting archived");
         setSelectedMeetingId(null);
+        setSelectedOccurrence(null);
       }
     });
   }
@@ -263,10 +330,18 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
                   <div className="space-y-2">
                     {upcomingMeetings.map((meeting) => (
                       <MeetingCard
-                        key={meeting.id}
+                        key={`${meeting.id}-${meeting.date}`}
                         meeting={meeting}
                         contact={contactMap.get(meeting.linked_contact_id) ?? null}
-                        onClick={() => setSelectedMeetingId(meeting.id)}
+                        onClick={() => {
+                          setSelectedMeetingId(meeting.id);
+                          // For recurring occurrences, record the specific occurrence date/times
+                          if (meeting.recurrence_rule) {
+                            setSelectedOccurrence({ date: meeting.date, startAt: meeting.start_at, endAt: meeting.end_at });
+                          } else {
+                            setSelectedOccurrence(null);
+                          }
+                        }}
                       />
                     ))}
                   </div>
@@ -286,7 +361,7 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
                         key={meeting.id}
                         meeting={meeting}
                         contact={contactMap.get(meeting.linked_contact_id) ?? null}
-                        onClick={() => setSelectedMeetingId(meeting.id)}
+                        onClick={() => { setSelectedMeetingId(meeting.id); setSelectedOccurrence(null); }}
                       />
                     ))}
                   </div>
@@ -306,7 +381,7 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
                         key={meeting.id}
                         meeting={meeting}
                         contact={contactMap.get(meeting.linked_contact_id) ?? null}
-                        onClick={() => setSelectedMeetingId(meeting.id)}
+                        onClick={() => { setSelectedMeetingId(meeting.id); setSelectedOccurrence(null); }}
                       />
                     ))}
                   </div>
@@ -321,14 +396,18 @@ export function MeetingPlannerView({ meetings, contacts }: Props) {
       {selectedMeeting && !editTarget && (
         <MeetingDetailModal
           meeting={selectedMeeting}
+          occurrenceDate={selectedOccurrence?.date}
           contact={contactMap.get(selectedMeeting.linked_contact_id) ?? null}
           isPending={isPending}
-          onClose={() => setSelectedMeetingId(null)}
+          onClose={() => { setSelectedMeetingId(null); setSelectedOccurrence(null); }}
           onEdit={() => {
+            // For recurring meetings, editing the series (not the instance)
             setEditTarget(selectedMeeting);
             setSelectedMeetingId(null);
+            setSelectedOccurrence(null);
           }}
           onDelete={handleDelete}
+          onDeleteSeries={selectedMeeting.recurrence_rule ? handleDeleteSeries : undefined}
           onArchive={handleArchive}
           onStatusUpdate={handleStatusUpdate}
           onSaveTakeaways={handleSaveTakeaways}

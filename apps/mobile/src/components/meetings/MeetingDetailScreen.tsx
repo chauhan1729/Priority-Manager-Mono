@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import {
   isMeetingPast,
@@ -22,6 +23,7 @@ import {
 import type { Meeting, MeetingStatus } from '@pm/types';
 import {
   useArchiveMeeting,
+  useCreateRecurringMeetingInstance,
   useDeleteMeeting,
   useUpdateMeeting,
 } from '../../hooks/useMeetings';
@@ -33,6 +35,8 @@ import { fontSize, fontFamily } from '../../theme/typography';
 
 interface Props {
   meeting: Meeting | null;
+  /** When set, we're viewing a specific occurrence of a recurring series. */
+  occurrence?: { date: string; startAt: string; endAt: string } | null;
   contactName?: string | undefined;
   contactSubtitle?: string | undefined;
   contactEmail?: string | null;
@@ -67,6 +71,7 @@ function formatDateTime(isoDatetime: string): string {
 
 export function MeetingDetailScreen({
   meeting,
+  occurrence,
   contactName,
   contactSubtitle,
   contactEmail,
@@ -83,6 +88,9 @@ export function MeetingDetailScreen({
   const updateMutation = useUpdateMeeting();
   const deleteMutation = useDeleteMeeting();
   const archiveMutation = useArchiveMeeting();
+  const recurringInstanceMutation = useCreateRecurringMeetingInstance();
+
+  const isRecurringInstance = !!meeting?.recurrence_rule && !!occurrence;
 
   // Sync form when meeting changes
   useEffect(() => {
@@ -118,6 +126,29 @@ export function MeetingDetailScreen({
     if (!meeting) return;
     setSaveState('saving');
     setError(null);
+
+    if (isRecurringInstance && occurrence) {
+      // Recurring occurrence: create a one-time instance, advance the series
+      recurringInstanceMutation.mutate(
+        {
+          recurringMeetingId: meeting.id,
+          occurrenceDate: occurrence.date,
+          occurrenceStartAt: occurrence.startAt,
+          occurrenceEndAt: occurrence.endAt,
+          status: selectedStatus,
+          keyTakeaways: takeaways.trim() || null,
+        },
+        {
+          onSuccess: () => {
+            setSaveState('saved');
+            onClose();
+          },
+          onError: (e) => { setError((e as Error).message); setSaveState('idle'); },
+        },
+      );
+      return;
+    }
+
     updateMutation.mutate(
       {
         id: meeting.id,
@@ -129,10 +160,46 @@ export function MeetingDetailScreen({
         onError: (e) => { setError((e as Error).message); setSaveState('idle'); },
       },
     );
-  }, [meeting, takeaways, selectedStatus, updateMutation]);
+  }, [meeting, takeaways, selectedStatus, updateMutation, isRecurringInstance, occurrence, recurringInstanceMutation, onClose]);
 
   const handleDelete = useCallback(() => {
     if (!meeting) return;
+
+    if (isRecurringInstance && occurrence) {
+      Alert.alert(
+        'Delete Recurring Meeting',
+        'This is a recurring meeting. What do you want to do?',
+        [
+          { text: 'Keep', style: 'cancel' },
+          {
+            text: 'Cancel this occurrence',
+            onPress: () =>
+              recurringInstanceMutation.mutate(
+                {
+                  recurringMeetingId: meeting.id,
+                  occurrenceDate: occurrence.date,
+                  occurrenceStartAt: occurrence.startAt,
+                  occurrenceEndAt: occurrence.endAt,
+                  status: 'cancelled',
+                  keyTakeaways: null,
+                },
+                { onSuccess: onClose },
+              ),
+          },
+          {
+            text: 'Delete entire series',
+            style: 'destructive',
+            onPress: () =>
+              deleteMutation.mutate(
+                { meetingId: meeting.id },
+                { onSuccess: onClose },
+              ),
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert(
       'Delete Meeting',
       `Delete "${meeting.title}"? This cannot be undone.`,
@@ -149,10 +216,38 @@ export function MeetingDetailScreen({
         },
       ],
     );
-  }, [meeting, deleteMutation, onClose]);
+  }, [meeting, deleteMutation, onClose, isRecurringInstance, occurrence, recurringInstanceMutation]);
 
   const handleArchive = useCallback(() => {
     if (!meeting) return;
+
+    if (isRecurringInstance && occurrence) {
+      Alert.alert(
+        'Archive Occurrence',
+        'Archive this occurrence of the recurring meeting? The series will continue.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Archive',
+            onPress: () =>
+              recurringInstanceMutation.mutate(
+                {
+                  recurringMeetingId: meeting.id,
+                  occurrenceDate: occurrence.date,
+                  occurrenceStartAt: occurrence.startAt,
+                  occurrenceEndAt: occurrence.endAt,
+                  status: meeting.status,
+                  archived: true,
+                  keyTakeaways: null,
+                },
+                { onSuccess: onClose },
+              ),
+          },
+        ],
+      );
+      return;
+    }
+
     Alert.alert('Archive Meeting', 'Archive this meeting? It will be hidden from the list.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -164,7 +259,7 @@ export function MeetingDetailScreen({
           ),
       },
     ]);
-  }, [meeting, archiveMutation, onClose]);
+  }, [meeting, archiveMutation, onClose, isRecurringInstance, occurrence, recurringInstanceMutation]);
 
   if (!meeting) return null;
 
@@ -175,6 +270,7 @@ export function MeetingDetailScreen({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
+      <SafeAreaView style={styles.flex} edges={['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -198,6 +294,23 @@ export function MeetingDetailScreen({
         </View>
 
         <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+          {/* Recurring instance banner */}
+          {isRecurringInstance && (
+            <View style={styles.recurringBanner}>
+              <Text style={styles.recurringBannerTitle}>↻ Recurring meeting</Text>
+              <Text style={styles.recurringBannerText}>
+                You are viewing the occurrence on{' '}
+                {new Date(occurrence!.startAt).toLocaleDateString(undefined, {
+                  weekday: 'short',
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })}
+                . Actions here affect only this instance — the series continues.
+              </Text>
+            </View>
+          )}
+
           {/* Takeaway prompt banner */}
           {needsTakeaway && (
             <View style={styles.takeawayBanner}>
@@ -264,8 +377,14 @@ export function MeetingDetailScreen({
 
           {/* Meta */}
           <View style={styles.metaBlock}>
-            <MetaRow label="Start" value={formatDateTime(meeting.start_at)} />
-            <MetaRow label="End" value={formatDateTime(meeting.end_at)} />
+            <MetaRow
+              label="Start"
+              value={formatDateTime(occurrence?.startAt ?? meeting.start_at)}
+            />
+            <MetaRow
+              label="End"
+              value={formatDateTime(occurrence?.endAt ?? meeting.end_at)}
+            />
             <MetaRow label="Duration" value={`${meeting.duration_minutes} min`} />
             {meeting.recurrence_rule && (
               <MetaRow label="Recurs" value={meeting.recurrence_rule} />
@@ -355,6 +474,7 @@ export function MeetingDetailScreen({
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      </SafeAreaView>
     </Modal>
   );
 }
@@ -404,6 +524,27 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
 
   // Banners
+  recurringBanner: {
+    margin: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.blue[50],
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.blue[200],
+  },
+  recurringBannerTitle: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    fontWeight: '700',
+    color: colors.blue[700],
+    marginBottom: 2,
+  },
+  recurringBannerText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.blue[600],
+    lineHeight: 16,
+  },
   takeawayBanner: {
     margin: spacing.md,
     padding: spacing.md,

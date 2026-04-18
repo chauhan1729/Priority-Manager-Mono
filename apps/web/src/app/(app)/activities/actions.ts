@@ -511,6 +511,31 @@ export async function bulkUpdateActivityStatus(
 }
 
 // ---------------------------------------------------------------------------
+// Bulk priority update
+// ---------------------------------------------------------------------------
+
+export async function bulkUpdateActivityPriority(
+  activityIds: string[],
+  priority: string | null,
+): Promise<{ error?: string }> {
+  if (activityIds.length === 0) return {};
+
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { error } = await supabase
+    .from("activities")
+    .update({ priority: priority || null, updated_at: new Date().toISOString() })
+    .in("id", activityIds)
+    .eq("user_id", user.id);
+
+  if (error) return { error: error.message };
+
+  revalidateAll();
+  return {};
+}
+
+// ---------------------------------------------------------------------------
 // Bulk archive
 // ---------------------------------------------------------------------------
 
