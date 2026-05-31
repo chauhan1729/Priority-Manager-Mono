@@ -10,7 +10,7 @@ import {
 
 export const meetingStatusSchema = z.enum(["upcoming", "completed", "missed", "cancelled"]);
 
-export const meetingSchema = z
+const meetingBaseSchema = z
   .object({
     id: uuidSchema,
     user_id: uuidSchema,
@@ -27,7 +27,9 @@ export const meetingSchema = z
     status: meetingStatusSchema.default("upcoming"),
     created_at: isoDatetimeSchema,
     updated_at: isoDatetimeSchema,
-  })
+  });
+
+export const meetingSchema = meetingBaseSchema
   .superRefine((data, ctx) => {
     if (data.start_at >= data.end_at) {
       ctx.addIssue({
@@ -38,7 +40,7 @@ export const meetingSchema = z
     }
   });
 
-export const insertMeetingSchema = meetingSchema
+export const insertMeetingSchema = meetingBaseSchema
   .omit({ id: true, created_at: true, updated_at: true });
 
 /**

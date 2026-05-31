@@ -29,6 +29,7 @@ type YearEntrySummary = Pick<YearEntry, "id" | "title" | "type" | "start_date" |
 
 interface Props {
   expense: Expense;
+  currency: string;
   linkedProject: ProjectSummary | null;
   linkedContact: ContactSummary | null;
   linkedYearEntry: YearEntrySummary | null;
@@ -40,6 +41,7 @@ interface Props {
 
 export function ExpenseCard({
   expense,
+  currency,
   linkedProject,
   linkedContact,
   linkedYearEntry,
@@ -57,7 +59,7 @@ export function ExpenseCard({
         {/* Top row: amount + actions */}
         <div className="flex items-start justify-between gap-2 mb-2">
           <p className="font-handwriting text-2xl text-ink leading-none">
-            {formatExpenseAmount(expense.amount)}
+            {formatExpenseAmount(expense.amount, currency)}
           </p>
           <div className="flex items-center gap-1 flex-shrink-0">
             <button

@@ -12,7 +12,7 @@ export const monthlyPriorityStatusSchema = z.enum([
 ]);
 export const progressModeSchema = z.enum(["manual", "auto_project"]);
 
-export const monthlyPrioritySchema = z
+const monthlyPriorityBaseSchema = z
   .object({
     id: uuidSchema,
     user_id: uuidSchema,
@@ -32,7 +32,9 @@ export const monthlyPrioritySchema = z
     month_key: monthKeySchema,
     created_at: isoDatetimeSchema,
     updated_at: isoDatetimeSchema,
-  })
+  });
+
+export const monthlyPrioritySchema = monthlyPriorityBaseSchema
   .superRefine((data, ctx) => {
     // auto_project mode requires a linked project
     if (data.progress_mode === "auto_project" && !data.linked_project_id) {
@@ -44,7 +46,7 @@ export const monthlyPrioritySchema = z
     }
   });
 
-export const insertMonthlyPrioritySchema = monthlyPrioritySchema
+export const insertMonthlyPrioritySchema = monthlyPriorityBaseSchema
   .omit({ id: true, created_at: true, updated_at: true });
 
 export const updateMonthlyPrioritySchema = insertMonthlyPrioritySchema

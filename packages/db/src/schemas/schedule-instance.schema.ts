@@ -11,7 +11,7 @@ export const scheduleInstanceStatusSchema = z.enum([
   "missed",
 ]);
 
-export const scheduleInstanceSchema = z
+const scheduleInstanceBaseSchema = z
   .object({
     id: uuidSchema,
     user_id: uuidSchema,
@@ -28,7 +28,9 @@ export const scheduleInstanceSchema = z
     keep_as_history: z.boolean().default(true),
     created_at: isoDatetimeSchema,
     updated_at: isoDatetimeSchema,
-  })
+  });
+
+export const scheduleInstanceSchema = scheduleInstanceBaseSchema
   .superRefine((data, ctx) => {
     // Time order
     if (data.start_at >= data.end_at) {
@@ -70,7 +72,7 @@ export const scheduleInstanceSchema = z
     }
   });
 
-export const insertScheduleInstanceSchema = scheduleInstanceSchema
+export const insertScheduleInstanceSchema = scheduleInstanceBaseSchema
   .omit({ id: true, created_at: true, updated_at: true });
 
 export const updateScheduleInstanceSchema = z.object({

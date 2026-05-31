@@ -23,7 +23,7 @@ export const calendarEventSourceTypeSchema = z.enum([
   "expense_recurring",
 ]);
 
-export const calendarEventSchema = z
+const calendarEventBaseSchema = z
   .object({
     id: uuidSchema,
     user_id: uuidSchema,
@@ -44,7 +44,9 @@ export const calendarEventSchema = z
     source_type: calendarEventSourceTypeSchema.default("calendar"),
     created_at: isoDatetimeSchema,
     updated_at: isoDatetimeSchema,
-  })
+  });
+
+export const calendarEventSchema = calendarEventBaseSchema
   .superRefine((data, ctx) => {
     // start before end when both provided
     if (data.start_at && data.end_at && data.start_at >= data.end_at) {
@@ -80,7 +82,7 @@ export const calendarEventSchema = z
     }
   });
 
-export const insertCalendarEventSchema = calendarEventSchema
+export const insertCalendarEventSchema = calendarEventBaseSchema
   .omit({ id: true, created_at: true, updated_at: true });
 
 export const updateCalendarEventSchema = insertCalendarEventSchema

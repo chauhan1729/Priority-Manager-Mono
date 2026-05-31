@@ -27,6 +27,7 @@ export interface ReminderPreference {
   activity_overdue_enabled: boolean;
   // Calendar event (appointment/other) reminders
   event_reminder_minutes_before: number;
+  currency_code: string; // ISO 4217 code, e.g. "USD" (app-wide display currency)
   created_at: string;
   updated_at: string;
 }

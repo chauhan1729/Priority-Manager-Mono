@@ -6,8 +6,10 @@ import { useState, useTransition } from "react";
 import type { Contact, Expense, Project, YearEntry } from "@pm/types";
 import {
   applyExpenseFilters,
+  computeBudgetStatus,
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
+  formatExpenseAmount,
   formatMonthLabel,
   getNextMonthKey,
   getPrevMonthKey,
@@ -23,6 +25,10 @@ import {
   type CreateExpenseData,
   type UpdateExpenseData,
 } from "@/app/(app)/expense-record/actions";
+import {
+  clearMonthlyBudget,
+  setMonthlyBudget,
+} from "@/app/(app)/expense-record/budget-actions";
 import { showToast } from "@/components/ui/Toaster";
 import { ExpenseCard } from "./ExpenseCard";
 import { ExpenseFormModal } from "./ExpenseFormModal";
@@ -43,6 +49,9 @@ interface Props {
   todayTotal: number;
   weekTotal: number;
   monthTotal: number;
+  currency: string;
+  monthlyBudget: number | null;
+  viewingMonthSpent: number;
   projects: ProjectSummary[];
   contacts: ContactSummary[];
   yearEntries: YearEntrySummary[];
@@ -58,6 +67,9 @@ export function ExpenseRecordView({
   todayTotal,
   weekTotal,
   monthTotal,
+  currency,
+  monthlyBudget,
+  viewingMonthSpent,
   projects,
   contacts,
   yearEntries,
@@ -68,6 +80,7 @@ export function ExpenseRecordView({
   const [formTarget, setFormTarget] = useState<null | "new" | Expense>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<ExpenseFilters>({});
+  const [editingBudget, setEditingBudget] = useState(false);
 
   // Apply filters to the viewing month's expenses
   const filtered = applyExpenseFilters(expenses, filters);
@@ -128,6 +141,30 @@ export function ExpenseRecordView({
       } else {
         showToast("One-time expense recorded");
         setFormTarget(null);
+      }
+    });
+  }
+
+  function handleSaveBudget(amount: number) {
+    startTransition(async () => {
+      const result = await setMonthlyBudget(viewingMonthKey, amount);
+      if (result && "error" in result) {
+        showToast(result.error, "error");
+      } else {
+        showToast("Budget saved");
+        setEditingBudget(false);
+      }
+    });
+  }
+
+  function handleClearBudget() {
+    startTransition(async () => {
+      const result = await clearMonthlyBudget(viewingMonthKey);
+      if (result && "error" in result) {
+        showToast(result.error, "error");
+      } else {
+        showToast("Budget removed");
+        setEditingBudget(false);
       }
     });
   }
@@ -212,6 +249,20 @@ export function ExpenseRecordView({
           todayTotal={todayTotal}
           weekTotal={weekTotal}
           monthTotal={monthTotal}
+          currency={currency}
+        />
+
+        {/* Monthly budget for the viewed month */}
+        <BudgetBar
+          monthLabel={monthLabel}
+          budget={monthlyBudget}
+          spent={viewingMonthSpent}
+          currency={currency}
+          editing={editingBudget}
+          onStartEdit={() => setEditingBudget(true)}
+          onCancel={() => setEditingBudget(false)}
+          onSave={handleSaveBudget}
+          onClear={handleClearBudget}
         />
 
         {/* Quick add bar */}
@@ -379,9 +430,9 @@ export function ExpenseRecordView({
                   </p>
                   <div className="flex-1 h-px bg-blue-50" />
                   <p className="text-xs text-ink-light">
-                    {dayExpenses.reduce((s, e) => s + Number(e.amount), 0).toLocaleString(
-                      "en-US",
-                      { style: "currency", currency: "USD" },
+                    {formatExpenseAmount(
+                      dayExpenses.reduce((s, e) => s + Number(e.amount), 0),
+                      currency,
                     )}
                   </p>
                 </div>
@@ -403,6 +454,7 @@ export function ExpenseRecordView({
                       <ExpenseCard
                         key={expense.id}
                         expense={expense}
+                        currency={currency}
                         linkedProject={linkedProject ?? null}
                         linkedContact={linkedContact ?? null}
                         linkedYearEntry={linkedYearEntry ?? null}
@@ -422,6 +474,7 @@ export function ExpenseRecordView({
           <UpcomingRecurringPanel
             recurringExpenses={recurringExpenses}
             today={today}
+            currency={currency}
             onEdit={(expense) => setFormTarget(expense)}
           />
         )}
@@ -444,6 +497,138 @@ export function ExpenseRecordView({
           }
         />
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Budget bar — shows spent vs. the budget for the viewed month
+// ---------------------------------------------------------------------------
+
+interface BudgetBarProps {
+  monthLabel: string;
+  budget: number | null;
+  spent: number;
+  currency: string;
+  editing: boolean;
+  onStartEdit: () => void;
+  onCancel: () => void;
+  onSave: (amount: number) => void;
+  onClear: () => void;
+}
+
+function BudgetBar({
+  monthLabel,
+  budget,
+  spent,
+  currency,
+  editing,
+  onStartEdit,
+  onCancel,
+  onSave,
+  onClear,
+}: BudgetBarProps) {
+  const [draft, setDraft] = useState(budget != null ? String(budget) : "");
+
+  const status = computeBudgetStatus(spent, budget);
+  const pct = Math.min(100, Math.max(0, status.percentUsed));
+  const barColor = status.isOver
+    ? "bg-red-500"
+    : pct >= 80
+      ? "bg-amber-500"
+      : "bg-blue-500";
+
+  if (editing) {
+    return (
+      <div className="rounded-xl border border-blue-100 bg-white shadow-sm px-5 py-4">
+        <p className="text-sm font-medium text-ink mb-2">
+          Set budget for {monthLabel}
+        </p>
+        <div className="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            step="0.01"
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder="0.00"
+            className="w-40 rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-blue-400"
+          />
+          <button
+            onClick={() => onSave(Number(draft) || 0)}
+            className="rounded-lg bg-blue-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-blue-700 transition"
+          >
+            Save
+          </button>
+          <button
+            onClick={onCancel}
+            className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs text-ink-light hover:border-blue-400 hover:text-ink transition"
+          >
+            Cancel
+          </button>
+          {budget != null && (
+            <button
+              onClick={onClear}
+              className="ml-auto text-xs text-ink-light hover:text-red-500 transition"
+            >
+              Remove budget
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!status.hasBudget) {
+    return (
+      <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50/30 px-4 py-3 flex items-center justify-between">
+        <p className="text-sm text-ink-light">
+          No budget set for {monthLabel}.
+        </p>
+        <button
+          onClick={onStartEdit}
+          className="rounded-lg border border-blue-200 px-3 py-1.5 text-xs font-medium text-ink-light hover:border-blue-400 hover:text-ink transition"
+        >
+          Set budget
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl border border-blue-100 bg-white shadow-sm px-5 py-4">
+      <div className="flex items-end justify-between mb-2">
+        <div>
+          <p className="text-xs text-ink-light">Budget · {monthLabel}</p>
+          <p className="text-sm text-ink">
+            <span className="font-medium">{formatExpenseAmount(spent, currency)}</span>
+            {" of "}
+            {formatExpenseAmount(status.budget, currency)}
+          </p>
+        </div>
+        <button
+          onClick={onStartEdit}
+          className="text-xs text-ink-light hover:text-ink transition"
+        >
+          Edit
+        </button>
+      </div>
+
+      <div className="h-2.5 w-full rounded-full bg-blue-50 overflow-hidden">
+        <div
+          className={`h-full rounded-full ${barColor} transition-all`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <p
+        className={`mt-1.5 text-xs ${status.isOver ? "text-red-600" : "text-ink-light"}`}
+      >
+        {status.isOver
+          ? `Over by ${formatExpenseAmount(spent - status.budget, currency)}`
+          : `${formatExpenseAmount(status.remaining, currency)} remaining · ${Math.round(status.percentUsed)}% used`}
+      </p>
     </div>
   );
 }

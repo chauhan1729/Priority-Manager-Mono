@@ -19,6 +19,7 @@ import {
   getUpcomingOccurrences,
   groupExpensesByDate,
   formatExpenseAmount,
+  currencySymbol,
 } from "../expense";
 
 // ---------------------------------------------------------------------------
@@ -391,6 +392,31 @@ describe("formatExpenseAmount", () => {
     expect(formatExpenseAmount(9.99)).toBe("$9.99");
     expect(formatExpenseAmount(1000)).toBe("$1,000.00");
     expect(formatExpenseAmount(0)).toBe("$0.00");
+  });
+
+  it("defaults to USD when no currency is given", () => {
+    expect(formatExpenseAmount(1000)).toContain("$");
+  });
+
+  it("formats a non-USD currency (EUR)", () => {
+    // Tolerant of locale/symbol placement: just assert the currency symbol is present.
+    expect(formatExpenseAmount(1000, "EUR")).toContain("€");
+  });
+
+  it("formats a non-USD currency (GBP)", () => {
+    expect(formatExpenseAmount(1000, "GBP")).toContain("£");
+  });
+});
+
+describe("currencySymbol", () => {
+  it("resolves known currency symbols", () => {
+    expect(currencySymbol("USD")).toBe("$");
+    expect(currencySymbol("EUR")).toBe("€");
+    expect(currencySymbol("INR")).toBe("₹");
+  });
+
+  it("falls back to the code itself when unknown", () => {
+    expect(currencySymbol("XYZ")).toBe("XYZ");
   });
 });
 

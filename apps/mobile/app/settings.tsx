@@ -23,6 +23,7 @@ import {
   useUpdateReminderPreferences,
 } from '../src/hooks/useSettings';
 import { useNotifications } from '../src/components/providers/NotificationProvider';
+import { CURRENCY_OPTIONS } from '@pm/domain';
 import { TimePickerField } from '../src/components/ui/TimePickerField';
 import {
   getNotificationSound,
@@ -173,6 +174,7 @@ export default function SettingsScreen() {
   const [activityOverdueEnabled, setActivityOverdueEnabled] = useState(true);
   const [eventMinutes, setEventMinutes] = useState(15);
   const [timezone, setTimezone] = useState('UTC');
+  const [currencyCode, setCurrencyCode] = useState('USD');
   const [notificationSound, setNotificationSound] = useState<NotificationSound>('default');
   // Track the value last persisted to AsyncStorage so dirty check works.
   const savedSoundRef = useRef<NotificationSound>('default');
@@ -197,6 +199,7 @@ export default function SettingsScreen() {
       setActivityMinutes(prefs.activity_reminder_minutes_before ?? 5);
       setActivityOverdueEnabled(prefs.activity_overdue_enabled ?? true);
       setEventMinutes(prefs.event_reminder_minutes_before ?? 15);
+      setCurrencyCode(prefs.currency_code ?? 'USD');
     }
   }, [prefs]);
 
@@ -234,6 +237,7 @@ export default function SettingsScreen() {
       activityMinutes !== prefs.activity_reminder_minutes_before ||
       activityOverdueEnabled !== prefs.activity_overdue_enabled ||
       eventMinutes !== prefs.event_reminder_minutes_before ||
+      currencyCode !== prefs.currency_code ||
       timezone !== profile.timezone ||
       notificationSound !== savedSoundRef.current
     );
@@ -243,7 +247,7 @@ export default function SettingsScreen() {
     eodEnabled, eodTime,
     meetingMinutes, birthdayDays, travelDays, renewalDays,
     activityStartingEnabled, activityMinutes, activityOverdueEnabled, eventMinutes,
-    timezone, notificationSound,
+    currencyCode, timezone, notificationSound,
   ]);
 
   const saving = updatePrefs.isPending || updateProfile.isPending;
@@ -264,6 +268,7 @@ export default function SettingsScreen() {
           activity_reminder_minutes_before: activityMinutes,
           activity_overdue_enabled: activityOverdueEnabled,
           event_reminder_minutes_before: eventMinutes,
+          currency_code: currencyCode,
         }),
         updateProfile.mutateAsync({
           timezone,
@@ -294,6 +299,7 @@ export default function SettingsScreen() {
     setActivityMinutes(prefs.activity_reminder_minutes_before ?? 5);
     setActivityOverdueEnabled(prefs.activity_overdue_enabled ?? true);
     setEventMinutes(prefs.event_reminder_minutes_before ?? 15);
+    setCurrencyCode(prefs.currency_code ?? 'USD');
     setTimezone(profile.timezone);
     setNotificationSound(savedSoundRef.current);
   };
@@ -525,6 +531,21 @@ export default function SettingsScreen() {
             <Text style={styles.rowValue} numberOfLines={1}>{timezone}</Text>
             <Text style={styles.chevron}>›</Text>
           </TouchableOpacity>
+        </View>
+
+        {/* Currency */}
+        <View style={styles.group}>
+          <Text style={styles.groupLabel}>Currency</Text>
+          <Text style={styles.rowHelp}>Applied to all expense amounts. Existing amounts are re-labeled, not converted.</Text>
+          <OptionPickerRow
+            options={CURRENCY_OPTIONS.map((c) => c.code)}
+            value={currencyCode}
+            format={(code) => {
+              const opt = CURRENCY_OPTIONS.find((c) => c.code === code);
+              return opt ? `${opt.code} ${opt.symbol}` : code;
+            }}
+            onSelect={setCurrencyCode}
+          />
         </View>
 
         {/* Developer */}

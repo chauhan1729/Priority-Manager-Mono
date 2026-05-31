@@ -7,7 +7,11 @@
   },
   "scripts": {
     "type-check": "tsc --noEmit",
-    "db:generate-types": "supabase gen types typescript --local > src/database.types.ts"
+    "db:link": "supabase link --project-ref \"$SUPABASE_PROJECT_REF\"",
+    "db:push": "supabase db push",
+    "db:push:url": "supabase db push --db-url \"$SUPABASE_DB_URL\"",
+    "db:generate-types": "supabase gen types typescript --local > src/database.types.ts",
+    "db:generate-types:remote": "supabase gen types typescript --linked > src/database.types.ts"
   },
   "dependencies": {
     "@pm/types": "workspace:*",

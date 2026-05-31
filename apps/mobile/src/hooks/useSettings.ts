@@ -33,6 +33,7 @@ const REMINDER_PREF_DEFAULTS = {
   activity_reminder_minutes_before: 5,
   activity_overdue_enabled: true,
   event_reminder_minutes_before: 15,
+  currency_code: 'USD',
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -73,6 +74,7 @@ export type UpdateReminderPreferencesData = Partial<
     | 'activity_reminder_minutes_before'
     | 'activity_overdue_enabled'
     | 'event_reminder_minutes_before'
+    | 'currency_code'
   >
 >;
 

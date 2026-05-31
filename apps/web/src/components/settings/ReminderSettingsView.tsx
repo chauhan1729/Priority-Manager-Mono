@@ -2,6 +2,8 @@
 
 import { useState, useTransition } from "react";
 
+import { CURRENCY_OPTIONS } from "@pm/domain";
+
 import {
   updateProfilePrefs,
   updateReminderPreferences,
@@ -103,6 +105,7 @@ interface ReminderPreferenceRow {
   birthday_reminder_days_before: number;
   travel_reminder_days_before: number;
   renewal_reminder_days_before: number;
+  currency_code: string;
 }
 
 // Defaults shown when no row exists yet
@@ -115,6 +118,7 @@ const DEFAULTS: ReminderPreferenceRow = {
   birthday_reminder_days_before: 1,
   travel_reminder_days_before: 1,
   renewal_reminder_days_before: 3,
+  currency_code: "USD",
 };
 
 interface Props {
@@ -132,13 +136,15 @@ export function ReminderSettingsView({ prefs, timezone: initialTimezone }: Props
     if (!prefs) return DEFAULTS;
     return {
       eod_review_enabled: prefs.eod_review_enabled ?? DEFAULTS.eod_review_enabled,
-      eod_review_time: (prefs.eod_review_time as string | null) || DEFAULTS.eod_review_time,
+      // Postgres `time` columns come back as "HH:MM:SS"; the time input + server expect "HH:MM".
+      eod_review_time: ((prefs.eod_review_time as string | null)?.slice(0, 5)) || DEFAULTS.eod_review_time,
       meeting_reminder_minutes_before: prefs.meeting_reminder_minutes_before ?? DEFAULTS.meeting_reminder_minutes_before,
       morning_summary_enabled: prefs.morning_summary_enabled ?? DEFAULTS.morning_summary_enabled,
-      morning_summary_time: (prefs.morning_summary_time as string | null) || DEFAULTS.morning_summary_time,
+      morning_summary_time: ((prefs.morning_summary_time as string | null)?.slice(0, 5)) || DEFAULTS.morning_summary_time,
       birthday_reminder_days_before: prefs.birthday_reminder_days_before ?? DEFAULTS.birthday_reminder_days_before,
       travel_reminder_days_before: prefs.travel_reminder_days_before ?? DEFAULTS.travel_reminder_days_before,
       renewal_reminder_days_before: prefs.renewal_reminder_days_before ?? DEFAULTS.renewal_reminder_days_before,
+      currency_code: (prefs.currency_code as string | null) || DEFAULTS.currency_code,
     };
   });
   const [timezone, setTimezone] = useState(initialTimezone || "UTC");
@@ -187,6 +193,24 @@ export function ReminderSettingsView({ prefs, timezone: initialTimezone }: Props
             ))}
           </select>
           <p className="mt-1 text-xs text-ink-light">Used for scheduling reminders and displaying the correct local date/time.</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1">Currency</label>
+          <select
+            value={form.currency_code}
+            onChange={(e) => setField("currency_code", e.target.value)}
+            className="w-full max-w-sm rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-blue-400"
+          >
+            {CURRENCY_OPTIONS.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} — {c.label} ({c.symbol})
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-ink-light">
+            Applied to all expense amounts across the app. Existing amounts are re-labeled, not converted.
+          </p>
         </div>
       </section>
 

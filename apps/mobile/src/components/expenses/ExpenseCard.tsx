@@ -33,6 +33,7 @@ const CATEGORY_COLORS: Record<ExpenseCategory, { bg: string; text: string }> = {
 
 interface Props {
   expense: Expense;
+  currency?: string;
   projectName?: string | null;
   contactName?: string | null;
   tripTitle?: string | null;
@@ -46,6 +47,7 @@ interface Props {
 
 function ExpenseCardBase({
   expense,
+  currency = 'USD',
   projectName,
   contactName,
   tripTitle,
@@ -65,7 +67,7 @@ function ExpenseCardBase({
       {/* Top row: title + amount */}
       <View style={styles.topRow}>
         <Text style={styles.title} numberOfLines={1}>{expense.title}</Text>
-        <Text style={styles.amount}>{formatExpenseAmount(expense.amount)}</Text>
+        <Text style={styles.amount}>{formatExpenseAmount(expense.amount, currency)}</Text>
       </View>
 
       {/* Meta row: date, merchant, payment method */}

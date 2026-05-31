@@ -10,4 +10,5 @@ export * from "./entities/schedule-instance";
 export * from "./entities/contact";
 export * from "./entities/meeting";
 export * from "./entities/expense";
+export * from "./entities/expense-budget";
 export * from "./entities/reminder-preference";

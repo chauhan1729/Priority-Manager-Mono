@@ -5,7 +5,7 @@ import { isoDateSchema, isoDatetimeSchema, uuidSchema } from "./common";
 export const yearEntryTypeSchema = z.enum(["travel", "away", "birthday"]);
 export const availabilityStatusSchema = z.enum(["available", "away", "partial"]);
 
-export const yearEntrySchema = z
+const yearEntryBaseSchema = z
   .object({
     id: uuidSchema,
     user_id: uuidSchema,
@@ -20,7 +20,9 @@ export const yearEntrySchema = z
     linked_project_id: uuidSchema.nullable(),
     created_at: isoDatetimeSchema,
     updated_at: isoDatetimeSchema,
-  })
+  });
+
+export const yearEntrySchema = yearEntryBaseSchema
   .superRefine((data, ctx) => {
     // Spec §10.1: birthday entries are single-day only
     if (data.type === "birthday" && data.end_date !== null) {
@@ -48,7 +50,7 @@ export const yearEntrySchema = z
     }
   });
 
-export const insertYearEntrySchema = yearEntrySchema
+export const insertYearEntrySchema = yearEntryBaseSchema
   .omit({ id: true, created_at: true, updated_at: true });
 
 export const updateYearEntrySchema = insertYearEntrySchema
