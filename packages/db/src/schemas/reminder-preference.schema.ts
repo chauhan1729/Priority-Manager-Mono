@@ -23,6 +23,7 @@ export const reminderPreferenceSchema = z.object({
   birthday_reminder_days_before: z.number().int().min(0).max(30).default(1),
   travel_reminder_days_before: z.number().int().min(0).max(30).default(1),
   renewal_reminder_days_before: z.number().int().min(0).max(30).default(3),
+  currency_code: z.string().regex(/^[A-Z]{3}$/).default("USD"),
   created_at: isoDatetimeSchema,
   updated_at: isoDatetimeSchema,
 });

@@ -1,5 +1,6 @@
 export * from "./time-rules";
 export * from "./expense";
+export * from "./expense-budget";
 export * from "./notification";
 export * from "./sync";
 export * from "./activity";

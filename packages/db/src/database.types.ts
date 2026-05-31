@@ -412,6 +412,7 @@ export interface Database {
           linked_project_id: string | null;
           linked_meeting_id: string | null;
           linked_year_entry_id: string | null;
+          linked_expense_id: string | null;
           location: string | null;
           notes: string | null;
           recurrence_rule: RecurrenceRule | null;
@@ -433,6 +434,7 @@ export interface Database {
           linked_project_id?: string | null;
           linked_meeting_id?: string | null;
           linked_year_entry_id?: string | null;
+          linked_expense_id?: string | null;
           location?: string | null;
           notes?: string | null;
           recurrence_rule?: RecurrenceRule | null;
@@ -578,6 +580,11 @@ export interface Database {
           birthday_reminder_days_before: number;
           travel_reminder_days_before: number;
           renewal_reminder_days_before: number;
+          activity_starting_enabled: boolean;
+          activity_reminder_minutes_before: number;
+          activity_overdue_enabled: boolean;
+          event_reminder_minutes_before: number;
+          currency_code: string; // ISO 4217, app-wide expense display currency
           created_at: string;
           updated_at: string;
         };
@@ -592,10 +599,55 @@ export interface Database {
           birthday_reminder_days_before?: number;
           travel_reminder_days_before?: number;
           renewal_reminder_days_before?: number;
+          activity_starting_enabled?: boolean;
+          activity_reminder_minutes_before?: number;
+          activity_overdue_enabled?: boolean;
+          event_reminder_minutes_before?: number;
+          currency_code?: string;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Omit<Database["public"]["Tables"]["reminder_preferences"]["Insert"], "user_id">>;
+      };
+
+      expense_budgets: {
+        Row: {
+          id: string;
+          user_id: string;
+          month: string; // "YYYY-MM"
+          amount: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          month: string;
+          amount?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["expense_budgets"]["Insert"], "user_id">>;
+      };
+
+      calendar_month_notes: {
+        Row: {
+          id: string;
+          user_id: string;
+          month_key: string; // "YYYY-MM"
+          notes: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          month_key: string;
+          notes?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["calendar_month_notes"]["Insert"], "user_id">>;
       };
 
       reminder_instances: {
@@ -644,6 +696,8 @@ export type CalendarEventRow = Database["public"]["Tables"]["calendar_events"]["
 export type ActivityRow = Database["public"]["Tables"]["activities"]["Row"];
 export type ScheduleInstanceRow = Database["public"]["Tables"]["schedule_instances"]["Row"];
 export type ExpenseRow = Database["public"]["Tables"]["expenses"]["Row"];
+export type ExpenseBudgetRow = Database["public"]["Tables"]["expense_budgets"]["Row"];
+export type CalendarMonthNoteRow = Database["public"]["Tables"]["calendar_month_notes"]["Row"];
 export type ReminderPreferenceRow = Database["public"]["Tables"]["reminder_preferences"]["Row"];
 export type ReminderInstanceRow = Database["public"]["Tables"]["reminder_instances"]["Row"];
 
@@ -661,5 +715,7 @@ export type InsertCalendarEvent = Database["public"]["Tables"]["calendar_events"
 export type InsertActivity = Database["public"]["Tables"]["activities"]["Insert"];
 export type InsertScheduleInstance = Database["public"]["Tables"]["schedule_instances"]["Insert"];
 export type InsertExpense = Database["public"]["Tables"]["expenses"]["Insert"];
+export type InsertExpenseBudget = Database["public"]["Tables"]["expense_budgets"]["Insert"];
+export type InsertCalendarMonthNote = Database["public"]["Tables"]["calendar_month_notes"]["Insert"];
 export type InsertReminderPreference = Database["public"]["Tables"]["reminder_preferences"]["Insert"];
 export type InsertReminderInstance = Database["public"]["Tables"]["reminder_instances"]["Insert"];

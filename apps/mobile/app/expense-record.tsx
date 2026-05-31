@@ -4,6 +4,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import {
   Alert,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +19,7 @@ import {
   EXPENSE_CATEGORIES,
   EXPENSE_CATEGORY_LABELS,
   applyExpenseFilters,
+  computeBudgetStatus,
   type ExpenseFilters,
   filterExpensesForDate,
   filterExpensesForMonth,
@@ -33,6 +35,8 @@ import {
   sumExpenses,
 } from '@pm/domain';
 import { useExpenses, useDeleteExpense, useCreateExpense, type CreateExpenseData } from '../src/hooks/useExpenses';
+import { useMonthlyBudget, useSetMonthlyBudget, useClearMonthlyBudget } from '../src/hooks/useBudget';
+import { useReminderPreferences } from '../src/hooks/useSettings';
 import { useProjects } from '../src/hooks/useProjects';
 import { useContacts } from '../src/hooks/useContacts';
 import { useYearEntries } from '../src/hooks/useYearEntries';
@@ -80,6 +84,17 @@ export default function ExpenseRecordScreen() {
   const { data: yearEntries = [] } = useYearEntries(new Date().getFullYear());
   const deleteMutation = useDeleteExpense();
   const createExpense = useCreateExpense();
+
+  // App-wide display currency
+  const { data: prefs } = useReminderPreferences();
+  const currency = prefs?.currency_code ?? 'USD';
+
+  // Per-month budget
+  const { data: budget = null } = useMonthlyBudget(monthKey);
+  const setBudget = useSetMonthlyBudget();
+  const clearBudget = useClearMonthlyBudget();
+  const [budgetModalVisible, setBudgetModalVisible] = useState(false);
+  const [budgetDraft, setBudgetDraft] = useState('');
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -285,6 +300,45 @@ export default function ExpenseRecordScreen() {
   }
 
   // ---------------------------------------------------------------------------
+  // Budget
+  // ---------------------------------------------------------------------------
+
+  const budgetStatus = useMemo(
+    () => computeBudgetStatus(monthTotal, budget),
+    [monthTotal, budget],
+  );
+
+  function openBudgetModal() {
+    setBudgetDraft(budget != null ? String(budget) : '');
+    setBudgetModalVisible(true);
+  }
+
+  function handleSaveBudget() {
+    const amount = parseFloat(budgetDraft);
+    if (isNaN(amount) || amount < 0) {
+      Alert.alert('Invalid', 'Enter a valid non-negative amount.');
+      return;
+    }
+    setBudget.mutate(
+      { monthKey, amount },
+      {
+        onSuccess: () => {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          setBudgetModalVisible(false);
+        },
+        onError: (e: Error) => Alert.alert('Error', e.message),
+      },
+    );
+  }
+
+  function handleClearBudget() {
+    clearBudget.mutate(monthKey, {
+      onSuccess: () => setBudgetModalVisible(false),
+      onError: (e: Error) => Alert.alert('Error', e.message),
+    });
+  }
+
+  // ---------------------------------------------------------------------------
   // Render
   // ---------------------------------------------------------------------------
 
@@ -340,10 +394,52 @@ export default function ExpenseRecordScreen() {
         style={styles.summaryStrip}
         contentContainerStyle={styles.summaryStripContent}
       >
-        <SummaryTile label="Today" value={formatExpenseAmount(todayTotal)} />
-        <SummaryTile label="This Week" value={formatExpenseAmount(weekTotal)} />
-        <SummaryTile label="This Month" value={formatExpenseAmount(monthTotal)} />
+        <SummaryTile label="Today" value={formatExpenseAmount(todayTotal, currency)} />
+        <SummaryTile label="This Week" value={formatExpenseAmount(weekTotal, currency)} />
+        <SummaryTile label="This Month" value={formatExpenseAmount(monthTotal, currency)} />
       </ScrollView>
+
+      {/* Budget card for the viewed month */}
+      <View style={styles.budgetCard}>
+        {budgetStatus.hasBudget ? (
+          <>
+            <View style={styles.budgetHeader}>
+              <Text style={styles.budgetTitle}>
+                Budget · {formatExpenseAmount(monthTotal, currency)} of{' '}
+                {formatExpenseAmount(budgetStatus.budget, currency)}
+              </Text>
+              <TouchableOpacity onPress={openBudgetModal}>
+                <Text style={styles.budgetEdit}>Edit</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.budgetTrack}>
+              <View
+                style={[
+                  styles.budgetFill,
+                  { width: `${Math.min(100, Math.max(0, budgetStatus.percentUsed))}%` },
+                  budgetStatus.isOver
+                    ? styles.budgetFillOver
+                    : budgetStatus.percentUsed >= 80
+                      ? styles.budgetFillWarn
+                      : null,
+                ]}
+              />
+            </View>
+            <Text style={[styles.budgetMeta, budgetStatus.isOver && styles.budgetMetaOver]}>
+              {budgetStatus.isOver
+                ? `Over by ${formatExpenseAmount(monthTotal - budgetStatus.budget, currency)}`
+                : `${formatExpenseAmount(budgetStatus.remaining, currency)} remaining · ${Math.round(budgetStatus.percentUsed)}% used`}
+            </Text>
+          </>
+        ) : (
+          <View style={styles.budgetHeader}>
+            <Text style={styles.budgetEmpty}>No budget set for {formatMonthLabel(monthKey)}.</Text>
+            <TouchableOpacity onPress={openBudgetModal}>
+              <Text style={styles.budgetEdit}>Set budget</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </View>
 
       {/* Quick add bar */}
       <View style={styles.quickAddBar}>
@@ -558,13 +654,14 @@ export default function ExpenseRecordScreen() {
               return (
                 <View style={styles.dateHeader}>
                   <Text style={styles.dateHeaderText}>{formatExpenseDate(item.date)}</Text>
-                  <Text style={styles.dateSubtotal}>{formatExpenseAmount(item.subtotal)}</Text>
+                  <Text style={styles.dateSubtotal}>{formatExpenseAmount(item.subtotal, currency)}</Text>
                 </View>
               );
             }
             return (
               <ExpenseCard
                 expense={item.expense}
+                currency={currency}
                 projectName={
                   item.expense.linked_project_id
                     ? projectMap.get(item.expense.linked_project_id) ?? null
@@ -610,7 +707,7 @@ export default function ExpenseRecordScreen() {
                           {item.expense.title}
                         </Text>
                         <Text style={styles.upcomingAmount}>
-                          {formatExpenseAmount(item.expense.amount)}
+                          {formatExpenseAmount(item.expense.amount, currency)}
                         </Text>
                       </View>
                     ))}
@@ -635,6 +732,53 @@ export default function ExpenseRecordScreen() {
           setEditExpense(null);
         }}
       />
+
+      {/* Budget modal */}
+      <Modal
+        visible={budgetModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setBudgetModalVisible(false)}
+      >
+        <View style={styles.budgetModalBackdrop}>
+          <View style={styles.budgetModalCard}>
+            <Text style={styles.budgetModalTitle}>
+              Budget for {formatMonthLabel(monthKey)}
+            </Text>
+            <TextInput
+              style={styles.budgetModalInput}
+              value={budgetDraft}
+              onChangeText={setBudgetDraft}
+              placeholder="0.00"
+              placeholderTextColor={colors.gray[400]}
+              keyboardType="decimal-pad"
+              autoFocus
+            />
+            <View style={styles.budgetModalActions}>
+              {budget != null ? (
+                <TouchableOpacity onPress={handleClearBudget} style={styles.budgetModalRemove}>
+                  <Text style={styles.budgetModalRemoveText}>Remove</Text>
+                </TouchableOpacity>
+              ) : (
+                <View style={{ flex: 1 }} />
+              )}
+              <TouchableOpacity
+                onPress={() => setBudgetModalVisible(false)}
+                style={styles.budgetModalCancel}
+              >
+                <Text style={styles.budgetModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSaveBudget}
+                style={styles.budgetModalSave}
+                disabled={setBudget.isPending}
+              >
+                <Text style={styles.budgetModalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -781,6 +925,127 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.ink.DEFAULT,
     marginTop: 2,
+  },
+
+  // Budget card
+  budgetCard: {
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.blue[100],
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    gap: spacing.xs,
+  },
+  budgetHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  budgetTitle: {
+    flex: 1,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.ink.DEFAULT,
+  },
+  budgetEmpty: {
+    flex: 1,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.gray[500],
+  },
+  budgetEdit: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    fontWeight: '600',
+    color: colors.blue[600],
+    paddingLeft: spacing.sm,
+  },
+  budgetTrack: {
+    height: 8,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.blue[50],
+    overflow: 'hidden',
+  },
+  budgetFill: {
+    height: '100%',
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.blue[500],
+  },
+  budgetFillWarn: { backgroundColor: colors.amber[500] },
+  budgetFillOver: { backgroundColor: colors.red[500] },
+  budgetMeta: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.xs,
+    color: colors.gray[500],
+  },
+  budgetMetaOver: { color: colors.red[600], fontWeight: '600' },
+
+  // Budget modal
+  budgetModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  budgetModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: borderRadius.lg,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  budgetModalTitle: {
+    fontFamily: fontFamily.handwriting,
+    fontSize: fontSize.xl,
+    color: colors.ink.DEFAULT,
+  },
+  budgetModalInput: {
+    height: 48,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.blue[200],
+    backgroundColor: colors.blue[50],
+    paddingHorizontal: spacing.md,
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.lg,
+    color: colors.ink.DEFAULT,
+  },
+  budgetModalActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  budgetModalRemove: { flex: 1 },
+  budgetModalRemoveText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.red[500],
+    fontWeight: '500',
+  },
+  budgetModalCancel: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.gray[300],
+  },
+  budgetModalCancelText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: colors.gray[700],
+    fontWeight: '500',
+  },
+  budgetModalSave: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.md,
+    backgroundColor: colors.blue[600],
+  },
+  budgetModalSaveText: {
+    fontFamily: fontFamily.sans,
+    fontSize: fontSize.sm,
+    color: '#FFFFFF',
+    fontWeight: '600',
   },
 
   // Quick add bar

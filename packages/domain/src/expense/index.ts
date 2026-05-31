@@ -232,13 +232,32 @@ export function groupExpensesByDate(
 // Display helpers
 // ---------------------------------------------------------------------------
 
-export function formatExpenseAmount(amount: number): string {
+export function formatExpenseAmount(amount: number, currencyCode = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency: currencyCode,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
+}
+
+// App-wide supported display currencies. Amounts are re-labeled, never converted.
+export const CURRENCY_OPTIONS = [
+  { code: "USD", label: "US Dollar", symbol: "$" },
+  { code: "EUR", label: "Euro", symbol: "€" },
+  { code: "GBP", label: "British Pound", symbol: "£" },
+  { code: "INR", label: "Indian Rupee", symbol: "₹" },
+  { code: "JPY", label: "Japanese Yen", symbol: "¥" },
+  { code: "CAD", label: "Canadian Dollar", symbol: "$" },
+  { code: "AUD", label: "Australian Dollar", symbol: "$" },
+] as const;
+
+export type CurrencyCode = (typeof CURRENCY_OPTIONS)[number]["code"];
+
+// Returns the symbol for a known currency code, or the code itself if unknown.
+export function currencySymbol(code: string): string {
+  const match = CURRENCY_OPTIONS.find((c) => c.code === code);
+  return match ? match.symbol : code;
 }
 
 export function formatExpenseDate(isoDate: string): string {

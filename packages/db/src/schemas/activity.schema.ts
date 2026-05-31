@@ -14,25 +14,26 @@ export const activityStatusSchema = z.enum([
 ]);
 export const activityOriginTypeSchema = z.enum(["manual", "project", "carry_forward"]);
 
-export const activitySchema = z
-  .object({
-    id: uuidSchema,
-    user_id: uuidSchema,
-    section_type: activitySectionSchema,
-    title: z.string().min(1).max(300),
-    priority: activityPrioritySchema.default(null),
-    activity_date: isoDateSchema,
-    estimated_minutes: nonNegativeMinutesSchema.default(0),
-    remaining_minutes: nonNegativeMinutesSchema.default(0),
-    status: activityStatusSchema.default("not_started"),
-    linked_project_id: uuidSchema.nullable(),
-    delegated_contact_id: uuidSchema.nullable(),
-    note: z.string().nullable(),
-    origin_type: activityOriginTypeSchema.nullable().default(null),
-    moved_from_date: isoDateSchema.nullable(),
-    created_at: isoDatetimeSchema,
-    updated_at: isoDatetimeSchema,
-  })
+const activityBaseSchema = z.object({
+  id: uuidSchema,
+  user_id: uuidSchema,
+  section_type: activitySectionSchema,
+  title: z.string().min(1).max(300),
+  priority: activityPrioritySchema.default(null),
+  activity_date: isoDateSchema,
+  estimated_minutes: nonNegativeMinutesSchema.default(0),
+  remaining_minutes: nonNegativeMinutesSchema.default(0),
+  status: activityStatusSchema.default("not_started"),
+  linked_project_id: uuidSchema.nullable(),
+  delegated_contact_id: uuidSchema.nullable(),
+  note: z.string().nullable(),
+  origin_type: activityOriginTypeSchema.nullable().default(null),
+  moved_from_date: isoDateSchema.nullable(),
+  created_at: isoDatetimeSchema,
+  updated_at: isoDatetimeSchema,
+});
+
+export const activitySchema = activityBaseSchema
   .superRefine((data, ctx) => {
     // remaining <= estimated
     if (data.remaining_minutes > data.estimated_minutes) {
@@ -60,7 +61,7 @@ export const activitySchema = z
     }
   });
 
-export const insertActivitySchema = activitySchema
+export const insertActivitySchema = activityBaseSchema
   .omit({ id: true, created_at: true, updated_at: true });
 
 export const updateActivitySchema = insertActivitySchema

@@ -21,6 +21,7 @@ export interface UpdateReminderPreferencesData {
   activity_reminder_minutes_before?: number;
   activity_overdue_enabled?: boolean;
   event_reminder_minutes_before?: number;
+  currency_code?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,12 +65,16 @@ export async function updateReminderPreferences(
   } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
-  // Validate time fields format
+  // Validate time fields format. Postgres `time` columns round-trip as "HH:MM:SS",
+  // so accept an optional seconds component and normalize back to "HH:MM" for storage.
   const timeFields = ["eod_review_time", "morning_summary_time"] as const;
   for (const field of timeFields) {
     const val = data[field];
-    if (val !== undefined && !/^\d{2}:\d{2}$/.test(val)) {
-      return { error: `${field} must be in HH:MM format` };
+    if (val !== undefined) {
+      if (!/^\d{2}:\d{2}(:\d{2})?$/.test(val)) {
+        return { error: `${field} must be in HH:MM format` };
+      }
+      data[field] = val.slice(0, 5);
     }
   }
 

@@ -1,0 +1,3 @@
+# Supabase CLI scratch dir (e.g. packages/db/supabase/.temp/).
+# Never commit; keep config.toml and migrations/ tracked.
+supabase/.temp/

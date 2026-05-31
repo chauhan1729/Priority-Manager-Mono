@@ -14,12 +14,13 @@ import {
 interface Props {
   recurringExpenses: Expense[];
   today: string;
+  currency: string;
   onEdit: (expense: Expense) => void;
 }
 
 // ---------------------------------------------------------------------------
 
-export function UpcomingRecurringPanel({ recurringExpenses, today, onEdit }: Props) {
+export function UpcomingRecurringPanel({ recurringExpenses, today, currency, onEdit }: Props) {
   // For each recurring expense, compute up to 2 upcoming dates
   const items = recurringExpenses
     .map((expense) => ({
@@ -63,7 +64,7 @@ export function UpcomingRecurringPanel({ recurringExpenses, today, onEdit }: Pro
             {/* Amount + recurrence */}
             <div className="flex items-center gap-2 mb-3">
               <p className="font-handwriting text-lg text-ink">
-                {formatExpenseAmount(expense.amount)}
+                {formatExpenseAmount(expense.amount, currency)}
               </p>
               <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">
                 ↻{" "}

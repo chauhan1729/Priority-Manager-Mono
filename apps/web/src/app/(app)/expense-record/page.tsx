@@ -10,6 +10,7 @@ import {
 import type { Contact, Expense, Project, YearEntry } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ExpenseRecordView } from "@/components/expense-record/ExpenseRecordView";
+import { getMonthlyBudget } from "./budget-actions";
 
 export const metadata: Metadata = { title: "Expense Record" };
 
@@ -70,6 +71,20 @@ export default async function ExpenseRecordPage({
     .gte("expense_date", viewingStart)
     .lte("expense_date", viewingEnd)
     .order("expense_date", { ascending: false });
+
+  // Spend total for the *viewing* month (used for the budget comparison)
+  const viewingMonthSpent = sumExpenses(
+    (viewingExpenses ?? []) as Pick<Expense, "amount">[],
+  );
+
+  // App-wide display currency + this month's budget
+  const { data: prefs } = await supabase
+    .from("reminder_preferences")
+    .select("currency_code")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const currency = prefs?.currency_code ?? "USD";
+  const monthlyBudget = await getMonthlyBudget(viewingMonthKey);
 
   // -------------------------------------------------------------------------
   // 2. Summary expenses (always current day/week/month — not the viewed month)
@@ -145,6 +160,9 @@ export default async function ExpenseRecordPage({
       todayTotal={todayTotal}
       weekTotal={weekTotal}
       monthTotal={monthTotal}
+      currency={currency}
+      monthlyBudget={monthlyBudget}
+      viewingMonthSpent={viewingMonthSpent}
       projects={(projectsResult.data ?? []) as Pick<Project, "id" | "name" | "status">[]}
       contacts={(contactsResult.data ?? []) as Pick<Contact, "id" | "full_name" | "company">[]}
       yearEntries={

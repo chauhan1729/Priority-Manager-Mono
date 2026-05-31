@@ -10,4 +10,5 @@ export * from "./calendar-event.schema";
 export * from "./activity.schema";
 export * from "./schedule-instance.schema";
 export * from "./expense.schema";
+export * from "./expense-budget.schema";
 export * from "./reminder-preference.schema";
