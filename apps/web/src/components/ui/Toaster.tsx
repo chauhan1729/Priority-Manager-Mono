@@ -49,7 +49,7 @@ export function Toaster() {
   return (
     <div
       aria-live="polite"
-      className="fixed bottom-5 right-5 z-[100] flex flex-col gap-2"
+      className="fixed bottom-20 right-5 z-[100] flex flex-col gap-2"
     >
       {toasts.map((toast) => (
         <div

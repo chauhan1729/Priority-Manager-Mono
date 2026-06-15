@@ -4,7 +4,6 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { SignOutButton } from "@/components/auth/SignOutButton";
-import { FotwTipsButton } from "@/components/help/FotwTipsButton";
 
 // ─── Nav icons (inline SVGs, no icon library needed) ─────────────────────────
 
@@ -270,16 +269,12 @@ export function Sidebar({
                 day: "numeric",
               })}
             </p>
-            <FotwTipsButton />
             <SignOutButton />
           </>
         ) : (
-          /* Rail mode: tips + sign-out icons */
-          <div className="flex flex-col items-center gap-1">
-            <FotwTipsButton iconOnly />
-            <div title="Sign out">
-              <SignOutButton iconOnly />
-            </div>
+          /* Rail mode: just sign-out icon */
+          <div className="flex justify-center" title="Sign out">
+            <SignOutButton iconOnly />
           </div>
         )}
 

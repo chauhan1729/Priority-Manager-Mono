@@ -4,11 +4,6 @@ import { useState } from "react";
 
 import { FotwTipsModal } from "./FotwTipsModal";
 
-interface Props {
-  /** Rail mode (collapsed desktop sidebar): show icon only, centered. */
-  iconOnly?: boolean;
-}
-
 function IconLightbulb() {
   return (
     <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5 shrink-0" aria-hidden="true">
@@ -23,23 +18,24 @@ function IconLightbulb() {
   );
 }
 
-/** On-demand "Tips" launcher for the sidebar footer. Holds its own modal state. */
-export function FotwTipsButton({ iconOnly = false }: Props) {
+/**
+ * Global floating "Tips" launcher — fixed bottom-right on every screen.
+ * Sits below the Toaster's stack (which is lifted to clear it). Holds its own
+ * modal state. The label collapses to an icon on the smallest screens.
+ */
+export function FotwTipsButton() {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <button
         onClick={() => setOpen(true)}
-        className={[
-          "flex items-center rounded-lg text-sm font-medium text-ink-light transition hover:bg-blue-50 hover:text-blue-700",
-          iconOnly ? "justify-center p-2" : "w-full gap-3 px-2 py-2",
-        ].join(" ")}
-        title="Tips — get the most from your Priority Manager"
+        className="fixed bottom-5 right-5 z-40 flex items-center gap-2 rounded-full border border-blue-200 bg-white px-4 py-2.5 text-sm font-medium text-blue-700 shadow-lg transition hover:bg-blue-50 hover:shadow-xl"
         aria-label="Open tips"
+        title="Tips — get the most from your Priority Manager"
       >
         <IconLightbulb />
-        {!iconOnly && <span>Tips</span>}
+        <span className="hidden sm:inline">Tips</span>
       </button>
 
       {open && <FotwTipsModal onClose={() => setOpen(false)} />}

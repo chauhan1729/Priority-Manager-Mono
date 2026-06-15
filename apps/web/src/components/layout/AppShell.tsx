@@ -5,6 +5,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { MobileDrawer } from "@/components/ui/MobileDrawer";
+import { FotwTipsButton } from "@/components/help/FotwTipsButton";
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -91,6 +92,9 @@ export function AppShell({ children, displayName, displayEmail }: AppShellProps)
         {/* Page content */}
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
+
+      {/* Global floating Tips launcher — visible on every screen */}
+      <FotwTipsButton />
     </div>
   );
 }
