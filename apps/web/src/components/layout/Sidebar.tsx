@@ -115,15 +115,16 @@ function IconSettings() {
 
 const NAV_ITEMS = [
   { href: "/daily-plan",            label: "Daily Plan",             Icon: IconDailyPlan },
-  { href: "/activities",            label: "Activities",             Icon: IconActivities },
+  { href: "/activities/a",          label: "A Activities",           Icon: IconActivities },
+  { href: "/activities/b",          label: "B Activities",           Icon: IconActivities },
+  { href: "/someday",               label: "Someday",                Icon: IconMonthlyPriorities },
   { href: "/calendar",              label: "Calendar",               Icon: IconCalendar },
-  { href: "/year-at-a-glance",      label: "Year at a Glance",       Icon: IconYearAtAGlance },
-  { href: "/annual-strategies",     label: "Annual Strategies",      Icon: IconAnnualStrategies },
-  { href: "/monthly-priorities",    label: "Monthly Priorities",     Icon: IconMonthlyPriorities },
+  { href: "/annual-strategies",     label: "Goals / Ideal Scene",    Icon: IconAnnualStrategies },
   { href: "/project-planner",       label: "Project Planner",        Icon: IconProjectPlanner },
   { href: "/meeting-planner",       label: "Meeting Planner",        Icon: IconMeetingPlanner },
   { href: "/communication-planner", label: "Communication Planner",  Icon: IconCommunicationPlanner },
-  { href: "/expense-record",        label: "Expense Record",         Icon: IconExpenseRecord },
+  { href: "/six-time-book",         label: "Six-Time Book",          Icon: IconActivities },
+  { href: "/giving",                label: "Giving",                 Icon: IconActivities },
   { href: "/settings",              label: "Settings",               Icon: IconSettings },
 ] as const;
 

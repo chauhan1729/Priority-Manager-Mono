@@ -212,7 +212,7 @@ export async function createDelegatedActivity(data: {
     user_id: user.id,
     section_type: "delegated",
     title: data.title.trim(),
-    priority: null,
+    priority: "B", // Phase 0A: priority is mandatory; delegated items default to B.
     activity_date: data.activityDate,
     estimated_minutes: data.estimatedMinutes,
     remaining_minutes: data.estimatedMinutes,

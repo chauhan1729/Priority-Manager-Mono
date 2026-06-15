@@ -4,7 +4,7 @@ import type { AnnualGoal, Project } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { AnnualStrategiesView } from "@/components/annual-strategies/AnnualStrategiesView";
 
-export const metadata: Metadata = { title: "Annual Strategies" };
+export const metadata: Metadata = { title: "Goals / Ideal Scene" };
 
 /**
  * Spec §10.3: yearly outcome-based planning layer.
@@ -43,7 +43,10 @@ export default async function AnnualStrategiesPage() {
   return (
     <div className="flex h-full flex-col">
       <header className="hidden md:block border-b border-blue-100 px-8 py-5">
-        <h1 className="font-handwriting text-2xl text-ink">Annual Strategies</h1>
+        <h1 className="font-handwriting text-2xl text-ink">Goals / Ideal Scene</h1>
+        <p className="mt-0.5 text-xs text-ink-light">
+          Your long-range goals and the ideal scene behind them — the &ldquo;why&rdquo; that makes a task an A.
+        </p>
       </header>
       <div className="flex-1 overflow-y-auto">
         <AnnualStrategiesView goals={goals} projects={projects} />

@@ -26,6 +26,7 @@ const scheduleInstanceBaseSchema = z
     focus_minutes: positiveMinutesSchema.nullable(),
     status_snapshot: scheduleInstanceStatusSchema.nullable(),
     keep_as_history: z.boolean().default(true),
+    note: z.string().max(280).nullable(),
     created_at: isoDatetimeSchema,
     updated_at: isoDatetimeSchema,
   });
@@ -84,6 +85,7 @@ export const updateScheduleInstanceSchema = z.object({
   end_at: isoDatetimeSchema.optional(),
   locked_minutes: positiveMinutesSchema.optional(),
   schedule_date: isoDateSchema.optional(),
+  note: z.string().max(280).nullable().optional(),
 });
 
 export type ScheduleInstance = z.infer<typeof scheduleInstanceSchema>;

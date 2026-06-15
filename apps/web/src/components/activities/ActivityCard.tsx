@@ -1,9 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 
+import { addDays, suggestRedate, todayISO } from "@pm/domain";
 import type { Activity, ActivityStatus, Contact } from "@pm/types";
+import { rescheduleActivityToDate } from "@/app/(app)/activities/actions";
+import { showToast } from "@/components/ui/Toaster";
 
 const STATUS_LABELS: Record<ActivityStatus, string> = {
   not_started: "Not Started",
@@ -46,6 +49,10 @@ interface Props {
   onPostpone: (id: string, projectId: string | null) => void;
   onEdit: (activity: Activity) => void;
   onArchive: (id: string, projectId: string | null) => void;
+  /** Phase 0A: one-tap promote/demote (A↔B) by clicking the priority badge. */
+  onTogglePriority?: ((activity: Activity) => void) | undefined;
+  /** Phase 1B: park this activity on the Someday list. */
+  onMoveToSomeday?: ((activity: Activity) => void) | undefined;
 }
 
 export function ActivityCard({
@@ -61,12 +68,27 @@ export function ActivityCard({
   onStatusChange,
   onDelegate,
   onDelete,
-  onPostpone,
   onEdit,
   onArchive,
+  onTogglePriority,
+  onMoveToSomeday,
 }: Props) {
   const [delegatePickerOpen, setDelegatePickerOpen] = useState(false);
   const [delegateContactId, setDelegateContactId] = useState("");
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState("");
+  const [isRescheduling, startReschedule] = useTransition();
+
+  function doReschedule(toDate: string) {
+    startReschedule(async () => {
+      const res = await rescheduleActivityToDate(activity.id, toDate);
+      if (res?.error) showToast(res.error, "error");
+      else {
+        showToast("Rescheduled");
+        setRescheduleOpen(false);
+      }
+    });
+  }
   const projectName = activity.linked_project_id
     ? (projectMap.get(activity.linked_project_id) ?? null)
     : null;
@@ -105,8 +127,26 @@ export function ActivityCard({
       {/* Left: priority + title + meta */}
       <div className="flex-1 min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Priority badge */}
-          {activity.priority && (
+          {/* Priority badge — one-tap promote/demote (A↔B) */}
+          {onTogglePriority && !isDone && !bulkMode ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTogglePriority(activity);
+              }}
+              disabled={isPending}
+              title={activity.priority === "A" ? "Make B (demote)" : "Make A (promote)"}
+              aria-label={activity.priority === "A" ? "Demote to B" : "Promote to A"}
+              className={`rounded px-1.5 py-0.5 text-xs font-bold transition disabled:opacity-50 ${
+                activity.priority === "A"
+                  ? "bg-red-100 text-red-600 hover:bg-red-200"
+                  : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+              }`}
+            >
+              {activity.priority}
+            </button>
+          ) : (
             <span
               className={`rounded px-1.5 py-0.5 text-xs font-bold ${
                 activity.priority === "A"
@@ -214,16 +254,32 @@ export function ActivityCard({
           </button>
         )}
 
-        {/* Postpone to tomorrow */}
+        {/* Reschedule to a chosen day (intentional re-dating) */}
         {!isDone && (
           <button
-            onClick={() => onPostpone(activity.id, activity.linked_project_id)}
-            disabled={isPending}
-            aria-label="Postpone to tomorrow"
-            title="Postpone to tomorrow"
-            className="rounded p-1 text-ink-light hover:bg-amber-50 hover:text-amber-600 disabled:opacity-50 transition"
+            onClick={() => {
+              setRescheduleDate(suggestRedate(activity, todayISO()));
+              setRescheduleOpen((s) => !s);
+            }}
+            disabled={isPending || isRescheduling}
+            aria-label="Reschedule to a chosen day"
+            title="Reschedule to a chosen day"
+            className="rounded p-1 text-ink-light hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 transition"
           >
-            ↷
+            📅
+          </button>
+        )}
+
+        {/* Move to Someday */}
+        {!isDone && !activity.is_someday && onMoveToSomeday && (
+          <button
+            onClick={() => onMoveToSomeday(activity)}
+            disabled={isPending}
+            aria-label="Move to Someday"
+            title="Move to Someday (park outside the 30-day horizon)"
+            className="rounded p-1 text-ink-light hover:bg-violet-50 hover:text-violet-600 disabled:opacity-50 transition"
+          >
+            ☾
           </button>
         )}
 
@@ -302,6 +358,44 @@ export function ActivityCard({
             onClick={() => { setDelegatePickerOpen(false); setDelegateContactId(""); }}
             className="text-xs text-ink-light hover:text-ink"
           >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {/* Inline reschedule picker — intentional re-dating (not a blind "tomorrow") */}
+      {rescheduleOpen && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+          <span className="text-xs font-medium text-ink-light">Reschedule to:</span>
+          <button
+            onClick={() => doReschedule(addDays(todayISO(), 1))}
+            disabled={isRescheduling}
+            className="rounded-md border border-blue-200 bg-white px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+          >
+            +1 day
+          </button>
+          <button
+            onClick={() => doReschedule(addDays(todayISO(), 7))}
+            disabled={isRescheduling}
+            className="rounded-md border border-blue-200 bg-white px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+          >
+            +1 week
+          </button>
+          <input
+            type="date"
+            value={rescheduleDate}
+            min={todayISO()}
+            onChange={(e) => setRescheduleDate(e.target.value)}
+            className="rounded-lg border border-blue-100 bg-white px-2 py-1 text-xs text-ink focus:border-blue-400 focus:outline-none"
+          />
+          <button
+            onClick={() => doReschedule(rescheduleDate)}
+            disabled={!rescheduleDate || isRescheduling}
+            className="rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-50"
+          >
+            Go
+          </button>
+          <button onClick={() => setRescheduleOpen(false)} className="text-xs text-ink-light hover:text-ink">
             Cancel
           </button>
         </div>

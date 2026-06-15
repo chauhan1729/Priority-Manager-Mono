@@ -18,6 +18,7 @@
 import { useCallback, useEffect } from "react";
 
 import {
+  addDays,
   computeAllReminders,
   filterUnfiredReminders,
   type ComputeRemindersParams,
@@ -69,12 +70,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       .not("fired_at", "is", null);
 
     // Parallel data fetches for reminder sources
-    const [meetingsResult, expensesResult, yearEntriesResult, scheduleInstancesResult, activitiesResult, calendarEventsResult] = await Promise.all([
+    const [meetingsResult, expensesResult, yearEntriesResult, scheduleInstancesResult, activitiesResult, calendarEventsResult, sixTimeConfigResult, sixTimeProblemsResult, givingChallengeResult] = await Promise.all([
       supabase
+        // Phase 2B: widen to the prep window (today … +14d) so "prepare for meeting" reminders
+        // can fire ahead of the meeting. Today-only time-window reminders still behave correctly.
         .from("meetings")
-        .select("id, title, start_at, end_at, status, key_takeaways")
+        .select("id, title, date, start_at, end_at, status, key_takeaways")
         .eq("user_id", user.id)
-        .eq("date", todayISO)
+        .gte("date", todayISO)
+        .lte("date", addDays(todayISO, 14))
         .in("status", ["upcoming"]),
       supabase
         .from("expenses")
@@ -101,6 +105,24 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         .eq("user_id", user.id)
         .gte("start_at", `${todayISO}T00:00:00Z`)
         .lte("start_at", `${todayISO}T23:59:59Z`),
+      // Phase 4: Six-Time Book config + active focus problems
+      supabase
+        .from("six_time_config")
+        .select("enabled, slot_times, nightly_time")
+        .eq("user_id", user.id)
+        .maybeSingle(),
+      supabase
+        .from("six_time_problems")
+        .select("position, status, reminder_phrase")
+        .eq("user_id", user.id)
+        .eq("status", "active"),
+      // Phase 5: is there an active giving challenge?
+      supabase
+        .from("giving_challenges")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle(),
     ]);
 
 
@@ -112,6 +134,9 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       scheduleInstances: scheduleInstancesResult.data ?? [],
       activities: activitiesResult.data ?? [],
       calendarEvents: calendarEventsResult.data ?? [],
+      sixTimeConfig: sixTimeConfigResult.data ?? null,
+      sixTimeProblems: sixTimeProblemsResult.data ?? [],
+      hasActiveGivingChallenge: Boolean(givingChallengeResult.data),
       todayISO,
       now,
     };

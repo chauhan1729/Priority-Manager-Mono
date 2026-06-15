@@ -5,9 +5,35 @@ import { type ScheduleInstance } from "@pm/types";
 import {
   checkScheduleOverlap,
   intervalsOverlap,
+  nextMeetingGapMinutes,
   validateFocusMinutes,
   validateLockedMinutes,
+  violatesMeetingBuffer,
 } from "../schedule";
+
+describe("meeting buffer (Phase 3A)", () => {
+  const meetings = ["2026-06-15T14:00:00.000Z"];
+
+  it("nextMeetingGapMinutes returns the gap to the next meeting", () => {
+    expect(nextMeetingGapMinutes("2026-06-15T13:50:00.000Z", meetings)).toBe(10);
+  });
+
+  it("ignores meetings that start before the block ends", () => {
+    expect(nextMeetingGapMinutes("2026-06-15T14:30:00.000Z", meetings)).toBeNull();
+  });
+
+  it("violatesMeetingBuffer is true when the gap is under the buffer", () => {
+    expect(violatesMeetingBuffer("2026-06-15T13:50:00.000Z", meetings, 15)).toBe(true); // 10 < 15
+  });
+
+  it("violatesMeetingBuffer is false when there's enough buffer", () => {
+    expect(violatesMeetingBuffer("2026-06-15T13:40:00.000Z", meetings, 15)).toBe(false); // 20 >= 15
+  });
+
+  it("a zero buffer never warns", () => {
+    expect(violatesMeetingBuffer("2026-06-15T13:59:00.000Z", meetings, 0)).toBe(false);
+  });
+});
 
 function makeInstance(
   startIso: string,
@@ -30,6 +56,7 @@ function makeInstance(
     focus_minutes: null,
     status_snapshot: "upcoming",
     keep_as_history: true,
+    note: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,

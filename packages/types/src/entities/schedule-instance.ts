@@ -30,6 +30,8 @@ export interface ScheduleInstance {
   focus_minutes: number | null;
   status_snapshot: ScheduleInstanceStatus | null;
   keep_as_history: boolean;
+  /** Optional note — e.g. what this focus cycle is about. */
+  note: string | null;
   created_at: string;
   updated_at: string;
 }

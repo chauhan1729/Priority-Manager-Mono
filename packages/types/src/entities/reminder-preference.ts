@@ -8,7 +8,12 @@ export type ReminderType =
   | "morning_summary"
   | "activity_starting"
   | "activity_overdue"
-  | "event_upcoming";
+  | "event_upcoming"
+  | "weekly_someday_review"
+  | "meeting_prep"
+  | "six_time_slot"
+  | "six_time_nightly"
+  | "giving_daily";
 
 export interface ReminderPreference {
   id: string;
@@ -27,6 +32,18 @@ export interface ReminderPreference {
   activity_overdue_enabled: boolean;
   // Calendar event (appointment/other) reminders
   event_reminder_minutes_before: number;
+  // Phase 1B: weekly Someday-list review
+  someday_review_enabled: boolean;
+  someday_review_weekday: number; // 0=Sunday … 6=Saturday
+  someday_review_time: string; // "HH:MM"
+  // Phase 2B: "prepare for meeting" reminder, N days before
+  meeting_prep_enabled: boolean;
+  meeting_prep_days_before: number;
+  // Phase 3A: recommended buffer (minutes) before a meeting to keep free
+  meeting_buffer_minutes: number;
+  // Phase 5: daily giving reminder
+  giving_reminder_enabled: boolean;
+  giving_reminder_time: string; // "HH:MM"
   currency_code: string; // ISO 4217 code, e.g. "USD" (app-wide display currency)
   created_at: string;
   updated_at: string;

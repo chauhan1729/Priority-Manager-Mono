@@ -83,6 +83,8 @@ export type ActivityOriginType = "manual" | "project" | "carry_forward";
 
 export type ScheduleSourceType = "activity" | "meeting" | "appointment" | "other";
 export type ScheduleInstanceStatus = "upcoming" | "working" | "completed" | "postponed" | "missed";
+export type CyclePhase = "focus" | "break" | "completed" | "abandoned";
+export type SixTimeProblemStatus = "active" | "retired";
 
 export type ExpenseCategory =
   | "personal"
@@ -101,7 +103,15 @@ export type ReminderType =
   | "renewal"
   | "birthday"
   | "travel"
-  | "morning_summary";
+  | "morning_summary"
+  | "activity_starting"
+  | "activity_overdue"
+  | "event_upcoming"
+  | "weekly_someday_review"
+  | "meeting_prep"
+  | "six_time_slot"
+  | "six_time_nightly"
+  | "giving_daily";
 
 // ---------------------------------------------------------------------------
 // Table row types
@@ -464,6 +474,7 @@ export interface Database {
           moved_from_date: string | null;
           hours_worked: number;
           archived: boolean;
+          is_someday: boolean;
           recurrence_rule: "daily" | "weekly" | "monthly" | null;
           created_at: string;
           updated_at: string;
@@ -485,6 +496,7 @@ export interface Database {
           moved_from_date?: string | null;
           hours_worked?: number;
           archived?: boolean;
+          is_someday?: boolean;
           recurrence_rule?: "daily" | "weekly" | "monthly" | null;
           created_at?: string;
           updated_at?: string;
@@ -507,6 +519,7 @@ export interface Database {
           focus_minutes: number | null;
           status_snapshot: ScheduleInstanceStatus | null;
           keep_as_history: boolean;
+          note: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -524,10 +537,227 @@ export interface Database {
           focus_minutes?: number | null;
           status_snapshot?: ScheduleInstanceStatus | null;
           keep_as_history?: boolean;
+          note?: string | null;
           created_at?: string;
           updated_at?: string;
         };
         Update: Partial<Omit<Database["public"]["Tables"]["schedule_instances"]["Insert"], "user_id">>;
+      };
+
+      cycles: {
+        Row: {
+          id: string;
+          user_id: string;
+          activity_id: string;
+          schedule_instance_id: string | null;
+          soft_target_minutes: number | null;
+          elapsed_focus_minutes: number;
+          segment_started_at: string | null;
+          break_count: number;
+          phase: CyclePhase;
+          started_at: string;
+          completed_at: string | null;
+          note: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          activity_id: string;
+          schedule_instance_id?: string | null;
+          soft_target_minutes?: number | null;
+          elapsed_focus_minutes?: number;
+          segment_started_at?: string | null;
+          break_count?: number;
+          phase?: CyclePhase;
+          started_at?: string;
+          completed_at?: string | null;
+          note?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["cycles"]["Insert"], "user_id">>;
+      };
+
+      activity_moves: {
+        Row: {
+          id: string;
+          user_id: string;
+          activity_id: string;
+          from_date: string;
+          to_date: string;
+          reason: string | null;
+          moved_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          activity_id: string;
+          from_date: string;
+          to_date: string;
+          reason?: string | null;
+          moved_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["activity_moves"]["Insert"], "user_id">>;
+      };
+
+      six_time_problems: {
+        Row: {
+          id: string;
+          user_id: string;
+          position: number;
+          problem: string;
+          solution: string;
+          reminder_phrase: string;
+          status: SixTimeProblemStatus;
+          created_at: string;
+          retired_at: string | null;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          position: number;
+          problem: string;
+          solution: string;
+          reminder_phrase: string;
+          status?: SixTimeProblemStatus;
+          created_at?: string;
+          retired_at?: string | null;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["six_time_problems"]["Insert"], "user_id">>;
+      };
+
+      six_time_entries: {
+        Row: {
+          id: string;
+          user_id: string;
+          entry_date: string;
+          slot_index: number;
+          problem_id: string;
+          plus: string | null;
+          minus: string | null;
+          todo: string | null;
+          logged_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          entry_date: string;
+          slot_index: number;
+          problem_id: string;
+          plus?: string | null;
+          minus?: string | null;
+          todo?: string | null;
+          logged_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["six_time_entries"]["Insert"], "user_id">>;
+      };
+
+      six_time_nightly_reviews: {
+        Row: {
+          id: string;
+          user_id: string;
+          review_date: string;
+          best: string[];
+          worst: string[];
+          logged_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          review_date: string;
+          best?: string[];
+          worst?: string[];
+          logged_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["six_time_nightly_reviews"]["Insert"], "user_id">>;
+      };
+
+      six_time_config: {
+        Row: {
+          id: string;
+          user_id: string;
+          enabled: boolean;
+          slot_times: string[];
+          nightly_time: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          enabled?: boolean;
+          slot_times?: string[];
+          nightly_time?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["six_time_config"]["Insert"], "user_id">>;
+      };
+
+      giving_challenges: {
+        Row: {
+          id: string;
+          user_id: string;
+          start_date: string;
+          mode: "challenge" | "continuous";
+          status: "active" | "completed" | "abandoned";
+          reviewed_at: string | null;
+          continue_decision: boolean | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          start_date: string;
+          mode?: "challenge" | "continuous";
+          status?: "active" | "completed" | "abandoned";
+          reviewed_at?: string | null;
+          continue_decision?: boolean | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["giving_challenges"]["Insert"], "user_id">>;
+      };
+
+      giving_logs: {
+        Row: {
+          id: string;
+          user_id: string;
+          challenge_id: string;
+          entry_date: string;
+          kind: "given" | "received" | "cognition";
+          content: string;
+          categories: string[];
+          given_in_secret: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          challenge_id: string;
+          entry_date: string;
+          kind: "given" | "received" | "cognition";
+          content: string;
+          categories?: string[];
+          given_in_secret?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<Omit<Database["public"]["Tables"]["giving_logs"]["Insert"], "user_id">>;
       };
 
       expenses: {
@@ -584,6 +814,14 @@ export interface Database {
           activity_reminder_minutes_before: number;
           activity_overdue_enabled: boolean;
           event_reminder_minutes_before: number;
+          someday_review_enabled: boolean;
+          someday_review_weekday: number;
+          someday_review_time: string;
+          meeting_prep_enabled: boolean;
+          meeting_prep_days_before: number;
+          meeting_buffer_minutes: number;
+          giving_reminder_enabled: boolean;
+          giving_reminder_time: string;
           currency_code: string; // ISO 4217, app-wide expense display currency
           created_at: string;
           updated_at: string;
@@ -603,6 +841,14 @@ export interface Database {
           activity_reminder_minutes_before?: number;
           activity_overdue_enabled?: boolean;
           event_reminder_minutes_before?: number;
+          someday_review_enabled?: boolean;
+          someday_review_weekday?: number;
+          someday_review_time?: string;
+          meeting_prep_enabled?: boolean;
+          meeting_prep_days_before?: number;
+          meeting_buffer_minutes?: number;
+          giving_reminder_enabled?: boolean;
+          giving_reminder_time?: string;
           currency_code?: string;
           created_at?: string;
           updated_at?: string;

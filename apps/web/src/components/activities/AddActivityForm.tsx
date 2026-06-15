@@ -20,13 +20,26 @@ interface Props {
   contacts: Pick<Contact, "id" | "full_name">[];
   onSuccess: () => void;
   onCancel: () => void;
+  /** Phase 0A: default priority for new activities — "A" on the A screen, "B" on the B screen. */
+  defaultPriority?: "A" | "B";
+  /** Phase 1B: when true, leaving the date blank parks the item on Someday (B screen / projects). */
+  defaultToSomeday?: boolean;
 }
 
-export function AddActivityForm({ selectedDate, projects, contacts, onSuccess, onCancel }: Props) {
+export function AddActivityForm({
+  selectedDate,
+  projects,
+  contacts,
+  onSuccess,
+  onCancel,
+  defaultPriority = "B",
+  defaultToSomeday = false,
+}: Props) {
   const [state, formAction] = useActionState<ActionResult, FormData>(createActivity, null);
   const formRef = useRef<HTMLFormElement>(null);
   const [section, setSection] = useState<ActivitySection>("work");
   const [showMore, setShowMore] = useState(false);
+  const [recurring, setRecurring] = useState(false);
 
   useEffect(() => {
     if (state && "success" in state) {
@@ -179,15 +192,17 @@ export function AddActivityForm({ selectedDate, projects, contacts, onSuccess, o
       {showMore && (
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
-            {/* Date */}
+            {/* Date — optional when defaulting to Someday (blank = parked) */}
             <div>
-              <label className="block text-xs text-ink-light mb-1">Date</label>
+              <label className="block text-xs text-ink-light mb-1">
+                Date {defaultToSomeday && <span className="text-ink-light/60">(blank → Someday)</span>}
+              </label>
               <input
                 name="activity_date"
                 type="date"
-                required
+                required={!defaultToSomeday}
                 min={todayISO()}
-                defaultValue={selectedDate}
+                defaultValue={defaultToSomeday ? "" : selectedDate}
                 className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
               />
             </div>
@@ -197,7 +212,7 @@ export function AddActivityForm({ selectedDate, projects, contacts, onSuccess, o
               <label className="block text-xs text-ink-light mb-1">Priority</label>
               <select
                 name="priority"
-                defaultValue="B"
+                defaultValue={defaultPriority}
                 className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
               >
                 <option value="A">A — Must do today</option>
@@ -212,6 +227,7 @@ export function AddActivityForm({ selectedDate, projects, contacts, onSuccess, o
             <select
               name="recurrence_rule"
               defaultValue=""
+              onChange={(e) => setRecurring(e.target.value !== "")}
               className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
             >
               <option value="">Does not repeat</option>
@@ -219,6 +235,16 @@ export function AddActivityForm({ selectedDate, projects, contacts, onSuccess, o
               <option value="weekly">Weekly (next 3 weeks)</option>
               <option value="monthly">Monthly (next 3 months)</option>
             </select>
+            {/* Phase 3B: nudge recurring commitments toward a self-appointment, not an A task. */}
+            {recurring && (
+              <p className="mt-1 text-xs text-violet-700 bg-violet-50 rounded-lg px-3 py-1.5">
+                A recurring commitment (like “read every day”) works better as a{" "}
+                <a href="/calendar" className="font-medium underline">
+                  calendar appointment with yourself
+                </a>{" "}
+                — a time block, not an A task.
+              </p>
+            )}
           </div>
 
           {/* Note */}
@@ -242,8 +268,9 @@ export function AddActivityForm({ selectedDate, projects, contacts, onSuccess, o
       {/* Hidden fields for quick-add (when showMore is false) */}
       {!showMore && (
         <>
-          <input type="hidden" name="activity_date" value={selectedDate} />
-          <input type="hidden" name="priority" value="B" />
+          {/* No date hidden field when defaulting to Someday → action parks it. */}
+          {!defaultToSomeday && <input type="hidden" name="activity_date" value={selectedDate} />}
+          <input type="hidden" name="priority" value={defaultPriority} />
         </>
       )}
 

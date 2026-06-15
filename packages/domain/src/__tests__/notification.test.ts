@@ -7,8 +7,13 @@ import {
   computeEodReminder,
   computeMeetingPassedReminders,
   computeMeetingUpcomingReminders,
+  computeGivingReminder,
+  computeMeetingPrepReminders,
+  computeSixTimeNightlyReminder,
+  computeSixTimeSlotReminders,
   computeMorningSummaryReminder,
   computeRenewalReminders,
+  computeSomedayReviewReminder,
   computeTravelReminders,
   filterUnfiredReminders,
 } from "../notification";
@@ -30,12 +35,16 @@ const BASE_PREFS = {
   activity_reminder_minutes_before: 5,
   activity_overdue_enabled: true,
   event_reminder_minutes_before: 15,
+  someday_review_enabled: false,
+  someday_review_weekday: 0,
+  someday_review_time: "09:00",
 };
 
 function makeMeeting(overrides: Record<string, unknown> = {}) {
   return {
     id: "meet-1",
     title: "Weekly Sync",
+    date: "2026-04-05",
     start_at: "2026-04-05T14:00:00.000Z",
     end_at: "2026-04-05T14:30:00.000Z",
     status: "upcoming" as const,
@@ -125,6 +134,110 @@ describe("computeEodReminder", () => {
 // ---------------------------------------------------------------------------
 // Morning summary reminder
 // ---------------------------------------------------------------------------
+
+describe("computeGivingReminder (Phase 5)", () => {
+  const prefs = { giving_reminder_enabled: true, giving_reminder_time: "20:00" };
+  it("fires daily while a challenge is active", () => {
+    expect(computeGivingReminder(prefs, true, "2026-06-15")?.type).toBe("giving_daily");
+  });
+  it("does not fire without an active challenge", () => {
+    expect(computeGivingReminder(prefs, false, "2026-06-15")).toBeNull();
+  });
+  it("does not fire when disabled", () => {
+    expect(computeGivingReminder({ ...prefs, giving_reminder_enabled: false }, true, "2026-06-15")).toBeNull();
+  });
+});
+
+describe("Six-Time reminders (Phase 4)", () => {
+  const config = {
+    enabled: true,
+    slot_times: ["08:00", "10:30", "12:30", "15:00", "18:00", "21:30"],
+    nightly_time: "22:30",
+  };
+  const problems = [
+    { position: 1, status: "active" as const, reminder_phrase: "Be patient" },
+    { position: 2, status: "active" as const, reminder_phrase: "Listen first" },
+    { position: 3, status: "active" as const, reminder_phrase: "Follow up" },
+  ];
+
+  it("emits 6 slot reminders with the right phrases", () => {
+    const r = computeSixTimeSlotReminders(config, problems, "2026-06-15");
+    expect(r).toHaveLength(6);
+    expect(r[0]?.body).toBe("Be patient"); // slot 1 → P1
+    expect(r[4]?.body).toBe("Listen first"); // slot 5 → P2
+    expect(r.every((x) => x.type === "six_time_slot")).toBe(true);
+  });
+
+  it("emits nothing when disabled or not set up", () => {
+    expect(computeSixTimeSlotReminders({ ...config, enabled: false }, problems, "2026-06-15")).toHaveLength(0);
+    expect(computeSixTimeSlotReminders(config, [problems[0]!], "2026-06-15")).toHaveLength(0);
+    expect(computeSixTimeNightlyReminder({ ...config, enabled: false }, "2026-06-15")).toBeNull();
+  });
+
+  it("nightly reminder fires when enabled", () => {
+    expect(computeSixTimeNightlyReminder(config, "2026-06-15")?.type).toBe("six_time_nightly");
+  });
+});
+
+describe("computeMeetingPrepReminders (Phase 2B)", () => {
+  it("fires one day before an upcoming meeting", () => {
+    const meeting = makeMeeting({ date: "2026-04-06", title: "Dustin 1:1" });
+    const r = computeMeetingPrepReminders([meeting], 1, "2026-04-05");
+    expect(r).toHaveLength(1);
+    expect(r[0]?.type).toBe("meeting_prep");
+    expect(r[0]?.title).toContain("Dustin 1:1");
+  });
+
+  it("does not fire on other days", () => {
+    const meeting = makeMeeting({ date: "2026-04-10" });
+    expect(computeMeetingPrepReminders([meeting], 1, "2026-04-05")).toHaveLength(0);
+  });
+
+  it("skips non-upcoming meetings", () => {
+    const meeting = makeMeeting({ date: "2026-04-06", status: "completed" });
+    expect(computeMeetingPrepReminders([meeting], 1, "2026-04-05")).toHaveLength(0);
+  });
+
+  it("honors a custom days-before", () => {
+    const meeting = makeMeeting({ date: "2026-04-08" });
+    expect(computeMeetingPrepReminders([meeting], 3, "2026-04-05")).toHaveLength(1);
+  });
+});
+
+describe("computeSomedayReviewReminder (Phase 1B)", () => {
+  const today = "2026-06-14";
+  const weekday = new Date(`${today}T12:00:00`).getDay();
+
+  it("fires on the configured weekday when enabled", () => {
+    const r = computeSomedayReviewReminder(
+      { someday_review_enabled: true, someday_review_weekday: weekday, someday_review_time: "09:00" },
+      today,
+    );
+    expect(r?.type).toBe("weekly_someday_review");
+  });
+
+  it("returns null when disabled", () => {
+    expect(
+      computeSomedayReviewReminder(
+        { someday_review_enabled: false, someday_review_weekday: weekday, someday_review_time: "09:00" },
+        today,
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null on a different weekday", () => {
+    expect(
+      computeSomedayReviewReminder(
+        {
+          someday_review_enabled: true,
+          someday_review_weekday: (weekday + 1) % 7,
+          someday_review_time: "09:00",
+        },
+        today,
+      ),
+    ).toBeNull();
+  });
+});
 
 describe("computeMorningSummaryReminder", () => {
   it("returns a reminder when enabled", () => {

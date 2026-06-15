@@ -202,7 +202,7 @@ export function useCreateActivity() {
         user_id: user.id,
         title: input.title.trim(),
         section_type: input.section_type,
-        priority: input.priority ?? null,
+        priority: input.priority ?? 'B', // Phase 0A: priority mandatory, default B.
         estimated_minutes: input.estimated_minutes,
         remaining_minutes: input.estimated_minutes,
         status: 'not_started' as const,
@@ -303,7 +303,7 @@ export function useUpdateActivity() {
         .update({
           title: input.title.trim(),
           section_type: input.section_type,
-          priority: input.priority ?? null,
+          priority: input.priority ?? 'B', // Phase 0A: priority mandatory, default B.
           activity_date: input.activity_date,
           estimated_minutes: input.estimated_minutes,
           remaining_minutes: newRemaining,

@@ -276,7 +276,7 @@ export function useCreateProjectActivity() {
         user_id: user.id,
         title: input.title.trim(),
         section_type: sectionType,
-        priority: input.priority ?? null,
+        priority: input.priority ?? 'B', // Phase 0A: priority mandatory, default B.
         activity_date: input.activity_date,
         estimated_minutes: estimatedMinutes,
         remaining_minutes: estimatedMinutes,

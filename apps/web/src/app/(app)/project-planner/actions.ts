@@ -117,9 +117,11 @@ export async function createProjectActivity(
   const title = (formData.get("title") as string | null)?.trim();
   if (!title) return { error: "Activity title is required." };
 
-  const activityDate = formData.get("activity_date") as string;
-  if (!activityDate) return { error: "Date is required." };
-  if (!canCreateActivityOnDate(activityDate)) {
+  // Phase 1B: no date → park on Someday (today as a soft date).
+  const activityDateRaw = (formData.get("activity_date") as string) || "";
+  const isSomeday = !activityDateRaw;
+  const activityDate = activityDateRaw || new Date().toISOString().slice(0, 10);
+  if (activityDateRaw && !canCreateActivityOnDate(activityDate)) {
     return { error: "Cannot create activities in the past." };
   }
 
@@ -131,7 +133,7 @@ export async function createProjectActivity(
   const estimatedMinutes = Math.round(estimatedHours * 60);
 
   const sectionType = (formData.get("section_type") as string) || "work";
-  const priority = (formData.get("priority") as string) || null;
+  const priority = (formData.get("priority") as string) === "A" ? "A" : "B"; // Phase 0A: mandatory A|B
   const delegatedContactId = (formData.get("delegated_contact_id") as string) || null;
   const isDelegated = sectionType === "delegated";
 
@@ -166,7 +168,7 @@ export async function createProjectActivity(
     user_id: user.id,
     title,
     section_type: sectionType,
-    priority: priority || null,
+    priority,
     estimated_minutes: estimatedMinutes,
     remaining_minutes: estimatedMinutes,
     status: "not_started" as const,
@@ -176,6 +178,7 @@ export async function createProjectActivity(
     origin_type: "project" as const,
     moved_from_date: null,
     recurrence_rule: recurrenceRule,
+    is_someday: isSomeday,
   };
 
   const { error } = await supabase.from("activities").insert({
@@ -274,7 +277,7 @@ export async function bulkCreateProjectActivities(
     return { error: "Estimated time must be a positive number." };
   }
   const estimatedMinutes = Math.round(estimatedHours * 60);
-  const priority = (formData.get("priority") as string) || null;
+  const priority = (formData.get("priority") as string) === "A" ? "A" : "B"; // Phase 0A: mandatory A|B
 
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) redirect("/login");
@@ -283,7 +286,7 @@ export async function bulkCreateProjectActivities(
     user_id: user.id,
     title,
     section_type: "work" as const,
-    priority: priority || null,
+    priority,
     activity_date: activityDate,
     estimated_minutes: estimatedMinutes,
     remaining_minutes: estimatedMinutes,

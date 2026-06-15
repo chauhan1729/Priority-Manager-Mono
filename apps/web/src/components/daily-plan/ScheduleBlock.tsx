@@ -89,6 +89,7 @@ export function ScheduleBlock({
           {isPast && status === "upcoming" && (
             <span className="text-amber-600 font-medium">needs update</span>
           )}
+          {instance.note && <span className="italic truncate">“{instance.note}”</span>}
         </div>
       )}
     </button>

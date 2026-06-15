@@ -15,9 +15,12 @@ export function intervalsOverlap(
   return aStart < bEnd && bStart < aEnd;
 }
 
-export interface OverlapCheckResult {
+/** Overlap detection only needs these fields — keeps callers free to pass partial selects. */
+type OverlapInstance = Pick<ScheduleInstance, "id" | "start_at" | "end_at">;
+
+export interface OverlapCheckResult<T extends OverlapInstance = ScheduleInstance> {
   overlaps: boolean;
-  conflictingInstances: ScheduleInstance[];
+  conflictingInstances: T[];
 }
 
 /**
@@ -29,12 +32,12 @@ export interface OverlapCheckResult {
  * @param proposedEnd   — ISO datetime string
  * @param excludeId     — optional: exclude this instance (for reschedule checks)
  */
-export function checkScheduleOverlap(
-  existing: ScheduleInstance[],
+export function checkScheduleOverlap<T extends OverlapInstance>(
+  existing: T[],
   proposedStart: string,
   proposedEnd: string,
   excludeId?: string,
-): OverlapCheckResult {
+): OverlapCheckResult<T> {
   const pStart = new Date(proposedStart);
   const pEnd = new Date(proposedEnd);
 
@@ -68,6 +71,39 @@ export function validateFocusMinutes(
     return `Focus duration (${focusMinutes}m) exceeds remaining activity time (${activityRemainingMinutes}m)`;
   }
   return null;
+}
+
+/**
+ * Phase 3A: meeting buffer. Minutes of gap between a block ending and the next meeting starting.
+ * Returns the smallest gap to any upcoming meeting that starts at/after the block ends, or null if
+ * there is no such meeting. A negative-ish small gap means the block ends too close to a meeting.
+ */
+export function nextMeetingGapMinutes(
+  blockEndISO: string,
+  meetingStartsISO: string[],
+): number | null {
+  const end = new Date(blockEndISO).getTime();
+  let smallest: number | null = null;
+  for (const startISO of meetingStartsISO) {
+    const gap = (new Date(startISO).getTime() - end) / 60_000;
+    if (gap < 0) continue; // meeting already started before the block ends — handled by overlap
+    if (smallest === null || gap < smallest) smallest = gap;
+  }
+  return smallest;
+}
+
+/**
+ * Phase 3A: soft buffer check (NOT a hard block). Returns true when a block ending at `blockEndISO`
+ * leaves less than `bufferMin` before the nearest upcoming meeting — the UI surfaces a gentle warning.
+ */
+export function violatesMeetingBuffer(
+  blockEndISO: string,
+  meetingStartsISO: string[],
+  bufferMin: number,
+): boolean {
+  if (bufferMin <= 0) return false;
+  const gap = nextMeetingGapMinutes(blockEndISO, meetingStartsISO);
+  return gap !== null && gap < bufferMin;
 }
 
 /**

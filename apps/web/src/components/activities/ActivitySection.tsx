@@ -29,6 +29,8 @@ interface Props {
   onPostpone: (id: string, projectId: string | null) => void;
   onEdit: (activity: Activity) => void;
   onArchive: (id: string, projectId: string | null) => void;
+  onTogglePriority?: ((activity: Activity) => void) | undefined;
+  onMoveToSomeday?: ((activity: Activity) => void) | undefined;
 }
 
 export function ActivitySection({
@@ -49,6 +51,8 @@ export function ActivitySection({
   onPostpone,
   onEdit,
   onArchive,
+  onTogglePriority,
+  onMoveToSomeday,
 }: Props) {
   if (activities.length === 0) return null;
 
@@ -98,6 +102,8 @@ export function ActivitySection({
             onPostpone={onPostpone}
             onEdit={onEdit}
             onArchive={onArchive}
+            onTogglePriority={onTogglePriority}
+            onMoveToSomeday={onMoveToSomeday}
           />
         ))}
       </div>

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { canScheduleAt, checkScheduleOverlap, validateFocusMinutes, validateLockedMinutes } from "@pm/domain";
+import type { ScheduleInstance } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ActionResult = { success: true } | { error: string };
@@ -47,7 +48,7 @@ export async function scheduleActivity(
   // 3. Fetch activity — validate ownership and remaining time
   const { data: activity, error: actErr } = await supabase
     .from("activities")
-    .select("id, remaining_minutes, estimated_minutes, linked_project_id, status")
+    .select("id, remaining_minutes, estimated_minutes, linked_project_id, status, priority")
     .eq("id", activityId)
     .eq("user_id", user.id)
     .single();
@@ -55,6 +56,11 @@ export async function scheduleActivity(
   if (actErr || !activity) return { error: "Activity not found" };
   if (activity.status === "completed" || activity.status === "cancelled") {
     return { error: "Cannot schedule a completed or cancelled activity" };
+  }
+  // Phase 0A: only A-priority activities are schedulable onto the timeline.
+  // A B reaches the timeline only after being promoted to A.
+  if (activity.priority !== "A") {
+    return { error: "Only A-priority activities can be scheduled. Promote it to A first." };
   }
 
   const focusErr = validateFocusMinutes(focusMinutes, activity.remaining_minutes);
@@ -67,7 +73,7 @@ export async function scheduleActivity(
   // 4. Fetch existing instances for overlap check
   const { data: existing } = await supabase
     .from("schedule_instances")
-    .select("id, start_at, end_at, source_activity_id, source_meeting_id, source_event_id, source_type, schedule_date, locked_minutes, focus_minutes, status_snapshot, keep_as_history, created_at, updated_at, user_id")
+    .select("id, start_at, end_at, source_activity_id, source_meeting_id, source_event_id, source_type, schedule_date, locked_minutes, focus_minutes, status_snapshot, keep_as_history, note, created_at, updated_at, user_id")
     .eq("user_id", user.id)
     .eq("schedule_date", scheduleDate);
 
@@ -112,6 +118,162 @@ export async function scheduleActivity(
       .eq("id", activityId)
       .eq("user_id", user.id);
   }
+
+  revalidateAll(activity.linked_project_id);
+  return { success: true };
+}
+
+/**
+ * Phase 4 (revised cycles): "start a cycle" = drop a timed focus block on the timeline starting NOW
+ * for the chosen duration. Unlike planned scheduling, this is allowed for B's too (you're actively
+ * choosing to work it now), and the block starts in "working" state.
+ */
+export async function startCycleBlock(
+  activityId: string,
+  durationMinutes: number,
+  note?: string,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+    return { error: "Pick a duration." };
+  }
+  const dur = Math.min(Math.round(durationMinutes), 600); // cap at 10h
+
+  const now = new Date();
+  const startAt = now.toISOString();
+  const endAt = new Date(now.getTime() + dur * 60_000).toISOString();
+  const scheduleDate = now.toISOString().slice(0, 10);
+
+  const { data: activity, error: actErr } = await supabase
+    .from("activities")
+    .select("id, remaining_minutes, status, linked_project_id")
+    .eq("id", activityId)
+    .eq("user_id", user.id)
+    .single();
+  if (actErr || !activity) return { error: "Activity not found" };
+  if (activity.status === "completed" || activity.status === "cancelled") {
+    return { error: "Cannot start a cycle on a completed or cancelled activity" };
+  }
+
+  // Overlap check against today's blocks.
+  const { data: existing } = await supabase
+    .from("schedule_instances")
+    .select("id, start_at, end_at, source_activity_id, source_meeting_id, source_event_id, source_type, schedule_date, locked_minutes, focus_minutes, status_snapshot, keep_as_history, note, created_at, updated_at, user_id")
+    .eq("user_id", user.id)
+    .eq("schedule_date", scheduleDate);
+
+  const { overlaps, conflictingInstances } = checkScheduleOverlap(existing ?? [], startAt, endAt);
+  if (overlaps) {
+    return { error: `That time overlaps ${conflictingInstances.length} existing block(s). Finish or move it first.` };
+  }
+
+  const { error: insertErr } = await supabase.from("schedule_instances").insert({
+    user_id: user.id,
+    source_type: "activity",
+    source_activity_id: activityId,
+    source_meeting_id: null,
+    source_event_id: null,
+    schedule_date: scheduleDate,
+    start_at: startAt,
+    end_at: endAt,
+    locked_minutes: dur,
+    focus_minutes: dur,
+    status_snapshot: "working", // a cycle starts now — you're focusing
+    keep_as_history: true,
+    note: note?.trim() ? note.trim() : null,
+  });
+  if (insertErr) return { error: insertErr.message };
+
+  // Mark the activity as working and consume remaining time.
+  const newRemaining = activity.remaining_minutes > 0
+    ? Math.max(0, activity.remaining_minutes - dur)
+    : 0;
+  await supabase
+    .from("activities")
+    .update({ status: "working", remaining_minutes: newRemaining, updated_at: new Date().toISOString() })
+    .eq("id", activityId)
+    .eq("user_id", user.id);
+
+  revalidateAll(activity.linked_project_id);
+  return { success: true };
+}
+
+/**
+ * For a (possibly recurring) appointment occurrence on a given day: find its schedule_instance, or
+ * materialize one on demand, so the user can manage/complete it for that specific day.
+ */
+export async function ensureAppointmentInstance(
+  eventId: string,
+  scheduleDate: string,
+  startAt: string,
+  endAt: string,
+  sourceType: "appointment" | "other",
+): Promise<{ instance: ScheduleInstance } | { error: string }> {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: existing } = await supabase
+    .from("schedule_instances")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("source_event_id", eventId)
+    .eq("schedule_date", scheduleDate)
+    .maybeSingle();
+  if (existing) return { instance: existing as ScheduleInstance };
+
+  const lockedMinutes =
+    Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000) || 30;
+  const { data: inserted, error } = await supabase
+    .from("schedule_instances")
+    .insert({
+      user_id: user.id,
+      source_type: sourceType,
+      source_activity_id: null,
+      source_meeting_id: null,
+      source_event_id: eventId,
+      schedule_date: scheduleDate,
+      start_at: startAt,
+      end_at: endAt,
+      locked_minutes: lockedMinutes,
+      focus_minutes: null,
+      status_snapshot: "upcoming",
+      keep_as_history: true,
+    })
+    .select("*")
+    .single();
+  if (error || !inserted) return { error: error?.message ?? "Could not open appointment" };
+
+  revalidateAll();
+  return { instance: inserted as ScheduleInstance };
+}
+
+/**
+ * Phase 0A: promote a B activity to A directly from the Daily Plan, so it becomes schedulable.
+ * Intended for use once the day's A's are completed and the user wants to pull a B forward.
+ */
+export async function promoteActivityToA(activityId: string): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: activity, error: actErr } = await supabase
+    .from("activities")
+    .select("id, linked_project_id")
+    .eq("id", activityId)
+    .eq("user_id", user.id)
+    .single();
+  if (actErr || !activity) return { error: "Activity not found" };
+
+  const { error } = await supabase
+    .from("activities")
+    .update({ priority: "A", updated_at: new Date().toISOString() })
+    .eq("id", activityId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
 
   revalidateAll(activity.linked_project_id);
   return { success: true };

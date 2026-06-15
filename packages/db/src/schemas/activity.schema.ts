@@ -3,7 +3,11 @@ import { z } from "zod";
 import { isoDateSchema, isoDatetimeSchema, nonNegativeMinutesSchema, uuidSchema } from "./common";
 
 export const activitySectionSchema = z.enum(["work", "outside", "delegated", "unplanned"]);
+// Phase 0A: priority is mandatory (every activity is an A or a B — "everything is a B").
+// Reads stay tolerant of legacy null (kept in the shared TS union for mobile compile-compat), but the
+// canonical A/B value defaults to B and the DB enforces NOT NULL.
 export const activityPrioritySchema = z.enum(["A", "B"]).nullable();
+export const activityPriorityRequiredSchema = z.enum(["A", "B"]);
 export const activityStatusSchema = z.enum([
   "not_started",
   "working",
@@ -19,7 +23,7 @@ const activityBaseSchema = z.object({
   user_id: uuidSchema,
   section_type: activitySectionSchema,
   title: z.string().min(1).max(300),
-  priority: activityPrioritySchema.default(null),
+  priority: activityPrioritySchema.default("B"),
   activity_date: isoDateSchema,
   estimated_minutes: nonNegativeMinutesSchema.default(0),
   remaining_minutes: nonNegativeMinutesSchema.default(0),
@@ -29,6 +33,7 @@ const activityBaseSchema = z.object({
   note: z.string().nullable(),
   origin_type: activityOriginTypeSchema.nullable().default(null),
   moved_from_date: isoDateSchema.nullable(),
+  is_someday: z.boolean().default(false),
   created_at: isoDatetimeSchema,
   updated_at: isoDatetimeSchema,
 });
@@ -43,8 +48,10 @@ export const activitySchema = activityBaseSchema
         path: ["remaining_minutes"],
       });
     }
-    // Work activities must have a linked project (spec §10.5)
-    if (data.section_type === "work" && !data.linked_project_id) {
+    // Work activities must have a linked project (spec §10.5).
+    // Phase 1B: someday items are parked / not yet committed, so they're exempt until pulled
+    // into the horizon (at which point the rule re-applies).
+    if (data.section_type === "work" && !data.is_someday && !data.linked_project_id) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Work activities require a linked_project_id",

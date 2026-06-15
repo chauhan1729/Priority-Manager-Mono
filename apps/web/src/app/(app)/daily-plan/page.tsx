@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { expandRecurringMeetings, localTodayForTimezone } from "@pm/domain";
+import { expandRecurringCalendarEvents, expandRecurringMeetings, localTodayForTimezone } from "@pm/domain";
 import type { Activity, CalendarEvent, Meeting, Project, ScheduleInstance } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { DailyPlanView } from "@/components/daily-plan/DailyPlanView";
@@ -52,12 +52,13 @@ export default async function DailyPlanPage({ searchParams }: Props) {
     { data: prevActivities },
     { data: projects },
   ] = await Promise.all([
-    // Activities for selected date
+    // Activities for selected date (exclude Someday — those live only on /someday)
     supabase
       .from("activities")
       .select("*")
       .eq("user_id", user.id)
       .eq("activity_date", selectedDate)
+      .eq("is_someday", false)
       .order("created_at", { ascending: true }),
 
     // Schedule instances for selected date (timeline blocks)
@@ -76,21 +77,21 @@ export default async function DailyPlanPage({ searchParams }: Props) {
       .eq("user_id", user.id)
       .or(`date.eq.${selectedDate},recurrence_rule.not.is.null`),
 
-    // CalendarEvents (appointment/other) for selected date
-    // ScheduleInstances with source_type='appointment'/'other' reference these via source_event_id
+    // CalendarEvents (appointment/other) for selected date + all recurring (for expansion)
     supabase
       .from("calendar_events")
       .select("*")
       .eq("user_id", user.id)
-      .eq("date", selectedDate)
-      .in("event_type", ["appointment", "other"]),
+      .in("event_type", ["appointment", "other"])
+      .or(`date.eq.${selectedDate},recurrence_rule.not.is.null`),
 
-    // Previous day's carry-forward eligible activities
+    // Previous day's carry-forward eligible activities (exclude Someday)
     supabase
       .from("activities")
       .select("*")
       .eq("user_id", user.id)
       .eq("activity_date", previousDate)
+      .eq("is_someday", false)
       .in("status", ["not_started", "postponed"]),
 
     // Active projects for name display
@@ -102,9 +103,14 @@ export default async function DailyPlanPage({ searchParams }: Props) {
       .order("name", { ascending: true }),
   ]);
 
-  // Expand recurring meetings and keep only those on selectedDate
+  // Expand recurring meetings + appointments and keep only those on selectedDate
   const expandedMeetings = expandRecurringMeetings(
     (meetings ?? []) as Meeting[],
+    selectedDate,
+    selectedDate,
+  );
+  const expandedEvents = expandRecurringCalendarEvents(
+    (calendarEvents ?? []) as CalendarEvent[],
     selectedDate,
     selectedDate,
   );
@@ -114,7 +120,7 @@ export default async function DailyPlanPage({ searchParams }: Props) {
       activities={(activities ?? []) as Activity[]}
       scheduleInstances={(scheduleInstances ?? []) as ScheduleInstance[]}
       meetings={expandedMeetings}
-      calendarEvents={(calendarEvents ?? []) as CalendarEvent[]}
+      calendarEvents={expandedEvents}
       carryForwardActivities={(prevActivities ?? []) as Activity[]}
       projects={(projects ?? []) as Pick<Project, "id" | "name" | "status">[]}
       selectedDate={selectedDate}

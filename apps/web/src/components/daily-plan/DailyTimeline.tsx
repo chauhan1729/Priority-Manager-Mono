@@ -61,6 +61,8 @@ interface Props {
   isPending: boolean;
   canSchedule: boolean;
   onBlockClick: (instance: ScheduleInstance) => void;
+  /** Click a (recurring) appointment occurrence — parent materializes its day instance + opens the modal. */
+  onAppointmentClick?: (event: CalendarEvent) => void;
   /** Called with local "HH:MM" when user clicks an empty grid area. */
   onSlotClick: (startTime: string) => void;
 }
@@ -75,6 +77,7 @@ export function DailyTimeline({
   isPending,
   canSchedule,
   onBlockClick,
+  onAppointmentClick,
   onSlotClick,
 }: Props) {
   /** Convert a click Y offset (px from top of grid) to a local "HH:MM" snapped to 15 min. */
@@ -104,6 +107,26 @@ export function DailyTimeline({
     nowMinutes >= TIMELINE_START_MIN && nowMinutes <= TIMELINE_END_HOUR * 60
       ? minutesToPx(nowMinutes)
       : null;
+
+  // Meetings / appointments are shown directly from their records (they don't create schedule
+  // instances). Skip any that DO already have a schedule_instance, to avoid double-rendering.
+  const scheduledMeetingIds = new Set(
+    scheduleInstances.map((i) => i.source_meeting_id).filter(Boolean),
+  );
+  const scheduledEventIds = new Set(
+    scheduleInstances.map((i) => i.source_event_id).filter(Boolean),
+  );
+  const meetingsOnTimeline = Array.from(meetingMap.values()).filter(
+    (m) => m.start_at && !scheduledMeetingIds.has(m.id),
+  );
+  const eventsOnTimeline = Array.from(eventMap.values()).filter(
+    (e) =>
+      (e.event_type === "appointment" || e.event_type === "other") &&
+      e.start_at &&
+      !scheduledEventIds.has(e.id),
+  );
+  const hasAnything =
+    scheduleInstances.length > 0 || meetingsOnTimeline.length > 0 || eventsOnTimeline.length > 0;
 
   return (
     <div className="rounded-xl border border-blue-100 bg-white overflow-hidden">
@@ -263,8 +286,79 @@ export function DailyTimeline({
               );
             })}
 
+            {/* Meeting blocks — rendered directly (meetings don't create schedule instances) */}
+            {meetingsOnTimeline.map((meeting) => {
+              if (!meeting.start_at) return null;
+              const startMin = toLocalMinutes(meeting.start_at);
+              if (startMin < TIMELINE_START_MIN || startMin >= TIMELINE_END_HOUR * 60) return null;
+              const top = minutesToPx(startMin);
+              const dur =
+                meeting.duration_minutes ||
+                (meeting.end_at
+                  ? Math.max(0, (new Date(meeting.end_at).getTime() - new Date(meeting.start_at).getTime()) / 60_000)
+                  : 0) ||
+                30;
+              const height = Math.max(dur * PX_PER_MIN, 24);
+              return (
+                <a
+                  key={`meeting-${meeting.id}`}
+                  href="/meeting-planner"
+                  className="absolute left-1 right-1 block rounded-lg bg-violet-100 border border-violet-200 px-2 py-1 overflow-hidden hover:bg-violet-200 transition-colors"
+                  style={{ top, height }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <p className="text-[10px] font-semibold text-violet-800 truncate leading-tight">
+                    {meeting.title}
+                  </p>
+                  <p className="text-[9px] text-violet-600 truncate leading-tight">
+                    {formatLocalTime(meeting.start_at)} · Meeting
+                  </p>
+                </a>
+              );
+            })}
+
+            {/* Appointment / other blocks — rendered directly from calendar_events */}
+            {eventsOnTimeline.map((ev) => {
+              if (!ev.start_at) return null;
+              const startMin = toLocalMinutes(ev.start_at);
+              if (startMin < TIMELINE_START_MIN || startMin >= TIMELINE_END_HOUR * 60) return null;
+              const top = minutesToPx(startMin);
+              const dur =
+                ev.duration_minutes ||
+                (ev.end_at
+                  ? Math.max(0, (new Date(ev.end_at).getTime() - new Date(ev.start_at).getTime()) / 60_000)
+                  : 0) ||
+                30;
+              const height = Math.max(dur * PX_PER_MIN, 24);
+              const isOther = ev.event_type === "other";
+              return (
+                <button
+                  key={`event-${ev.id}`}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onAppointmentClick?.(ev);
+                  }}
+                  disabled={isPending}
+                  className={`absolute left-1 right-1 block rounded-lg border px-2 py-1 text-left overflow-hidden transition-colors disabled:opacity-50 ${
+                    isOther
+                      ? "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                      : "bg-emerald-50 border-emerald-200 hover:bg-emerald-100"
+                  }`}
+                  style={{ top, height }}
+                >
+                  <p className={`text-[10px] font-semibold truncate leading-tight ${isOther ? "text-gray-700" : "text-emerald-800"}`}>
+                    {ev.title}
+                  </p>
+                  <p className={`text-[9px] truncate leading-tight ${isOther ? "text-gray-500" : "text-emerald-600"}`}>
+                    {formatLocalTime(ev.start_at)} · {isOther ? "Event" : "Appointment"}
+                  </p>
+                </button>
+              );
+            })}
+
             {/* Empty state */}
-            {scheduleInstances.length === 0 && (
+            {!hasAnything && (
               <div className="absolute inset-0 flex items-center justify-center">
                 <p className="text-xs text-ink-light">
                   No scheduled blocks. Schedule from the list →

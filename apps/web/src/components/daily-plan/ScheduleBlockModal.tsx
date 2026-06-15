@@ -3,7 +3,7 @@
 import { useState } from "react";
 
 import { isDateTimeInPast, todayISO } from "@pm/domain";
-import type { Activity, Meeting, ScheduleInstance, ScheduleInstanceStatus } from "@pm/types";
+import type { Activity, CalendarEvent, Meeting, ScheduleInstance, ScheduleInstanceStatus } from "@pm/types";
 
 function formatMinutes(minutes: number): string {
   if (minutes < 60) return `${minutes}m`;
@@ -33,6 +33,7 @@ interface Props {
   instance: ScheduleInstance;
   activity: Activity | null;
   meeting: Meeting | null;
+  event?: CalendarEvent | null;
   projectName: string | null;
   isPending: boolean;
   onClose: () => void;
@@ -40,12 +41,15 @@ interface Props {
   onUnscheduleRunning: (instanceId: string, activityId: string, mode: "full" | "split") => void;
   onStatusUpdate: (instanceId: string, status: ScheduleInstanceStatus) => void;
   onPostpone: (activityId: string, toDate: string, linkedProjectId: string | null) => void;
+  /** Phase 1A: start a focus cycle on this block's activity (Daily Plan is the cycle launch point). */
+  onStartCycle?: (activity: Activity) => void;
 }
 
 export function ScheduleBlockModal({
   instance,
   activity,
   meeting,
+  event,
   projectName,
   isPending,
   onClose,
@@ -53,6 +57,7 @@ export function ScheduleBlockModal({
   onUnscheduleRunning,
   onStatusUpdate,
   onPostpone,
+  onStartCycle,
 }: Props) {
   const [postponeDate, setPostponeDate] = useState("");
   const [showPostponeInput, setShowPostponeInput] = useState(false);
@@ -62,9 +67,13 @@ export function ScheduleBlockModal({
   const isEnded = isDateTimeInPast(instance.end_at);
   const isRunning = isPast && !isEnded; // started but not yet ended
   const isMeetingBlock = instance.source_type === "meeting";
+  const isEventBlock = instance.source_type === "appointment" || instance.source_type === "other";
+  const eventLabel = instance.source_type === "appointment" ? "Appointment" : "Event";
   const title = isMeetingBlock
     ? (meeting?.title ?? "Meeting")
-    : (activity?.title ?? "Unknown activity");
+    : isEventBlock
+      ? (event?.title ?? eventLabel)
+      : (activity?.title ?? "Unknown activity");
   const focus = instance.focus_minutes ?? instance.locked_minutes;
 
   // Estimate elapsed / remaining for display in running-block choice
@@ -94,12 +103,20 @@ export function ScheduleBlockModal({
                 Meeting
               </span>
             )}
+            {isEventBlock && (
+              <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 uppercase tracking-wide">
+                {eventLabel}
+              </span>
+            )}
           </div>
           <p className="text-xs text-ink-light mt-0.5">
             {formatLocalTime(instance.start_at)} – {formatLocalTime(instance.end_at)}
             {" · "}{formatMinutes(focus)}
             {projectName && <span className="text-blue-600"> · {projectName}</span>}
           </p>
+          {instance.note && (
+            <p className="mt-1 text-xs italic text-ink-light">“{instance.note}”</p>
+          )}
           {isMeetingBlock && meeting && (
             <div className="mt-2 space-y-0.5">
               {meeting.agenda && (
@@ -119,6 +136,17 @@ export function ScheduleBlockModal({
         </div>
 
         <div className="space-y-2">
+          {/* Start a focus cycle (activity blocks only) */}
+          {activity && !isMeetingBlock && instance.status_snapshot !== "completed" && onStartCycle && (
+            <button
+              onClick={() => { onStartCycle(activity); onClose(); }}
+              disabled={isPending}
+              className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 text-left"
+            >
+              ◷ Start a focus cycle
+            </button>
+          )}
+
           {/* Completed block — locked, read-only */}
           {instance.status_snapshot === "completed" && (
             <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-800">
@@ -126,8 +154,8 @@ export function ScheduleBlockModal({
             </div>
           )}
 
-          {/* Status updates — for past/running blocks (not already completed) */}
-          {isPast && instance.status_snapshot !== "completed" && (
+          {/* Status updates — past/running activity blocks, or any meeting/appointment block. */}
+          {(isPast || isMeetingBlock || isEventBlock) && instance.status_snapshot !== "completed" && (
             <div>
               <p className="text-[10px] font-semibold text-ink-light uppercase tracking-wide mb-1.5">
                 Update Status

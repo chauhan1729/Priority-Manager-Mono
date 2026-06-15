@@ -26,6 +26,7 @@ function makeMeeting(overrides: Partial<Meeting> = {}): Meeting {
     key_takeaways: null,
     recurrence_rule: null,
     status: "upcoming",
+    archived: false,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     ...overrides,

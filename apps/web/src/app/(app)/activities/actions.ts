@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { canCreateActivityOnDate, MAX_A_PRIORITY_PER_DAY } from "@pm/domain";
+import { buildActivityMove, canCreateActivityOnDate } from "@pm/domain";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ActionResult = { error: string } | { success: true } | null;
@@ -25,7 +25,10 @@ async function getAuthenticatedUser() {
  * Called after every mutation so Activities tab and Project Planner stay in sync.
  */
 function revalidateAll(linkedProjectId?: string | null) {
-  revalidatePath("/activities");
+  revalidatePath("/activities/a");
+  revalidatePath("/activities/b");
+  revalidatePath("/daily-plan");
+  revalidatePath("/someday");
   revalidatePath("/project-planner");
   if (linkedProjectId) revalidatePath(`/project-planner/${linkedProjectId}`);
 }
@@ -41,9 +44,11 @@ export async function createActivity(
   const title = (formData.get("title") as string | null)?.trim();
   if (!title) return { error: "Title is required." };
 
-  const activityDate = formData.get("activity_date") as string;
-  if (!activityDate) return { error: "Date is required." };
-  if (!canCreateActivityOnDate(activityDate)) {
+  // Phase 1B: no date chosen → park on the Someday list (use today as a soft "review on/after" date).
+  const activityDateRaw = (formData.get("activity_date") as string) || "";
+  const isSomeday = !activityDateRaw;
+  const activityDate = activityDateRaw || new Date().toISOString().slice(0, 10);
+  if (activityDateRaw && !canCreateActivityOnDate(activityDate)) {
     return { error: "Cannot create activities in the past." };
   }
 
@@ -62,11 +67,12 @@ export async function createActivity(
   }
   const estimatedMinutes = Math.round(estimatedHours * 60);
 
-  const priority = (formData.get("priority") as string) || null;
+  // Phase 0A: priority is mandatory — default to B ("everything is a B").
+  const priority = (formData.get("priority") as string) === "A" ? "A" : "B";
   const linkedProjectId = (formData.get("linked_project_id") as string) || null;
 
-  // Spec §10.5: Work activities must link to a project
-  if (sectionType === "work" && !linkedProjectId) {
+  // Spec §10.5: Work activities must link to a project — except Someday items (parked, not committed).
+  if (sectionType === "work" && !linkedProjectId && !isSomeday) {
     return { error: "Work activities must be linked to a project." };
   }
 
@@ -85,21 +91,8 @@ export async function createActivity(
     if (!contact) return { error: "Contact not found." };
   }
 
-  // Spec §10.5: Hard block — max 3 A-priorities per day (server-side)
-  if (priority === "A") {
-    const { count } = await supabase
-      .from("activities")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("activity_date", activityDate)
-      .eq("priority", "A");
-
-    if ((count ?? 0) >= MAX_A_PRIORITY_PER_DAY) {
-      return {
-        error: `Maximum ${MAX_A_PRIORITY_PER_DAY} A-priority activities allowed per day.`,
-      };
-    }
-  }
+  // Phase 0A: the 3-A/day cap is a soft, override-able recommendation, surfaced as an escalating
+  // warning in the UI — not a server-side hard block. So no cap enforcement here.
 
   const recurrenceRule = (formData.get("recurrence_rule") as string) || null;
   const validRecurrence = ["daily", "weekly", "monthly"] as const;
@@ -113,7 +106,7 @@ export async function createActivity(
     user_id: user.id,
     title,
     section_type: sectionType,
-    priority: priority || null,
+    priority,
     estimated_minutes: estimatedMinutes,
     remaining_minutes: estimatedMinutes,
     status: "not_started" as const,
@@ -123,6 +116,7 @@ export async function createActivity(
     origin_type: "manual" as const,
     moved_from_date: null,
     recurrence_rule: typedRecurrence,
+    is_someday: isSomeday,
   };
 
   const { error } = await supabase.from("activities").insert({
@@ -205,7 +199,8 @@ export async function updateActivity(
   }
   const estimatedMinutes = Math.round(estimatedHours * 60);
 
-  const priority = (formData.get("priority") as string) || null;
+  // Phase 0A: priority is mandatory — default to B.
+  const priority = (formData.get("priority") as string) === "A" ? "A" : "B";
   const linkedProjectId = (formData.get("linked_project_id") as string) || null;
 
   if (sectionType === "work" && !linkedProjectId) {
@@ -215,29 +210,14 @@ export async function updateActivity(
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) redirect("/login");
 
-  // A-priority cap check (exclude self from count)
-  if (priority === "A") {
-    const { count } = await supabase
-      .from("activities")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", user.id)
-      .eq("activity_date", activityDate)
-      .eq("priority", "A")
-      .neq("id", activityId);
-
-    if ((count ?? 0) >= MAX_A_PRIORITY_PER_DAY) {
-      return {
-        error: `Maximum ${MAX_A_PRIORITY_PER_DAY} A-priority activities allowed per day.`,
-      };
-    }
-  }
+  // Phase 0A: 3-A/day cap is a soft UI warning with override, not a server hard block.
 
   const { error } = await supabase
     .from("activities")
     .update({
       title,
       section_type: sectionType,
-      priority: priority || null,
+      priority,
       activity_date: activityDate,
       estimated_minutes: estimatedMinutes,
       remaining_minutes: estimatedMinutes, // sync remaining to new estimate
@@ -516,16 +496,18 @@ export async function bulkUpdateActivityStatus(
 
 export async function bulkUpdateActivityPriority(
   activityIds: string[],
-  priority: string | null,
+  priority: "A" | "B",
 ): Promise<{ error?: string }> {
   if (activityIds.length === 0) return {};
 
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) return { error: "Not authenticated." };
 
+  // Phase 0A: priority is mandatory A|B (default B for any unexpected value).
+  const next = priority === "A" ? "A" : "B";
   const { error } = await supabase
     .from("activities")
-    .update({ priority: priority || null, updated_at: new Date().toISOString() })
+    .update({ priority: next, updated_at: new Date().toISOString() })
     .in("id", activityIds)
     .eq("user_id", user.id);
 
@@ -577,4 +559,141 @@ export async function archiveActivity(
     .eq("user_id", user.id);
 
   revalidateAll(linkedProjectId);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1B — Someday list (parked outside the 30-day horizon)
+// ---------------------------------------------------------------------------
+
+/** Park an activity on the Someday list (outside the horizon). */
+export async function moveToSomeday(activityId: string): Promise<{ error?: string }> {
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+  const { error } = await supabase
+    .from("activities")
+    .update({ is_someday: true, updated_at: new Date().toISOString() })
+    .eq("id", activityId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+  revalidateAll();
+  return {};
+}
+
+/**
+ * Pull a Someday item into the 30-day horizon: clear the someday flag and give it a concrete date.
+ * Rejects past dates (no creation in the past).
+ */
+export async function pullIntoHorizon(
+  activityId: string,
+  toDateISO: string,
+): Promise<{ error?: string }> {
+  if (!canCreateActivityOnDate(toDateISO)) {
+    return { error: "Pick today or a future date." };
+  }
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+  const { error } = await supabase
+    .from("activities")
+    .update({ is_someday: false, activity_date: toDateISO, updated_at: new Date().toISOString() })
+    .eq("id", activityId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+  revalidateAll();
+  return {};
+}
+
+/**
+ * Phase 2A: re-date an activity to a chosen day (not a blind "tomorrow"), recording the move in
+ * activity_moves and setting moved_from_date. Rejects past targets.
+ */
+export async function rescheduleActivityToDate(
+  activityId: string,
+  toDateISO: string,
+  reason?: string,
+): Promise<{ error?: string }> {
+  if (!canCreateActivityOnDate(toDateISO)) {
+    return { error: "Pick today or a future date." };
+  }
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { data: activity } = await supabase
+    .from("activities")
+    .select("id, user_id, activity_date, linked_project_id")
+    .eq("id", activityId)
+    .eq("user_id", user.id)
+    .single();
+  if (!activity) return { error: "Activity not found." };
+  if (activity.activity_date === toDateISO) return {}; // no-op
+
+  const nowISO = new Date().toISOString();
+  const { error } = await supabase
+    .from("activities")
+    .update({
+      activity_date: toDateISO,
+      moved_from_date: activity.activity_date,
+      updated_at: nowISO,
+    })
+    .eq("id", activityId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+
+  const move = buildActivityMove({
+    activity,
+    toDateISO,
+    nowISO,
+    reason: reason ?? null,
+  });
+  await supabase.from("activity_moves").insert(move);
+
+  revalidateAll(activity.linked_project_id);
+  return {};
+}
+
+/** Quick-add a Someday item (title + optional project; priority B, parked outside the horizon). */
+export async function createSomedayActivity(
+  _prev: ActionResult,
+  formData: FormData,
+): Promise<ActionResult> {
+  const title = (formData.get("title") as string | null)?.trim();
+  if (!title) return { error: "Title is required." };
+
+  // Optional project link. If chosen, the item is a (parked) work activity; otherwise unplanned.
+  const linkedProjectId = (formData.get("linked_project_id") as string) || null;
+  const sectionType = linkedProjectId ? "work" : "unplanned";
+
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) redirect("/login");
+
+  if (linkedProjectId) {
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", linkedProjectId)
+      .eq("user_id", user.id)
+      .single();
+    if (!project) return { error: "Project not found." };
+  }
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const { error } = await supabase.from("activities").insert({
+    user_id: user.id,
+    section_type: sectionType,
+    title,
+    priority: "B",
+    activity_date: todayStr, // soft "review on/after" date
+    estimated_minutes: 0,
+    remaining_minutes: 0,
+    status: "not_started",
+    linked_project_id: linkedProjectId,
+    delegated_contact_id: null,
+    note: (formData.get("note") as string) || null,
+    origin_type: "manual",
+    moved_from_date: null,
+    is_someday: true,
+  });
+  if (error) return { error: error.message };
+
+  revalidateAll();
+  return { success: true };
 }

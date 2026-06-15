@@ -103,15 +103,16 @@ function AddActivityForm({ projectId, contacts, onSuccess, onCancel }: AddActivi
       />
 
       <div className="grid grid-cols-2 gap-3">
-        {/* Date */}
+        {/* Date — optional; blank parks the task on Someday (Phase 1B) */}
         <div>
-          <label className="block text-xs text-ink-light mb-1">Date</label>
+          <label className="block text-xs text-ink-light mb-1">
+            Date <span className="text-ink-light/60">(blank → Someday)</span>
+          </label>
           <input
             name="activity_date"
             type="date"
-            required
             min={todayISO()}
-            defaultValue={todayISO()}
+            defaultValue=""
             className="w-full rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
         </div>

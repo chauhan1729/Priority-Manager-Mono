@@ -6,10 +6,13 @@ import type {
   ReminderPreference,
   ReminderType,
   ScheduleInstance,
+  SixTimeConfig,
+  SixTimeProblem,
   YearEntry,
 } from "@pm/types";
 
 import { getNextOccurrenceDate } from "../expense";
+import { isSixTimeSetUp, resolveSlotProblem, SIX_TIME_SLOT_COUNT } from "../six-time";
 import { birthdayDateForYear, isBirthdayEntry, isTravelOrAway } from "../year-entry";
 
 // ---------------------------------------------------------------------------
@@ -100,6 +103,102 @@ export function computeMorningSummaryReminder(
 }
 
 // ---------------------------------------------------------------------------
+// Phase 4: Six-Time Book reminders (six daily slots + nightly review)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns up to six "Six-Time check" reminders for today, one per configured slot time, each
+ * carrying the reminder phrase of the problem that slot is about. Gated on config.enabled + setup.
+ */
+export function computeSixTimeSlotReminders(
+  config: Pick<SixTimeConfig, "enabled" | "slot_times"> | null | undefined,
+  problems: Pick<SixTimeProblem, "position" | "status" | "reminder_phrase">[],
+  todayISO: string,
+): ReminderSchedule[] {
+  if (!config?.enabled || !isSixTimeSetUp(problems as SixTimeProblem[])) return [];
+  const out: ReminderSchedule[] = [];
+  for (let slot = 1; slot <= SIX_TIME_SLOT_COUNT; slot++) {
+    const time = config.slot_times[slot - 1];
+    if (!time) continue;
+    const problem = resolveSlotProblem(slot, problems as SixTimeProblem[]);
+    if (!problem) continue;
+    out.push({
+      type: "six_time_slot",
+      source_id: null,
+      scheduled_for: buildDateTimeFromTime(time, todayISO),
+      title: "Six-Time check",
+      body: problem.reminder_phrase,
+    });
+  }
+  return out;
+}
+
+/** The nightly review reminder (top 3 best / worst), if enabled. */
+export function computeSixTimeNightlyReminder(
+  config: Pick<SixTimeConfig, "enabled" | "nightly_time"> | null | undefined,
+  todayISO: string,
+): ReminderSchedule | null {
+  if (!config?.enabled) return null;
+  return {
+    type: "six_time_nightly",
+    source_id: null,
+    scheduled_for: buildDateTimeFromTime(config.nightly_time, todayISO),
+    title: "Nightly review",
+    body: "Review your day — top 3 best and worst, free of judgment. Focus on the good before sleep.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5: daily giving reminder
+// ---------------------------------------------------------------------------
+
+/** A daily "give something + keep score" nudge, while a giving challenge is active. */
+export function computeGivingReminder(
+  prefs: Partial<Pick<ReminderPreference, "giving_reminder_enabled" | "giving_reminder_time">>,
+  hasActiveChallenge: boolean,
+  todayISO: string,
+): ReminderSchedule | null {
+  if (!prefs.giving_reminder_enabled || !hasActiveChallenge) return null;
+  return {
+    type: "giving_daily",
+    source_id: null,
+    scheduled_for: buildDateTimeFromTime(prefs.giving_reminder_time ?? "20:00", todayISO),
+    title: "Give something today",
+    body: "Give freely and cheerfully — then log what you gave and what you received.",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1B: weekly Someday-review reminder
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns the weekly Someday-review reminder if enabled and today is the configured weekday.
+ * Fires at `someday_review_time`. Prompts the user to review the Someday list and pull items
+ * into the 30-day horizon.
+ */
+export function computeSomedayReviewReminder(
+  prefs: Partial<
+    Pick<
+      ReminderPreference,
+      "someday_review_enabled" | "someday_review_weekday" | "someday_review_time"
+    >
+  >,
+  todayISO: string,
+): ReminderSchedule | null {
+  if (!prefs.someday_review_enabled) return null;
+  const weekday = new Date(`${todayISO}T12:00:00`).getDay(); // 0=Sun … 6=Sat
+  if (weekday !== prefs.someday_review_weekday) return null;
+  return {
+    type: "weekly_someday_review",
+    source_id: null,
+    scheduled_for: buildDateTimeFromTime(prefs.someday_review_time ?? "09:00", todayISO),
+    title: "Weekly review",
+    body: "Review your Someday list — pull anything ready into the next 30 days.",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // §13: Upcoming meeting reminders
 // ---------------------------------------------------------------------------
 
@@ -128,6 +227,40 @@ export function computeMeetingUpcomingReminders(
         scheduled_for: reminderTime,
         title: m.title,
         body: `Meeting in ${minutesBefore} min. Show up fully, or reschedule and own it.`,
+      },
+    ];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2B: "Prepare for meeting" reminders (N days before)
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns "prepare for meeting" reminders for upcoming meetings whose date is exactly
+ * `daysBefore` days from today. Fires at 09:00 on the prep day. Driven from the shared
+ * meetings record — no duplicate task.
+ */
+export function computeMeetingPrepReminders(
+  // `date` optional so callers that don't yet supply it (e.g. mobile) still compile — they just
+  // won't emit prep reminders until they pass the meeting date.
+  meetings: (Pick<Meeting, "id" | "title" | "status"> & { date?: string | null })[],
+  daysBefore: number,
+  todayISO: string,
+): ReminderSchedule[] {
+  return meetings.flatMap((m) => {
+    if (m.status !== "upcoming" || !m.date) return [];
+    if (addDays(m.date, -daysBefore) !== todayISO) return [];
+    return [
+      {
+        type: "meeting_prep" as ReminderType,
+        source_id: m.id,
+        scheduled_for: buildDateTimeFromTime("09:00", todayISO),
+        title: `Prepare for: ${m.title}`,
+        body:
+          daysBefore === 1
+            ? "Meeting tomorrow — prep your file, agenda, and questions."
+            : `Meeting in ${daysBefore} days — prep your file, agenda, and questions.`,
       },
     ];
   });
@@ -396,8 +529,24 @@ export interface ComputeRemindersParams {
     | "activity_reminder_minutes_before"
     | "activity_overdue_enabled"
     | "event_reminder_minutes_before"
-  >;
-  meetings: Pick<Meeting, "id" | "title" | "start_at" | "end_at" | "status" | "key_takeaways">[];
+  > &
+    // Phase 1B: optional so callers that haven't adopted these prefs yet (e.g. mobile) still compile.
+    Partial<
+      Pick<
+        ReminderPreference,
+        | "someday_review_enabled"
+        | "someday_review_weekday"
+        | "someday_review_time"
+        | "meeting_prep_enabled"
+        | "meeting_prep_days_before"
+        | "giving_reminder_enabled"
+        | "giving_reminder_time"
+      >
+    >;
+  meetings: (Pick<
+    Meeting,
+    "id" | "title" | "start_at" | "end_at" | "status" | "key_takeaways"
+  > & { date?: string | null })[];
   expenses: Pick<Expense, "id" | "title" | "amount" | "expense_date" | "recurrence_rule">[];
   yearEntries: Pick<YearEntry, "id" | "title" | "type" | "start_date">[];
   scheduleInstances?: Pick<
@@ -406,6 +555,11 @@ export interface ComputeRemindersParams {
   >[];
   activities?: Pick<Activity, "id" | "title">[];
   calendarEvents?: Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at">[];
+  // Phase 4: optional so callers that haven't adopted Six-Time (e.g. mobile) still compile.
+  sixTimeConfig?: Pick<SixTimeConfig, "enabled" | "slot_times" | "nightly_time"> | null;
+  sixTimeProblems?: Pick<SixTimeProblem, "position" | "status" | "reminder_phrase">[];
+  // Phase 5: whether a giving challenge is active (drives the daily giving reminder).
+  hasActiveGivingChallenge?: boolean;
   todayISO: string;
   now: Date;
 }
@@ -425,6 +579,9 @@ export function computeAllReminders(params: ComputeRemindersParams): ReminderSch
     scheduleInstances = [],
     activities = [],
     calendarEvents = [],
+    sixTimeConfig = null,
+    sixTimeProblems = [],
+    hasActiveGivingChallenge = false,
     todayISO,
     now,
   } = params;
@@ -432,8 +589,12 @@ export function computeAllReminders(params: ComputeRemindersParams): ReminderSch
   const results: ReminderSchedule[] = [
     computeEodReminder(prefs, todayISO),
     computeMorningSummaryReminder(prefs, todayISO),
+    computeSomedayReviewReminder(prefs, todayISO),
     ...computeMeetingUpcomingReminders(meetings, prefs.meeting_reminder_minutes_before, now),
     ...computeMeetingPassedReminders(meetings, now),
+    ...(prefs.meeting_prep_enabled
+      ? computeMeetingPrepReminders(meetings, prefs.meeting_prep_days_before ?? 1, todayISO)
+      : []),
     ...computeRenewalReminders(expenses, prefs.renewal_reminder_days_before, todayISO),
     ...computeBirthdayReminders(yearEntries, prefs.birthday_reminder_days_before, todayISO),
     ...computeTravelReminders(yearEntries, prefs.travel_reminder_days_before, todayISO),
@@ -449,6 +610,9 @@ export function computeAllReminders(params: ComputeRemindersParams): ReminderSch
       ? computeActivityOverdueReminders(scheduleInstances, activities, now)
       : []),
     ...computeEventUpcomingReminders(calendarEvents, prefs.event_reminder_minutes_before, now),
+    ...computeSixTimeSlotReminders(sixTimeConfig, sixTimeProblems, todayISO),
+    computeSixTimeNightlyReminder(sixTimeConfig, todayISO),
+    computeGivingReminder(prefs, hasActiveGivingChallenge, todayISO),
   ].filter((r): r is ReminderSchedule => r !== null);
 
   return results.sort((a, b) => a.scheduled_for.getTime() - b.scheduled_for.getTime());

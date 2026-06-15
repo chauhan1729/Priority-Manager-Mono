@@ -4,10 +4,9 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 
 import {
-  canAddAPriority,
+  aPriorityWarningLevel,
   exceedsDailyCapacity,
   groupActivitiesBySection,
-  MAX_A_PRIORITY_PER_DAY,
 } from "@pm/domain";
 import type { Activity, ActivitySection, Contact, Project } from "@pm/types";
 import {
@@ -20,6 +19,7 @@ import {
   carryForwardActivity,
   delegateActivity,
   deleteActivity,
+  moveToSomeday,
   postponeActivity,
   updateActivityStatus,
 } from "@/app/(app)/activities/actions";
@@ -72,6 +72,8 @@ interface Props {
   selectedDate: string;
   previousDate: string;
   projectPriorityMap?: Map<string, string | null>;
+  /** Phase 0A: when set, the view shows only A or only B activities (the two screens). */
+  priorityFilter?: "A" | "B";
 }
 
 export function ActivitiesView({
@@ -82,6 +84,7 @@ export function ActivitiesView({
   selectedDate,
   previousDate,
   projectPriorityMap = new Map(),
+  priorityFilter,
 }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
@@ -106,8 +109,30 @@ export function ActivitiesView({
   const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
   const isToday = selectedDate === todayStr;
 
-  const activeActivities = activities.filter((a) => !a.archived);
-  const archivedActivities = activities.filter((a) => a.archived);
+  // Phase 0A: distinct title + nav path per priority screen.
+  const screenTitle =
+    priorityFilter === "A" ? "A Activities" : priorityFilter === "B" ? "B Activities" : "Activities";
+  const screenSubtitle =
+    priorityFilter === "A"
+      ? "Must do today — the few that matter (typically 1–2)."
+      : priorityFilter === "B"
+        ? "Important, but movable. Choose what you want to do."
+        : "";
+  const basePath =
+    priorityFilter === "A" ? "/activities/a" : priorityFilter === "B" ? "/activities/b" : "/activities";
+
+  // Phase 0A: the soft A-cap warning is computed from the whole day's A's (independent of which
+  // priority screen is shown), since all A's live on the A screen.
+  const dayActive = activities.filter((a) => !a.archived);
+  const dayAPriorities = dayActive.filter((a) => a.priority === "A");
+  const aWarningLevel = aPriorityWarningLevel(dayAPriorities.length);
+
+  // Filter to the current screen (A vs B). Legacy null is treated as B.
+  const matchesFilter = (a: Activity) =>
+    !priorityFilter ? true : priorityFilter === "A" ? a.priority === "A" : a.priority !== "A";
+
+  const activeActivities = dayActive.filter(matchesFilter);
+  const archivedActivities = activities.filter((a) => a.archived && matchesFilter(a));
 
   const canBulkArchive =
     selectedIds.size > 0 &&
@@ -115,10 +140,7 @@ export function ActivitiesView({
       (id) => { const s = activeActivities.find((a) => a.id === id)?.status; return s === "completed" || s === "cancelled"; },
     );
 
-  const canAddA = canAddAPriority(activeActivities);
-  const capacityExceeded = exceedsDailyCapacity(
-    activeActivities.filter((a) => a.priority === "A"),
-  );
+  const capacityExceeded = exceedsDailyCapacity(dayAPriorities);
   const grouped = groupActivitiesBySection(activeActivities);
 
   const STATUS_TOAST_LABELS: Record<string, string> = {
@@ -265,6 +287,28 @@ export function ActivitiesView({
     });
   }
 
+  // Phase 1B: park an activity on the Someday list.
+  function handleMoveToSomeday(activity: Activity) {
+    startTransition(async () => {
+      const result = await moveToSomeday(activity.id);
+      if (result?.error) showToast(result.error, "error");
+      else showToast("Moved to Someday");
+    });
+  }
+
+  // Phase 0A: one-tap promote/demote — flip an activity between the A and B screens.
+  function handleTogglePriority(activity: Activity) {
+    const next = activity.priority === "A" ? "B" : "A";
+    startTransition(async () => {
+      const result = await bulkUpdateActivityPriority([activity.id], next);
+      if (result?.error) {
+        showToast(result.error, "error");
+      } else {
+        showToast(next === "A" ? "Promoted to A" : "Moved to B");
+      }
+    });
+  }
+
   function handleBulkArchive() {
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
@@ -285,7 +329,10 @@ export function ActivitiesView({
       {/* Header */}
       <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
         {/* Row 1: Page title */}
-        <h1 className="hidden md:block font-handwriting text-2xl text-ink mb-2">Activities</h1>
+        <h1 className="hidden md:block font-handwriting text-2xl text-ink">{screenTitle}</h1>
+        {screenSubtitle && (
+          <p className="hidden md:block text-xs text-ink-light mb-2">{screenSubtitle}</p>
+        )}
 
         {/* Row 2: Date nav + action buttons */}
         <div className="flex items-center justify-between gap-2">
@@ -293,7 +340,7 @@ export function ActivitiesView({
             {/* Date navigation */}
             <div className="flex items-center gap-0.5 rounded-lg border border-blue-100 bg-white px-1 py-0.5">
               <Link
-                href={`/activities?date=${prevDateStr}`}
+                href={`${basePath}?date=${prevDateStr}`}
                 className="rounded px-2 py-1 text-sm text-ink-light hover:bg-blue-50 hover:text-blue-700 transition"
                 aria-label="Previous day"
               >
@@ -303,7 +350,7 @@ export function ActivitiesView({
                 {formatHeaderDate(selectedDate)}
               </span>
               <Link
-                href={`/activities?date=${nextDateStr}`}
+                href={`${basePath}?date=${nextDateStr}`}
                 className="rounded px-2 py-1 text-sm text-ink-light hover:bg-blue-50 hover:text-blue-700 transition"
                 aria-label="Next day"
               >
@@ -312,7 +359,7 @@ export function ActivitiesView({
             </div>
 
             {!isToday && (
-              <Link href="/activities" className="text-xs text-blue-600 hover:underline">
+              <Link href={basePath} className="text-xs text-blue-600 hover:underline">
                 Today
               </Link>
             )}
@@ -351,9 +398,16 @@ export function ActivitiesView({
             ⚠ A-priority workload exceeds realistic daily capacity.
           </p>
         )}
-        {!canAddA && (
+        {/* Phase 0A: escalating soft A-cap nudge (no hard block — warn and allow). */}
+        {aWarningLevel === "hint" && (
+          <p className="mt-2 text-xs text-blue-700 bg-blue-50 rounded-lg px-3 py-1.5">
+            Most things are B. Typically only 1–2 A&apos;s a day.
+          </p>
+        )}
+        {aWarningLevel === "warn" && (
           <p className="mt-2 text-xs text-orange-700 bg-orange-50 rounded-lg px-3 py-1.5">
-            ✕ Max {MAX_A_PRIORITY_PER_DAY} A-priority activities reached for this day.
+            ⚠ You have {dayAPriorities.length} A&apos;s today — most days have 1–2. You can still add
+            more, but consider keeping some as B.
           </p>
         )}
       </header>
@@ -474,6 +528,8 @@ export function ActivitiesView({
             selectedDate={selectedDate}
             projects={projects}
             contacts={contacts}
+            defaultPriority={priorityFilter ?? "B"}
+            defaultToSomeday={priorityFilter === "B"}
             onSuccess={() => setShowAddForm(false)}
             onCancel={() => setShowAddForm(false)}
           />
@@ -514,6 +570,8 @@ export function ActivitiesView({
               onPostpone={handlePostpone}
               onEdit={setEditActivity}
               onArchive={handleArchive}
+              onTogglePriority={handleTogglePriority}
+              onMoveToSomeday={handleMoveToSomeday}
             />
           );
         })}
