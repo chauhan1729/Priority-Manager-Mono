@@ -34,6 +34,43 @@ function revalidateAll(linkedProjectId?: string | null) {
 }
 
 // ---------------------------------------------------------------------------
+// Cycle history (read-only) — every focus block ("cycle") for an activity.
+// ---------------------------------------------------------------------------
+
+/** A single cycle (focus block) in an activity's history. */
+export interface ActivityCycle {
+  id: string;
+  schedule_date: string;
+  start_at: string;
+  end_at: string;
+  locked_minutes: number;
+  status_snapshot: string | null;
+  note: string | null;
+}
+
+/**
+ * Returns all cycles (schedule_instances of source_type 'activity') for one
+ * activity, earliest first. Read-only — used by the per-activity Cycles panel.
+ */
+export async function getActivityCycles(
+  activityId: string,
+): Promise<{ cycles: ActivityCycle[] } | { error: string }> {
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data, error } = await supabase
+    .from("schedule_instances")
+    .select("id, schedule_date, start_at, end_at, locked_minutes, status_snapshot, note")
+    .eq("user_id", user.id)
+    .eq("source_type", "activity")
+    .eq("source_activity_id", activityId)
+    .order("start_at", { ascending: true });
+
+  if (error) return { error: error.message };
+  return { cycles: (data ?? []) as ActivityCycle[] };
+}
+
+// ---------------------------------------------------------------------------
 // Create (spec §10.5)
 // ---------------------------------------------------------------------------
 

@@ -144,12 +144,31 @@ export function DailyPlanView({
     });
   }
 
-  function handleStartCycleBlock(activityId: string, minutes: number, note: string) {
+  function handleStartCycleBlock(
+    activityId: string,
+    minutes: number,
+    note: string,
+    startTime: string | null,
+  ) {
     startTransition(async () => {
-      const result = await startCycleBlock(activityId, minutes, note);
+      // "Later" → build a local ISO datetime from the viewed date + chosen time.
+      // "Now" → leave startAt null (server stamps the current time) and use today.
+      let startAtIso: string | null = null;
+      let scheduleDate = todayStr;
+      if (startTime) {
+        const [h, m] = startTime.split(":").map(Number);
+        const [y, mo, d] = selectedDate.split("-").map(Number);
+        startAtIso = new Date(y!, mo! - 1, d!, h!, m!, 0, 0).toISOString();
+        scheduleDate = selectedDate;
+      }
+      const result = await startCycleBlock(activityId, minutes, note, startAtIso, scheduleDate);
       if (result && "error" in result) showToast(result.error, "error");
       else {
-        showToast("Cycle started — block placed on the timeline");
+        showToast(
+          startTime
+            ? "Cycle scheduled — block placed on the timeline"
+            : "Cycle started — block placed on the timeline",
+        );
         setCycleTarget(null);
       }
     });
@@ -402,7 +421,7 @@ export function DailyPlanView({
         <StartCycleModal
           activity={cycleTarget}
           isPending={isPending}
-          onStart={(min, note) => handleStartCycleBlock(cycleTarget.id, min, note)}
+          onStart={(min, note, startTime) => handleStartCycleBlock(cycleTarget.id, min, note, startTime)}
           onClose={() => setCycleTarget(null)}
         />
       )}

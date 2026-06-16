@@ -7,6 +7,7 @@ import { addDays, suggestRedate, todayISO } from "@pm/domain";
 import type { Activity, ActivityStatus, Contact } from "@pm/types";
 import { rescheduleActivityToDate } from "@/app/(app)/activities/actions";
 import { showToast } from "@/components/ui/Toaster";
+import { ActivityCyclesModal } from "./ActivityCyclesModal";
 
 const STATUS_LABELS: Record<ActivityStatus, string> = {
   not_started: "Not Started",
@@ -78,6 +79,7 @@ export function ActivityCard({
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [rescheduleDate, setRescheduleDate] = useState("");
   const [isRescheduling, startReschedule] = useTransition();
+  const [cyclesOpen, setCyclesOpen] = useState(false);
 
   function doReschedule(toDate: string) {
     startReschedule(async () => {
@@ -254,6 +256,16 @@ export function ActivityCard({
           </button>
         )}
 
+        {/* Cycle history — opens a popup of every focus block for this activity */}
+        <button
+          onClick={() => setCyclesOpen(true)}
+          aria-label="View cycles"
+          title="Cycles — focus blocks worked on this activity"
+          className="rounded p-1 text-ink-light transition hover:bg-indigo-50 hover:text-indigo-600"
+        >
+          ↻
+        </button>
+
         {/* Reschedule to a chosen day (intentional re-dating) */}
         {!isDone && (
           <button
@@ -399,6 +411,14 @@ export function ActivityCard({
             Cancel
           </button>
         </div>
+      )}
+
+      {/* Cycle history popup */}
+      {cyclesOpen && (
+        <ActivityCyclesModal
+          activity={activity}
+          onClose={() => setCyclesOpen(false)}
+        />
       )}
     </div>
   );

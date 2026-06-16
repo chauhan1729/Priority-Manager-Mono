@@ -124,14 +124,20 @@ export async function scheduleActivity(
 }
 
 /**
- * Phase 4 (revised cycles): "start a cycle" = drop a timed focus block on the timeline starting NOW
+ * Phase 4 (revised cycles): "start a cycle" = drop a timed focus block on the timeline
  * for the chosen duration. Unlike planned scheduling, this is allowed for B's too (you're actively
- * choosing to work it now), and the block starts in "working" state.
+ * choosing to work it).
+ *
+ * @param startAtIso  null → start NOW (block opens in "working" state).
+ *                    ISO datetime → schedule for LATER (block is "upcoming"; must be in the future).
+ * @param scheduleDateArg  local date the block belongs to (defaults to today / the start's date).
  */
 export async function startCycleBlock(
   activityId: string,
   durationMinutes: number,
   note?: string,
+  startAtIso?: string | null,
+  scheduleDateArg?: string,
 ): Promise<ActionResult> {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -142,10 +148,22 @@ export async function startCycleBlock(
   }
   const dur = Math.min(Math.round(durationMinutes), 600); // cap at 10h
 
-  const now = new Date();
-  const startAt = now.toISOString();
-  const endAt = new Date(now.getTime() + dur * 60_000).toISOString();
-  const scheduleDate = now.toISOString().slice(0, 10);
+  const startsNow = !startAtIso;
+  let startDate: Date;
+  if (startsNow) {
+    startDate = new Date();
+  } else {
+    startDate = new Date(startAtIso as string);
+    if (Number.isNaN(startDate.getTime())) return { error: "Invalid start time." };
+  }
+  const startAt = startDate.toISOString();
+  const endAt = new Date(startDate.getTime() + dur * 60_000).toISOString();
+  const scheduleDate = scheduleDateArg ?? startAt.slice(0, 10);
+
+  // Past-time rule: a "later" cycle cannot be placed in the past.
+  if (!startsNow && !canScheduleAt(startAt)) {
+    return { error: "Cannot start a cycle in the past. Pick a future time." };
+  }
 
   const { data: activity, error: actErr } = await supabase
     .from("activities")
@@ -181,19 +199,25 @@ export async function startCycleBlock(
     end_at: endAt,
     locked_minutes: dur,
     focus_minutes: dur,
-    status_snapshot: "working", // a cycle starts now — you're focusing
+    // Now → you're focusing immediately; Later → a planned, upcoming block.
+    status_snapshot: startsNow ? "working" : "upcoming",
     keep_as_history: true,
     note: note?.trim() ? note.trim() : null,
   });
   if (insertErr) return { error: insertErr.message };
 
-  // Mark the activity as working and consume remaining time.
+  // Consume remaining time either way (a future cycle is committed time, like planned scheduling).
+  // Only flip the activity into "working" when the cycle starts now.
   const newRemaining = activity.remaining_minutes > 0
     ? Math.max(0, activity.remaining_minutes - dur)
     : 0;
   await supabase
     .from("activities")
-    .update({ status: "working", remaining_minutes: newRemaining, updated_at: new Date().toISOString() })
+    .update({
+      ...(startsNow ? { status: "working" } : {}),
+      remaining_minutes: newRemaining,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", activityId)
     .eq("user_id", user.id);
 

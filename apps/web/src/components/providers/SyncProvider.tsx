@@ -52,9 +52,10 @@ export function useSyncState(): SyncState {
 // ---------------------------------------------------------------------------
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const [isOnline, setIsOnline] = useState<boolean>(
-    typeof navigator !== "undefined" ? navigator.onLine : true,
-  );
+  // Seed to `true` so the first client render matches the server (which has no
+  // `navigator`). The real connectivity is read in useEffect after mount —
+  // reading navigator.onLine during render causes a hydration mismatch.
+  const [isOnline, setIsOnline] = useState<boolean>(true);
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const [hasErrors, setHasErrors] = useState(false);
@@ -105,6 +106,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+
+    // Sync real connectivity now that we're on the client (post-hydration).
+    setIsOnline(navigator.onLine);
 
     // Initial load
     refreshPending();
