@@ -226,6 +226,87 @@ export async function startCycleBlock(
 }
 
 /**
+ * Early-start a cycle that was scheduled for later: move an upcoming activity block
+ * to start NOW (keeping its duration) and flip it to "working" — but only if the
+ * now → now+duration window is free. Returns an error if another block is in the way.
+ *
+ * @param newScheduleDate  client-local "today" the block moves onto.
+ */
+export async function startScheduledCycleNow(
+  instanceId: string,
+  newScheduleDate: string,
+): Promise<ActionResult> {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "Not authenticated" };
+
+  const { data: instance, error: instErr } = await supabase
+    .from("schedule_instances")
+    .select("id, source_type, source_activity_id, locked_minutes, status_snapshot")
+    .eq("id", instanceId)
+    .eq("user_id", user.id)
+    .single();
+  if (instErr || !instance) return { error: "Block not found" };
+  if (instance.source_type !== "activity" || !instance.source_activity_id) {
+    return { error: "Only activity cycles can be started." };
+  }
+  if (instance.status_snapshot === "completed") {
+    return { error: "This block is already completed." };
+  }
+
+  const dur = instance.locked_minutes;
+  const now = new Date();
+  const startAt = now.toISOString();
+  const endAt = new Date(now.getTime() + dur * 60_000).toISOString();
+
+  // Room check: the now-window must not overlap any other block on the target day.
+  const { data: existing } = await supabase
+    .from("schedule_instances")
+    .select("id, start_at, end_at")
+    .eq("user_id", user.id)
+    .eq("schedule_date", newScheduleDate);
+
+  const { overlaps } = checkScheduleOverlap(
+    existing ?? [],
+    startAt,
+    endAt,
+    instanceId,
+  );
+  if (overlaps) {
+    return { error: "No room to start now — it overlaps another block." };
+  }
+
+  const { error: updErr } = await supabase
+    .from("schedule_instances")
+    .update({
+      start_at: startAt,
+      end_at: endAt,
+      schedule_date: newScheduleDate,
+      status_snapshot: "working",
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", instanceId)
+    .eq("user_id", user.id);
+  if (updErr) return { error: updErr.message };
+
+  // Reflect the active focus on the activity.
+  const { data: activity } = await supabase
+    .from("activities")
+    .select("linked_project_id")
+    .eq("id", instance.source_activity_id)
+    .eq("user_id", user.id)
+    .single();
+  await supabase
+    .from("activities")
+    .update({ status: "working", updated_at: new Date().toISOString() })
+    .eq("id", instance.source_activity_id)
+    .eq("user_id", user.id);
+
+  revalidateAll(activity?.linked_project_id);
+  return { success: true };
+}
+
+/**
  * For a (possibly recurring) appointment occurrence on a given day: find its schedule_instance, or
  * materialize one on demand, so the user can manage/complete it for that specific day.
  */

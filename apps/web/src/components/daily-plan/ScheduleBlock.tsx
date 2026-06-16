@@ -58,7 +58,7 @@ export function ScheduleBlock({
       `}
       title="Click to manage this block"
     >
-      {/* Header row */}
+      {/* Header row — "Cycle name | Activity title" when the cycle has a name */}
       <div className="flex items-start justify-between gap-1 min-w-0">
         <div className="flex items-center gap-1 min-w-0">
           {priority && (
@@ -71,11 +71,19 @@ export function ScheduleBlock({
             </span>
           )}
           <span
-            className={`text-xs font-medium text-ink truncate ${
-              status === "completed" ? "line-through text-ink-light" : ""
+            className={`text-xs truncate ${
+              status === "completed" ? "text-ink-light line-through" : "text-ink"
             }`}
           >
-            {title}
+            {instance.note ? (
+              <>
+                <span className="font-medium">{instance.note}</span>
+                <span className="mx-1 text-ink-light/50">|</span>
+                <span className="font-normal text-ink-light">{title}</span>
+              </>
+            ) : (
+              <span className="font-medium">{title}</span>
+            )}
           </span>
         </div>
         <span className="flex-shrink-0 text-[10px] text-ink-light">{startLabel}</span>
@@ -89,7 +97,6 @@ export function ScheduleBlock({
           {isPast && status === "upcoming" && (
             <span className="text-amber-600 font-medium">needs update</span>
           )}
-          {instance.note && <span className="italic truncate">“{instance.note}”</span>}
         </div>
       )}
     </button>

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 
+import { checkScheduleOverlap } from "@pm/domain";
 import type { Activity, CalendarEvent, Meeting, Project, ScheduleInstance, ScheduleInstanceStatus } from "@pm/types";
 import { carryForwardActivity, updateActivityStatus } from "@/app/(app)/activities/actions";
 import {
@@ -10,6 +11,7 @@ import {
   postponeFromDailyPlan,
   scheduleActivity,
   startCycleBlock,
+  startScheduledCycleNow,
   unscheduleActivity,
   unscheduleRunningBlock,
   updateScheduleBlockStatus,
@@ -174,6 +176,17 @@ export function DailyPlanView({
     });
   }
 
+  function handleStartNow(instance: ScheduleInstance) {
+    startTransition(async () => {
+      const result = await startScheduledCycleNow(instance.id, todayStr);
+      if (result && "error" in result) showToast(result.error, "error");
+      else {
+        showToast("Cycle started now");
+        setBlockModalTarget(null);
+      }
+    });
+  }
+
   function handleCarryForward(activityId: string, linkedProjectId: string | null) {
     startTransition(async () => {
       await carryForwardActivity(activityId, previousDate, selectedDate, linkedProjectId);
@@ -256,6 +269,26 @@ export function DailyPlanView({
   const blockModalEvent = blockModalTarget?.source_event_id
     ? (eventMap.get(blockModalTarget.source_event_id) ?? null)
     : null;
+
+  // Early-start eligibility for the block popup: only an upcoming activity cycle
+  // on today qualifies. If eligible, check whether the now-window has room.
+  let blockModalStartNowEligible = false;
+  let blockModalStartNowBlocked = false;
+  if (
+    blockModalTarget &&
+    blockModalTarget.source_type === "activity" &&
+    blockModalTarget.source_activity_id &&
+    blockModalTarget.status_snapshot !== "completed" &&
+    selectedDate === todayStr &&
+    new Date(blockModalTarget.start_at).getTime() > Date.now()
+  ) {
+    blockModalStartNowEligible = true;
+    const nowMs = Date.now();
+    const startAt = new Date(nowMs).toISOString();
+    const endAt = new Date(nowMs + blockModalTarget.locked_minutes * 60_000).toISOString();
+    const { overlaps } = checkScheduleOverlap(scheduleInstances, startAt, endAt, blockModalTarget.id);
+    blockModalStartNowBlocked = overlaps;
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -412,7 +445,8 @@ export function DailyPlanView({
           onUnscheduleRunning={handleUnscheduleRunning}
           onStatusUpdate={handleBlockStatusUpdate}
           onPostpone={handlePostpone}
-          onStartCycle={handleStartCycle}
+          onStartNow={blockModalStartNowEligible ? handleStartNow : undefined}
+          startNowBlocked={blockModalStartNowBlocked}
         />
       )}
 

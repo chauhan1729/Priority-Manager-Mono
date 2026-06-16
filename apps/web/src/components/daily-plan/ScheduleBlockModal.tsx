@@ -41,8 +41,13 @@ interface Props {
   onUnscheduleRunning: (instanceId: string, activityId: string, mode: "full" | "split") => void;
   onStatusUpdate: (instanceId: string, status: ScheduleInstanceStatus) => void;
   onPostpone: (activityId: string, toDate: string, linkedProjectId: string | null) => void;
-  /** Phase 1A: start a focus cycle on this block's activity (Daily Plan is the cycle launch point). */
-  onStartCycle?: (activity: Activity) => void;
+  /**
+   * Early-start: move this later-scheduled cycle to start now. Provided only when
+   * the block is an eligible upcoming activity cycle (today). When `startNowBlocked`
+   * is true there's no room, so the option is shown disabled with a reason.
+   */
+  onStartNow?: ((instance: ScheduleInstance) => void) | undefined;
+  startNowBlocked?: boolean;
 }
 
 export function ScheduleBlockModal({
@@ -57,7 +62,8 @@ export function ScheduleBlockModal({
   onUnscheduleRunning,
   onStatusUpdate,
   onPostpone,
-  onStartCycle,
+  onStartNow,
+  startNowBlocked = false,
 }: Props) {
   const [postponeDate, setPostponeDate] = useState("");
   const [showPostponeInput, setShowPostponeInput] = useState(false);
@@ -136,15 +142,22 @@ export function ScheduleBlockModal({
         </div>
 
         <div className="space-y-2">
-          {/* Start a focus cycle (activity blocks only) */}
-          {activity && !isMeetingBlock && instance.status_snapshot !== "completed" && onStartCycle && (
-            <button
-              onClick={() => { onStartCycle(activity); onClose(); }}
-              disabled={isPending}
-              className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 text-left"
-            >
-              ◷ Start a focus cycle
-            </button>
+          {/* Early-start a later-scheduled cycle now (only when there's room) */}
+          {onStartNow && (
+            startNowBlocked ? (
+              <div className="w-full rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-left">
+                <p className="text-sm font-medium text-ink-light">▶ Start now</p>
+                <p className="text-[11px] text-ink-light/80">No room — another block overlaps the next {formatMinutes(focus)}.</p>
+              </div>
+            ) : (
+              <button
+                onClick={() => { onStartNow(instance); onClose(); }}
+                disabled={isPending}
+                className="w-full rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 text-left"
+              >
+                ▶ Start now <span className="font-normal text-indigo-500">· move this cycle to now</span>
+              </button>
+            )
           )}
 
           {/* Completed block — locked, read-only */}
