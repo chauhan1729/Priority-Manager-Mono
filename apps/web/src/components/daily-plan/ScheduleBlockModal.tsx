@@ -29,6 +29,10 @@ const STATUS_LABELS: Record<ScheduleInstanceStatus, string> = {
   missed: "Missed",
 };
 
+// Appointment / "other" event blocks: per-occurrence status, stored on the day's
+// schedule_instance (so each recurring occurrence is independent).
+const EVENT_STATUS_OPTIONS: ScheduleInstanceStatus[] = ["completed", "missed", "postponed", "upcoming"];
+
 interface Props {
   instance: ScheduleInstance;
   activity: Activity | null;
@@ -48,6 +52,11 @@ interface Props {
    */
   onStartNow?: ((instance: ScheduleInstance) => void) | undefined;
   startNowBlocked?: boolean;
+  /**
+   * Set the per-occurrence status of an appointment/"other" block. The instance
+   * may be transient (not yet persisted) — the handler upserts by event + date.
+   */
+  onEventStatusUpdate?: ((instance: ScheduleInstance, status: ScheduleInstanceStatus) => void) | undefined;
 }
 
 export function ScheduleBlockModal({
@@ -64,6 +73,7 @@ export function ScheduleBlockModal({
   onPostpone,
   onStartNow,
   startNowBlocked = false,
+  onEventStatusUpdate,
 }: Props) {
   const [postponeDate, setPostponeDate] = useState("");
   const [showPostponeInput, setShowPostponeInput] = useState(false);
@@ -160,15 +170,15 @@ export function ScheduleBlockModal({
             )
           )}
 
-          {/* Completed block — locked, read-only */}
-          {instance.status_snapshot === "completed" && (
+          {/* Completed block — locked, read-only (activity/meeting only; events stay editable) */}
+          {instance.status_snapshot === "completed" && !isEventBlock && (
             <div className="rounded-lg border border-green-100 bg-green-50 px-3 py-2 text-xs text-green-800">
               This block is completed and cannot be modified.
             </div>
           )}
 
-          {/* Status updates — past/running activity blocks, or any meeting/appointment block. */}
-          {(isPast || isMeetingBlock || isEventBlock) && instance.status_snapshot !== "completed" && (
+          {/* Status updates — past/running activity blocks, or meeting blocks. */}
+          {(isPast || isMeetingBlock) && !isEventBlock && instance.status_snapshot !== "completed" && (
             <div>
               <p className="text-[10px] font-semibold text-ink-light uppercase tracking-wide mb-1.5">
                 Update Status
@@ -178,6 +188,29 @@ export function ScheduleBlockModal({
                   <button
                     key={s}
                     onClick={() => { onStatusUpdate(instance.id, s); onClose(); }}
+                    disabled={isPending || instance.status_snapshot === s}
+                    className="rounded-lg border border-blue-100 px-3 py-2 text-xs font-medium text-ink hover:bg-blue-50 disabled:opacity-40 disabled:cursor-default"
+                  >
+                    {STATUS_LABELS[s]}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Status updates — appointment / "other" event blocks.
+              Per-occurrence: writes to this day's schedule_instance, so other
+              occurrences of a recurring appointment are unaffected. */}
+          {isEventBlock && onEventStatusUpdate && (
+            <div>
+              <p className="text-[10px] font-semibold text-ink-light uppercase tracking-wide mb-1.5">
+                Update Status
+              </p>
+              <div className="grid grid-cols-2 gap-1.5">
+                {EVENT_STATUS_OPTIONS.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => { onEventStatusUpdate(instance, s); onClose(); }}
                     disabled={isPending || instance.status_snapshot === s}
                     className="rounded-lg border border-blue-100 px-3 py-2 text-xs font-medium text-ink hover:bg-blue-50 disabled:opacity-40 disabled:cursor-default"
                   >

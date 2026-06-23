@@ -142,7 +142,10 @@ export function expandRecurringCalendarEvents(
         let occStartAt = event.start_at;
         let occEndAt = event.end_at;
 
-        if (event.start_at && durationMs > 0) {
+        // Move the occurrence's start_at onto its own date (not the base event's),
+        // even when there's no duration — otherwise every occurrence inherits the
+        // original (possibly past) datetime.
+        if (event.start_at) {
           const origStart = new Date(event.start_at);
           const occStart = new Date(current);
           occStart.setUTCHours(
@@ -151,9 +154,9 @@ export function expandRecurringCalendarEvents(
             origStart.getUTCSeconds(),
             0,
           );
-          const occEnd = new Date(occStart.getTime() + durationMs);
           occStartAt = occStart.toISOString();
-          occEndAt = occEnd.toISOString();
+          occEndAt =
+            durationMs > 0 ? new Date(occStart.getTime() + durationMs).toISOString() : event.end_at;
         }
 
         result.push({ ...event, date: occDate, start_at: occStartAt, end_at: occEndAt });

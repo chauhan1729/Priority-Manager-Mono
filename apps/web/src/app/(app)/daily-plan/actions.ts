@@ -307,34 +307,44 @@ export async function startScheduledCycleNow(
 }
 
 /**
- * For a (possibly recurring) appointment occurrence on a given day: find its schedule_instance, or
- * materialize one on demand, so the user can manage/complete it for that specific day.
+ * Set the per-occurrence status of an appointment / "other" calendar event for a
+ * given day. Upserts the day's schedule_instance (status lives there, so each
+ * recurring occurrence is independent). The modal opens without any DB write — we
+ * only persist when a status is chosen here.
  */
-export async function ensureAppointmentInstance(
+export async function setAppointmentOccurrenceStatus(
   eventId: string,
   scheduleDate: string,
   startAt: string,
   endAt: string,
   sourceType: "appointment" | "other",
-): Promise<{ instance: ScheduleInstance } | { error: string }> {
+  status: "upcoming" | "working" | "completed" | "postponed" | "missed",
+): Promise<ActionResult> {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return { error: "Not authenticated" };
 
+  // Update the existing per-day instance if present…
   const { data: existing } = await supabase
     .from("schedule_instances")
-    .select("*")
+    .select("id")
     .eq("user_id", user.id)
     .eq("source_event_id", eventId)
     .eq("schedule_date", scheduleDate)
     .maybeSingle();
-  if (existing) return { instance: existing as ScheduleInstance };
 
-  const lockedMinutes =
-    Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000) || 30;
-  const { data: inserted, error } = await supabase
-    .from("schedule_instances")
-    .insert({
+  if (existing) {
+    const { error } = await supabase
+      .from("schedule_instances")
+      .update({ status_snapshot: status, updated_at: new Date().toISOString() })
+      .eq("id", existing.id)
+      .eq("user_id", user.id);
+    if (error) return { error: error.message };
+  } else {
+    // …or materialize it now with the chosen status.
+    const lockedMinutes =
+      Math.max(1, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000)) || 30;
+    const { error } = await supabase.from("schedule_instances").insert({
       user_id: user.id,
       source_type: sourceType,
       source_activity_id: null,
@@ -345,15 +355,15 @@ export async function ensureAppointmentInstance(
       end_at: endAt,
       locked_minutes: lockedMinutes,
       focus_minutes: null,
-      status_snapshot: "upcoming",
+      status_snapshot: status,
       keep_as_history: true,
-    })
-    .select("*")
-    .single();
-  if (error || !inserted) return { error: error?.message ?? "Could not open appointment" };
+    });
+    if (error) return { error: error.message };
+  }
 
-  revalidateAll();
-  return { instance: inserted as ScheduleInstance };
+  revalidatePath("/daily-plan");
+  revalidatePath("/calendar");
+  return { success: true };
 }
 
 /**
@@ -475,7 +485,9 @@ export async function updateScheduleBlockStatus(
   };
   let earlyCompletionUnworkedMinutes = 0;
 
-  if (status === "completed" && instance) {
+  // Early-completion truncation is for time-accounted activity blocks only —
+  // never shrink a meeting/appointment block when it's marked complete.
+  if (status === "completed" && instance && instance.source_type === "activity") {
     const focusMinutes: number = instance.focus_minutes ?? instance.locked_minutes ?? 0;
     const endMs = new Date(instance.end_at).getTime();
     const isEarlyCompletion = now.getTime() < endMs;

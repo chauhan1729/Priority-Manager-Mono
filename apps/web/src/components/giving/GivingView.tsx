@@ -21,6 +21,7 @@ import {
   addGivingLog,
   completeGivingReview,
   deleteGivingLog,
+  resetGiving,
   startGivingChallenge,
 } from "@/app/(app)/giving/actions";
 import { showToast } from "@/components/ui/Toaster";
@@ -128,6 +129,7 @@ function ReviewScreen({
           No, close it
         </button>
       </div>
+      <ResetButton />
     </div>
   );
 }
@@ -312,6 +314,57 @@ function AllEntries({ logs, editable }: { logs: GivingLog[]; editable: boolean }
 }
 
 // ---------------------------------------------------------------------------
+/** Destructive reset — wipes all giving records (logs + challenge) behind an inline confirm. */
+function ResetButton() {
+  const [confirming, setConfirming] = useState(false);
+  const [isPending, start] = useTransition();
+
+  function reset() {
+    start(async () => {
+      const res = await resetGiving();
+      if (res?.error) showToast(res.error, "error");
+      else {
+        setConfirming(false);
+        showToast("Giving reset — clean slate");
+      }
+    });
+  }
+
+  if (!confirming) {
+    return (
+      <div className="pt-2 text-center">
+        <button
+          onClick={() => setConfirming(true)}
+          className="text-xs font-medium text-ink-light hover:text-red-600"
+        >
+          Reset records
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2.5">
+      <span className="text-xs text-red-800">Delete all giving records? This can&apos;t be undone.</span>
+      <button
+        onClick={reset}
+        disabled={isPending}
+        className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+      >
+        Yes, reset
+      </button>
+      <button
+        onClick={() => setConfirming(false)}
+        disabled={isPending}
+        className="text-xs text-ink-light hover:text-ink"
+      >
+        Cancel
+      </button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 function DailyBoard({
   today,
   challenge,
@@ -409,6 +462,8 @@ function DailyBoard({
       />
         </>
       )}
+
+      <ResetButton />
     </div>
   );
 }

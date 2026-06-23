@@ -7,9 +7,9 @@ import { checkScheduleOverlap } from "@pm/domain";
 import type { Activity, CalendarEvent, Meeting, Project, ScheduleInstance, ScheduleInstanceStatus } from "@pm/types";
 import { carryForwardActivity, updateActivityStatus } from "@/app/(app)/activities/actions";
 import {
-  ensureAppointmentInstance,
   postponeFromDailyPlan,
   scheduleActivity,
+  setAppointmentOccurrenceStatus,
   startCycleBlock,
   startScheduledCycleNow,
   unscheduleActivity,
@@ -133,16 +133,55 @@ export function DailyPlanView({
     });
   }
 
-  // Open an appointment occurrence (materialize a per-day schedule_instance so it can be managed/completed).
+  // Open an appointment occurrence. We DON'T write to the DB just to view it —
+  // build a transient schedule_instance and open the modal immediately. The row
+  // is only persisted when the user actually picks a status (see below).
   function handleAppointmentClick(ev: CalendarEvent) {
-    if (!ev.start_at || !ev.end_at) return;
+    if (!ev.start_at) return;
     const startAt = ev.start_at;
-    const endAt = ev.end_at;
+    const endAt =
+      ev.end_at ??
+      new Date(new Date(startAt).getTime() + (ev.duration_minutes ?? 30) * 60_000).toISOString();
     const sourceType = ev.event_type === "appointment" ? "appointment" : "other";
+    const lockedMinutes =
+      Math.max(1, Math.round((new Date(endAt).getTime() - new Date(startAt).getTime()) / 60_000)) || 30;
+    const transient: ScheduleInstance = {
+      id: `appt:${ev.id}:${selectedDate}`,
+      user_id: "",
+      source_type: sourceType,
+      source_activity_id: null,
+      source_meeting_id: null,
+      source_event_id: ev.id,
+      schedule_date: selectedDate,
+      start_at: startAt,
+      end_at: endAt,
+      locked_minutes: lockedMinutes,
+      focus_minutes: null,
+      status_snapshot: "upcoming",
+      keep_as_history: true,
+      note: null,
+      created_at: "",
+      updated_at: "",
+    };
+    setBlockModalTarget(transient);
+  }
+
+  function handleEventStatusUpdate(instance: ScheduleInstance, status: ScheduleInstanceStatus) {
+    if (!instance.source_event_id) return;
     startTransition(async () => {
-      const res = await ensureAppointmentInstance(ev.id, selectedDate, startAt, endAt, sourceType);
-      if ("error" in res) showToast(res.error, "error");
-      else setBlockModalTarget(res.instance);
+      const result = await setAppointmentOccurrenceStatus(
+        instance.source_event_id!,
+        instance.schedule_date,
+        instance.start_at,
+        instance.end_at,
+        instance.source_type === "other" ? "other" : "appointment",
+        status,
+      );
+      if (result && "error" in result) showToast(result.error, "error");
+      else {
+        showToast("Status updated");
+        setBlockModalTarget(null);
+      }
     });
   }
 
@@ -447,6 +486,7 @@ export function DailyPlanView({
           onPostpone={handlePostpone}
           onStartNow={blockModalStartNowEligible ? handleStartNow : undefined}
           startNowBlocked={blockModalStartNowBlocked}
+          onEventStatusUpdate={handleEventStatusUpdate}
         />
       )}
 

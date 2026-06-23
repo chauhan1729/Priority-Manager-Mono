@@ -72,6 +72,27 @@ export async function addGivingLog(
   return {};
 }
 
+/**
+ * Reset Giving: delete all giving records (logs + challenges) for the user,
+ * returning the screen to a clean start. Destructive — guard with a confirm in the UI.
+ */
+export async function resetGiving(): Promise<{ error?: string }> {
+  const { supabase, user } = await auth();
+  if (!user) return { error: "Not authenticated." };
+
+  const { error: logErr } = await supabase.from("giving_logs").delete().eq("user_id", user.id);
+  if (logErr) return { error: logErr.message };
+
+  const { error: challengeErr } = await supabase
+    .from("giving_challenges")
+    .delete()
+    .eq("user_id", user.id);
+  if (challengeErr) return { error: challengeErr.message };
+
+  revalidate();
+  return {};
+}
+
 /** Remove a single log. */
 export async function deleteGivingLog(id: string): Promise<{ error?: string }> {
   const { supabase, user } = await auth();

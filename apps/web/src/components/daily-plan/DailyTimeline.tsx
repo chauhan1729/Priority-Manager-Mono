@@ -232,6 +232,18 @@ export function DailyTimeline({
                 const calEvent = eventMap.get(instance.source_event_id);
                 if (!calEvent) return null;
                 const isOther = instance.source_type === "other";
+                // Per-occurrence status lives on this day's instance.
+                const evStatus = instance.status_snapshot ?? "upcoming";
+                const isResolved =
+                  evStatus === "completed" || evStatus === "missed" || evStatus === "postponed";
+                const statusSuffix =
+                  evStatus === "completed"
+                    ? " · Completed"
+                    : evStatus === "missed"
+                      ? " · Missed"
+                      : evStatus === "postponed"
+                        ? " · Postponed"
+                        : "";
                 return (
                   <div
                     key={instance.id}
@@ -244,16 +256,22 @@ export function DailyTimeline({
                       disabled={isPending}
                       className={[
                         "w-full h-full rounded-lg border px-2 py-1 text-left overflow-hidden transition-colors disabled:opacity-50",
-                        isOther
-                          ? "bg-gray-50 border-gray-200 hover:bg-gray-100"
-                          : "bg-emerald-50 border-emerald-200 hover:bg-emerald-100",
+                        isResolved
+                          ? "bg-gray-50 border-gray-200 hover:bg-gray-100 opacity-70"
+                          : isOther
+                            ? "bg-gray-50 border-gray-200 hover:bg-gray-100"
+                            : "bg-emerald-50 border-emerald-200 hover:bg-emerald-100",
                       ].join(" ")}
                     >
-                      <p className={`text-[10px] font-semibold truncate leading-tight ${isOther ? "text-gray-700" : "text-emerald-800"}`}>
+                      <p
+                        className={`text-[10px] font-semibold truncate leading-tight ${
+                          isResolved ? "text-ink-light line-through" : isOther ? "text-gray-700" : "text-emerald-800"
+                        }`}
+                      >
                         {calEvent.title}
                       </p>
-                      <p className={`text-[9px] truncate leading-tight ${isOther ? "text-gray-500" : "text-emerald-600"}`}>
-                        {formatLocalTime(instance.start_at)}
+                      <p className={`text-[9px] truncate leading-tight ${isResolved ? "text-ink-light" : isOther ? "text-gray-500" : "text-emerald-600"}`}>
+                        {formatLocalTime(instance.start_at)}{statusSuffix}
                       </p>
                     </button>
                   </div>
