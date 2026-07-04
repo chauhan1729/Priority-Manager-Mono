@@ -48,3 +48,7 @@ coverage/
 web-build/
 android/
 ios/
+
+# Source reference material (books/notes) — kept locally, not tracked
+/*.pdf
+/fotw.txt
