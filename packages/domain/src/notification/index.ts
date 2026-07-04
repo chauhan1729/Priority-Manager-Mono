@@ -12,7 +12,7 @@ import type {
 } from "@pm/types";
 
 import { getNextOccurrenceDate } from "../expense";
-import { isSixTimeSetUp, resolveSlotProblem, SIX_TIME_SLOT_COUNT } from "../six-time";
+import { isSixTimeSetUp } from "../six-time";
 import { birthdayDateForYear, isBirthdayEntry, isTravelOrAway } from "../year-entry";
 
 // ---------------------------------------------------------------------------
@@ -103,34 +103,26 @@ export function computeMorningSummaryReminder(
 }
 
 // ---------------------------------------------------------------------------
-// Phase 4: Six-Time Book reminders (six daily slots + nightly review)
+// Phase 4 / 6: Six-Time Book reminders (one daily log + nightly review)
 // ---------------------------------------------------------------------------
 
 /**
- * Returns up to six "Six-Time check" reminders for today, one per configured slot time, each
- * carrying the reminder phrase of the problem that slot is about. Gated on config.enabled + setup.
+ * Returns a single "log your Six-Time Book" nudge for today, if enabled + set up.
+ * Fires at the configured daily_log_time.
  */
-export function computeSixTimeSlotReminders(
-  config: Pick<SixTimeConfig, "enabled" | "slot_times"> | null | undefined,
+export function computeSixTimeDailyReminder(
+  config: Pick<SixTimeConfig, "enabled" | "daily_log_time"> | null | undefined,
   problems: Pick<SixTimeProblem, "position" | "status" | "reminder_phrase">[],
   todayISO: string,
-): ReminderSchedule[] {
-  if (!config?.enabled || !isSixTimeSetUp(problems as SixTimeProblem[])) return [];
-  const out: ReminderSchedule[] = [];
-  for (let slot = 1; slot <= SIX_TIME_SLOT_COUNT; slot++) {
-    const time = config.slot_times[slot - 1];
-    if (!time) continue;
-    const problem = resolveSlotProblem(slot, problems as SixTimeProblem[]);
-    if (!problem) continue;
-    out.push({
-      type: "six_time_slot",
-      source_id: null,
-      scheduled_for: buildDateTimeFromTime(time, todayISO),
-      title: "Six-Time check",
-      body: problem.reminder_phrase,
-    });
-  }
-  return out;
+): ReminderSchedule | null {
+  if (!config?.enabled || !isSixTimeSetUp(problems as SixTimeProblem[])) return null;
+  return {
+    type: "six_time_daily",
+    source_id: null,
+    scheduled_for: buildDateTimeFromTime(config.daily_log_time, todayISO),
+    title: "Six-Time log",
+    body: "Log today — a win, a slip, and a small to-do for each focus problem.",
+  };
 }
 
 /** The nightly review reminder (top 3 best / worst), if enabled. */
@@ -657,8 +649,8 @@ export interface ComputeRemindersParams {
     "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "archived"
   >[];
   calendarEvents?: Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at">[];
-  // Phase 4: optional so callers that haven't adopted Six-Time (e.g. mobile) still compile.
-  sixTimeConfig?: Pick<SixTimeConfig, "enabled" | "slot_times" | "nightly_time"> | null;
+  // Phase 4 / 6: optional so callers that haven't adopted Six-Time (e.g. mobile) still compile.
+  sixTimeConfig?: Pick<SixTimeConfig, "enabled" | "daily_log_time" | "nightly_time"> | null;
   sixTimeProblems?: Pick<SixTimeProblem, "position" | "status" | "reminder_phrase">[];
   // Phase 5: whether a giving challenge is active (drives the daily giving reminder).
   hasActiveGivingChallenge?: boolean;
@@ -712,7 +704,7 @@ export function computeAllReminders(params: ComputeRemindersParams): ReminderSch
       ? computeActivityOverdueReminders(scheduleInstances, activities, now)
       : []),
     ...computeEventUpcomingReminders(calendarEvents, prefs.event_reminder_minutes_before, now),
-    ...computeSixTimeSlotReminders(sixTimeConfig, sixTimeProblems, todayISO),
+    computeSixTimeDailyReminder(sixTimeConfig, sixTimeProblems, todayISO),
     computeSixTimeNightlyReminder(sixTimeConfig, todayISO),
     computeGivingReminder(prefs, hasActiveGivingChallenge, todayISO),
     ...(prefs.activity_due_today_enabled

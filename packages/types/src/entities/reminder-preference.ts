@@ -11,7 +11,7 @@ export type ReminderType =
   | "event_upcoming"
   | "weekly_someday_review"
   | "meeting_prep"
-  | "six_time_slot"
+  | "six_time_daily"
   | "six_time_nightly"
   | "giving_daily"
   // Activity date-based nudges (not tied to a scheduled block)

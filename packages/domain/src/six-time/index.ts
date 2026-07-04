@@ -1,14 +1,8 @@
 import type { SixTimeEntry, SixTimeProblem } from "@pm/types";
 
-/** Phase 4: Six-Time Book — six daily slots cycling through three focus problems (twice). */
-export const SIX_TIME_SLOT_COUNT = 6;
+/** Phase 4 / 6: Six-Time Book — three focus problems, each logged ONCE a day. */
 export const SIX_TIME_PROBLEM_COUNT = 3;
 export const SIX_TIME_MAX_REVIEW_ITEMS = 3;
-
-/** Slot → problem position: slots 1/4 → P1, 2/5 → P2, 3/6 → P3. */
-export function slotToPosition(slotIndex: number): number {
-  return ((slotIndex - 1) % SIX_TIME_PROBLEM_COUNT) + 1;
-}
 
 /** Map of position → the active problem at that position. */
 export function activeProblemsByPosition(
@@ -31,43 +25,32 @@ export function isSixTimeSetUp(problems: SixTimeProblem[]): boolean {
   return byPos.has(1) && byPos.has(2) && byPos.has(3);
 }
 
-/** The active problem a given slot is about (null if that position isn't set up). */
-export function resolveSlotProblem(
-  slotIndex: number,
-  problems: SixTimeProblem[],
-): SixTimeProblem | null {
-  return activeProblemsByPosition(problems).get(slotToPosition(slotIndex)) ?? null;
-}
-
-export interface SixTimeSlot {
-  slotIndex: number; // 1..6
+export interface SixTimeLogCard {
   position: number; // 1..3
   problem: SixTimeProblem;
-  entry: SixTimeEntry | null; // the saved entry for this slot today, if any
+  entry: SixTimeEntry | null; // today's saved entry for this problem, if any
 }
 
 /**
- * Builds the six daily slots wired to their problems, merging in any saved entries for the day.
- * Returns an empty array if the book isn't fully set up.
+ * Builds the once-a-day log: one card per active focus problem (ordered by position),
+ * merging in any saved entry for the day. Returns an empty array if the book isn't
+ * fully set up (all three positions active).
  */
-export function buildDaySlots(
+export function buildDailyLog(
   problems: SixTimeProblem[],
   entries: SixTimeEntry[] = [],
-): SixTimeSlot[] {
+): SixTimeLogCard[] {
   const byPos = activeProblemsByPosition(problems);
   if (!(byPos.has(1) && byPos.has(2) && byPos.has(3))) return [];
-  const entryBySlot = new Map(entries.map((e) => [e.slot_index, e]));
-  const slots: SixTimeSlot[] = [];
-  for (let slot = 1; slot <= SIX_TIME_SLOT_COUNT; slot++) {
-    const position = slotToPosition(slot);
-    const problem = byPos.get(position)!;
-    slots.push({ slotIndex: slot, position, problem, entry: entryBySlot.get(slot) ?? null });
+  const entryByProblem = new Map(entries.map((e) => [e.problem_id, e]));
+  const cards: SixTimeLogCard[] = [];
+  for (let pos = 1; pos <= SIX_TIME_PROBLEM_COUNT; pos++) {
+    const problem = byPos.get(pos)!;
+    cards.push({
+      position: pos,
+      problem,
+      entry: entryByProblem.get(problem.id) ?? null,
+    });
   }
-  return slots;
-}
-
-/** Which problem position is the "current" slot to nudge, given the time-of-day index (0-based). */
-export function slotIndexForTimeOfDay(elapsedSlots: number): number {
-  // clamp to 1..6
-  return Math.min(SIX_TIME_SLOT_COUNT, Math.max(1, elapsedSlots + 1));
+  return cards;
 }

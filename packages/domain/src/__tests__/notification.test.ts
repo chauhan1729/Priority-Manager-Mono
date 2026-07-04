@@ -9,8 +9,8 @@ import {
   computeMeetingUpcomingReminders,
   computeGivingReminder,
   computeMeetingPrepReminders,
+  computeSixTimeDailyReminder,
   computeSixTimeNightlyReminder,
-  computeSixTimeSlotReminders,
   computeMorningSummaryReminder,
   computeRenewalReminders,
   computeSomedayReviewReminder,
@@ -151,7 +151,7 @@ describe("computeGivingReminder (Phase 5)", () => {
 describe("Six-Time reminders (Phase 4)", () => {
   const config = {
     enabled: true,
-    slot_times: ["08:00", "10:30", "12:30", "15:00", "18:00", "21:30"],
+    daily_log_time: "21:00",
     nightly_time: "22:30",
   };
   const problems = [
@@ -160,17 +160,15 @@ describe("Six-Time reminders (Phase 4)", () => {
     { position: 3, status: "active" as const, reminder_phrase: "Follow up" },
   ];
 
-  it("emits 6 slot reminders with the right phrases", () => {
-    const r = computeSixTimeSlotReminders(config, problems, "2026-06-15");
-    expect(r).toHaveLength(6);
-    expect(r[0]?.body).toBe("Be patient"); // slot 1 → P1
-    expect(r[4]?.body).toBe("Listen first"); // slot 5 → P2
-    expect(r.every((x) => x.type === "six_time_slot")).toBe(true);
+  it("emits one daily log reminder when set up", () => {
+    const r = computeSixTimeDailyReminder(config, problems, "2026-06-15");
+    expect(r?.type).toBe("six_time_daily");
+    expect(r?.scheduled_for.getHours()).toBe(21);
   });
 
   it("emits nothing when disabled or not set up", () => {
-    expect(computeSixTimeSlotReminders({ ...config, enabled: false }, problems, "2026-06-15")).toHaveLength(0);
-    expect(computeSixTimeSlotReminders(config, [problems[0]!], "2026-06-15")).toHaveLength(0);
+    expect(computeSixTimeDailyReminder({ ...config, enabled: false }, problems, "2026-06-15")).toBeNull();
+    expect(computeSixTimeDailyReminder(config, [problems[0]!], "2026-06-15")).toBeNull();
     expect(computeSixTimeNightlyReminder({ ...config, enabled: false }, "2026-06-15")).toBeNull();
   });
 

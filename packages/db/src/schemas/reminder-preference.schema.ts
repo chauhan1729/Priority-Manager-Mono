@@ -15,7 +15,7 @@ export const reminderTypeSchema = z.enum([
   "event_upcoming",
   "weekly_someday_review",
   "meeting_prep",
-  "six_time_slot",
+  "six_time_daily",
   "six_time_nightly",
   "giving_daily",
 ]);

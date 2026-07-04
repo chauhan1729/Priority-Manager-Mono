@@ -116,7 +116,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       // Phase 4: Six-Time Book config + active focus problems
       supabase
         .from("six_time_config")
-        .select("enabled, slot_times, nightly_time")
+        .select("enabled, daily_log_time, nightly_time")
         .eq("user_id", user.id)
         .maybeSingle(),
       supabase

@@ -91,13 +91,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
             .not('recurrence_rule', 'is', null),
           supabase
             .from('schedule_instances')
-            .select('id, source_type, source_activity_id, start_at, end_at, status_snapshot')
+            .select(
+              'id, source_type, source_activity_id, start_at, end_at, status_snapshot, schedule_date',
+            )
             .eq('user_id', user.id)
             .gte('schedule_date', today)
             .lte('schedule_date', horizonISO),
           supabase
             .from('activities')
-            .select('id, title')
+            .select('id, title, priority, activity_date, status, is_someday, archived')
             .eq('user_id', user.id)
             .gte('activity_date', today)
             .lte('activity_date', horizonISO),

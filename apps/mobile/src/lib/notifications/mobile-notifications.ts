@@ -204,9 +204,18 @@ export async function scheduleAllReminders(
   expenses: Pick<Expense, 'id' | 'title' | 'amount' | 'expense_date' | 'recurrence_rule'>[],
   scheduleInstances: Pick<
     ScheduleInstance,
-    'id' | 'source_type' | 'source_activity_id' | 'start_at' | 'end_at' | 'status_snapshot'
+    | 'id'
+    | 'source_type'
+    | 'source_activity_id'
+    | 'start_at'
+    | 'end_at'
+    | 'status_snapshot'
+    | 'schedule_date'
   >[] = [],
-  activities: Pick<Activity, 'id' | 'title'>[] = [],
+  activities: Pick<
+    Activity,
+    'id' | 'title' | 'priority' | 'activity_date' | 'status' | 'is_someday' | 'archived'
+  >[] = [],
   calendarEvents: Pick<CalendarEvent, 'id' | 'title' | 'event_type' | 'start_at'>[] = [],
 ): Promise<void> {
   const N = getNotifications();

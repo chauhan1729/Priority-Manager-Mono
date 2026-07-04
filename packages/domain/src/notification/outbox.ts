@@ -49,7 +49,7 @@ export function notificationRoute(type: ReminderType): string {
     case "birthday":
     case "travel":
       return "/year-at-a-glance";
-    case "six_time_slot":
+    case "six_time_daily":
     case "six_time_nightly":
       return "/six-time-book";
     case "giving_daily":

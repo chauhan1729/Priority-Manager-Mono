@@ -635,7 +635,6 @@ export interface Database {
           id: string;
           user_id: string;
           entry_date: string;
-          slot_index: number;
           problem_id: string;
           plus: string | null;
           minus: string | null;
@@ -648,7 +647,6 @@ export interface Database {
           id?: string;
           user_id: string;
           entry_date: string;
-          slot_index: number;
           problem_id: string;
           plus?: string | null;
           minus?: string | null;
@@ -689,7 +687,7 @@ export interface Database {
           id: string;
           user_id: string;
           enabled: boolean;
-          slot_times: string[];
+          daily_log_time: string;
           nightly_time: string;
           created_at: string;
           updated_at: string;
@@ -698,7 +696,7 @@ export interface Database {
           id?: string;
           user_id: string;
           enabled?: boolean;
-          slot_times?: string[];
+          daily_log_time?: string;
           nightly_time?: string;
           created_at?: string;
           updated_at?: string;

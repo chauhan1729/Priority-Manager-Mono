@@ -4,6 +4,8 @@ import { isoDateSchema, isoDatetimeSchema, timeSchema, uuidSchema } from "./comm
 
 // Brevity is the point — keep entries short & sweet.
 const shortText = z.string().max(140);
+// Nightly review lines get a little more room (multi-line reflection).
+const reviewText = z.string().max(300);
 
 // --- Problem ---------------------------------------------------------------
 export const sixTimeProblemStatusSchema = z.enum(["active", "retired"]);
@@ -31,7 +33,6 @@ export const sixTimeEntrySchema = z.object({
   id: uuidSchema,
   user_id: uuidSchema,
   entry_date: isoDateSchema,
-  slot_index: z.number().int().min(1).max(6),
   problem_id: uuidSchema,
   plus: shortText.nullable(),
   minus: shortText.nullable(),
@@ -57,8 +58,8 @@ export const sixTimeNightlyReviewSchema = z.object({
   id: uuidSchema,
   user_id: uuidSchema,
   review_date: isoDateSchema,
-  best: z.array(shortText).max(3),
-  worst: z.array(shortText).max(3),
+  best: z.array(reviewText).max(25),
+  worst: z.array(reviewText).max(25),
   logged_at: isoDatetimeSchema.nullable(),
   created_at: isoDatetimeSchema,
   updated_at: isoDatetimeSchema,
@@ -74,14 +75,14 @@ export const sixTimeConfigSchema = z.object({
   id: uuidSchema,
   user_id: uuidSchema,
   enabled: z.boolean().default(true),
-  slot_times: z.array(timeSchema).length(6),
+  daily_log_time: timeSchema,
   nightly_time: timeSchema,
   created_at: isoDatetimeSchema,
   updated_at: isoDatetimeSchema,
 });
 export const updateSixTimeConfigSchema = z.object({
   enabled: z.boolean().optional(),
-  slot_times: z.array(timeSchema).length(6).optional(),
+  daily_log_time: timeSchema.optional(),
   nightly_time: timeSchema.optional(),
 });
 
