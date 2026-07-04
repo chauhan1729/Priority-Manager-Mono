@@ -8,7 +8,16 @@
  * Used exclusively on the client side ("use client" components / providers).
  */
 
-import type { ReminderSchedule } from "@pm/domain";
+import { notificationRoute, type ReminderSchedule } from "@pm/domain";
+import type { NotificationSound } from "@pm/types";
+
+import { playNotificationSound } from "./sounds";
+
+/** Sound settings threaded through the foreground fire path. */
+export interface SoundConfig {
+  sound: NotificationSound;
+  enabled: boolean;
+}
 
 // ---------------------------------------------------------------------------
 // Permission
@@ -39,21 +48,59 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
 // Show a single browser notification
 // ---------------------------------------------------------------------------
 
+/** Shared tag so the foreground and background (push) paths never duplicate. */
+function reminderTag(reminder: ReminderSchedule): string {
+  return `pm-${reminder.type}-${reminder.source_id ?? "global"}`;
+}
+
 /**
- * Shows a browser Notification for a given ReminderSchedule.
- * Falls back gracefully if permission is denied.
+ * Shows a browser notification for a reminder while the app is open.
+ *
+ * Uses the service worker's `showNotification()` rather than the `Notification`
+ * constructor — the constructor is illegal in installed PWAs and on Android and
+ * throws, which is exactly why notifications never appeared there. Falls back to
+ * the constructor only on desktop browsers without an active SW registration.
+ *
+ * Also plays the user's chosen tone (foreground only; SWs can't play audio).
  */
-export function showBrowserNotification(reminder: ReminderSchedule): void {
+export async function showBrowserNotification(
+  reminder: ReminderSchedule,
+  sound?: SoundConfig,
+): Promise<void> {
   if (!isNotificationSupported() || Notification.permission !== "granted") return;
 
+  if (sound?.enabled) {
+    try {
+      playNotificationSound(sound.sound);
+    } catch {
+      // Web Audio unavailable — notification still shows.
+    }
+  }
+
+  const options: NotificationOptions & { renotify?: boolean } = {
+    body: reminder.body,
+    tag: reminderTag(reminder),
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    silent: sound ? !sound.enabled : false,
+    renotify: false,
+    data: { url: notificationRoute(reminder.type) },
+  };
+
   try {
-    new Notification(reminder.title, {
-      body: reminder.body,
-      tag: `pm-${reminder.type}-${reminder.source_id ?? "global"}`,
-      // Reusing the same tag prevents duplicate notifications for the same reminder
-    });
+    if ("serviceWorker" in navigator) {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(reminder.title, options);
+      return;
+    }
   } catch {
-    // Silent — some browsers restrict Notification outside secure contexts
+    // Fall through to the constructor fallback below.
+  }
+
+  try {
+    new Notification(reminder.title, options);
+  } catch {
+    // Silent — platform disallows the constructor and no SW is available.
   }
 }
 
@@ -71,10 +118,11 @@ export function showBrowserNotification(reminder: ReminderSchedule): void {
 export function fireOverdueReminders(
   reminders: ReminderSchedule[],
   now: Date = new Date(),
+  sound?: SoundConfig,
 ): ReminderSchedule[] {
   const overdue = reminders.filter((r) => r.scheduled_for <= now);
   for (const r of overdue) {
-    showBrowserNotification(r);
+    void showBrowserNotification(r, sound);
   }
   return overdue;
 }
@@ -131,6 +179,7 @@ export function markFiredInStorage(type: string, sourceId: string | null): void 
 export function fireNewOverdueReminders(
   reminders: ReminderSchedule[],
   now: Date = new Date(),
+  sound?: SoundConfig,
 ): ReminderSchedule[] {
   const firedToday = getFiredTodayFromStorage();
   const toFire = reminders.filter((r) => {
@@ -139,7 +188,7 @@ export function fireNewOverdueReminders(
   });
 
   for (const r of toFire) {
-    showBrowserNotification(r);
+    void showBrowserNotification(r, sound);
     markFiredInStorage(r.type, r.source_id);
   }
 

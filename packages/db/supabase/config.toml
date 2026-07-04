@@ -1,6 +1,7 @@
 # Supabase project config
-# Fill in after running: supabase link --project-ref <your-ref>
 # Then run: supabase db push   to apply all migrations
+
+project_id = "arpkgbrzjnhiehdjjcdi"
 
 [api]
 enabled = true
@@ -19,3 +20,8 @@ port = 54323
 
 [auth]
 enabled = true
+
+# Web Push dispatcher — invoked by pg_cron with the service_role key as Bearer.
+# JWT verification stays ON so the endpoint isn't publicly invocable.
+[functions.send-web-push]
+verify_jwt = true

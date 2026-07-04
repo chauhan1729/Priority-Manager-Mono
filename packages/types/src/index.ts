@@ -16,3 +16,4 @@ export * from "./entities/meeting";
 export * from "./entities/expense";
 export * from "./entities/expense-budget";
 export * from "./entities/reminder-preference";
+export * from "./entities/web-push";

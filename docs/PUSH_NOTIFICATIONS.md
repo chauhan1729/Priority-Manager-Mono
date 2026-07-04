@@ -1,5 +1,10 @@
 # Push Notifications — Setup
 
+> **Web app / PWA push:** this document covers the **mobile** (Expo) app. For the
+> web app and installable PWA — including closed-app delivery via Supabase Edge
+> Functions and the notification-sound picker — see
+> [WEB_PUSH_SETUP.md](./WEB_PUSH_SETUP.md).
+
 The mobile app uses **local notifications** via `expo-notifications`. They fire on-device even while the app is closed, as long as the user has opened the app at least once since the scheduled time. This covers every notification type listed in `bugs.md` for users who open the app at least daily.
 
 Remote push (Expo Push API) is **optional** and only needed for users who may not open the app for several days. Setup steps for that are at the bottom.

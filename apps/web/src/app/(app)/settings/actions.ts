@@ -22,6 +22,8 @@ export interface UpdateReminderPreferencesData {
   activity_overdue_enabled?: boolean;
   event_reminder_minutes_before?: number;
   currency_code?: string;
+  notification_sound?: string;
+  notification_sound_enabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------

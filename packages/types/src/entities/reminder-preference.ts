@@ -45,9 +45,17 @@ export interface ReminderPreference {
   giving_reminder_enabled: boolean;
   giving_reminder_time: string; // "HH:MM"
   currency_code: string; // ISO 4217 code, e.g. "USD" (app-wide display currency)
+  // Notification sound (web): foreground tone choice + master on/off.
+  // Background push cannot carry a custom sound file (browser limitation); the
+  // enabled flag toggles the OS notification sound via the push `silent` field.
+  notification_sound: NotificationSound;
+  notification_sound_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
+
+/** Foreground notification tones, synthesized in-browser via the Web Audio API. */
+export type NotificationSound = "chime" | "bell" | "ding" | "none";
 
 export interface ReminderInstance {
   id: string;

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 
 import { CURRENCY_OPTIONS } from "@pm/domain";
+import type { NotificationSound } from "@pm/types";
 
 import {
   updateProfilePrefs,
@@ -10,6 +11,8 @@ import {
   type UpdateReminderPreferencesData,
 } from "@/app/(app)/settings/actions";
 import { showToast } from "@/components/ui/Toaster";
+import { NOTIFICATION_SOUND_OPTIONS, playNotificationSound } from "@/lib/notifications/sounds";
+import { enableWebPush, type PushSetupResult } from "@/lib/notifications/web-push";
 
 // ---------------------------------------------------------------------------
 // Common IANA timezones grouped by region
@@ -106,6 +109,8 @@ interface ReminderPreferenceRow {
   travel_reminder_days_before: number;
   renewal_reminder_days_before: number;
   currency_code: string;
+  notification_sound: NotificationSound;
+  notification_sound_enabled: boolean;
 }
 
 // Defaults shown when no row exists yet
@@ -119,6 +124,8 @@ const DEFAULTS: ReminderPreferenceRow = {
   travel_reminder_days_before: 1,
   renewal_reminder_days_before: 3,
   currency_code: "USD",
+  notification_sound: "chime",
+  notification_sound_enabled: true,
 };
 
 interface Props {
@@ -145,12 +152,35 @@ export function ReminderSettingsView({ prefs, timezone: initialTimezone }: Props
       travel_reminder_days_before: prefs.travel_reminder_days_before ?? DEFAULTS.travel_reminder_days_before,
       renewal_reminder_days_before: prefs.renewal_reminder_days_before ?? DEFAULTS.renewal_reminder_days_before,
       currency_code: (prefs.currency_code as string | null) || DEFAULTS.currency_code,
+      notification_sound: (prefs.notification_sound as NotificationSound | null) || DEFAULTS.notification_sound,
+      notification_sound_enabled: prefs.notification_sound_enabled ?? DEFAULTS.notification_sound_enabled,
     };
   });
   const [timezone, setTimezone] = useState(initialTimezone || "UTC");
 
+  const [pushBusy, setPushBusy] = useState(false);
+
   function setField<K extends keyof ReminderPreferenceRow>(key: K, value: ReminderPreferenceRow[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  const PUSH_MESSAGES: Record<PushSetupResult, { text: string; kind: "success" | "error" }> = {
+    subscribed: { text: "Notifications enabled on this device", kind: "success" },
+    denied: { text: "Permission denied — enable notifications in your browser settings", kind: "error" },
+    unsupported: { text: "This browser doesn't support push notifications", kind: "error" },
+    "no-vapid-key": { text: "Push isn't configured on the server yet (missing VAPID key)", kind: "error" },
+    error: { text: "Couldn't enable notifications — please try again", kind: "error" },
+  };
+
+  async function handleEnablePush() {
+    setPushBusy(true);
+    try {
+      const result = await enableWebPush();
+      const msg = PUSH_MESSAGES[result];
+      showToast(msg.text, msg.kind === "error" ? "error" : undefined);
+    } finally {
+      setPushBusy(false);
+    }
   }
 
   function handleSave() {
@@ -210,6 +240,74 @@ export function ReminderSettingsView({ prefs, timezone: initialTimezone }: Props
           </select>
           <p className="mt-1 text-xs text-ink-light">
             Applied to all expense amounts across the app. Existing amounts are re-labeled, not converted.
+          </p>
+        </div>
+      </section>
+
+      {/* Section: Device notifications */}
+      <section className="rounded-xl border border-blue-100 bg-white shadow-sm px-6 py-5 space-y-4">
+        <h3 className="font-handwriting text-lg text-ink">Device Notifications</h3>
+
+        <div>
+          <button
+            type="button"
+            onClick={handleEnablePush}
+            disabled={pushBusy}
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition disabled:opacity-50"
+          >
+            {pushBusy ? "Enabling…" : "Enable notifications on this device"}
+          </button>
+          <p className="mt-2 text-xs text-ink-light">
+            Turns on push notifications so reminders reach you even when the app is closed.
+            You&apos;ll be asked to allow notifications. Do this once per device/browser.
+            On iPhone/iPad, first add the app to your Home Screen, then enable here.
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-blue-50 pt-4">
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">Notification sound</label>
+            <p className="text-xs text-ink-light">Play a sound with reminders.</p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.notification_sound_enabled}
+              onChange={(e) => setField("notification_sound_enabled", e.target.checked)}
+              className="rounded border-blue-300 text-blue-600 focus:ring-blue-400"
+            />
+            <span className="text-sm text-ink-light">Enabled</span>
+          </label>
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-ink mb-1">Sound</label>
+          <div className="flex items-center gap-2">
+            <select
+              value={form.notification_sound}
+              onChange={(e) => setField("notification_sound", e.target.value as NotificationSound)}
+              disabled={!form.notification_sound_enabled}
+              className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-40"
+            >
+              {NOTIFICATION_SOUND_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={() => playNotificationSound(form.notification_sound)}
+              disabled={!form.notification_sound_enabled || form.notification_sound === "none"}
+              className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-ink hover:bg-blue-50 transition disabled:opacity-40"
+            >
+              Preview
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-ink-light">
+            The chosen sound plays while the app is open. When the app is closed, your
+            device&apos;s default notification sound is used (browsers don&apos;t allow a
+            custom sound for background notifications).
           </p>
         </div>
       </section>

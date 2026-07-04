@@ -19,20 +19,25 @@ import { useCallback, useEffect } from "react";
 
 import {
   addDays,
+  buildOutboxRows,
   computeAllReminders,
   filterUnfiredReminders,
   type ComputeRemindersParams,
   type ReminderSchedule,
 } from "@pm/domain";
-import type { ReminderPreference } from "@pm/types";
+import type { NotificationSound, ReminderPreference } from "@pm/types";
 
 
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 import { showToast } from "@/components/ui/Toaster";
 import {
   fireNewOverdueReminders,
-  requestNotificationPermission,
+  type SoundConfig,
 } from "@/lib/notifications/web-notifications";
+import { ensureWebPushSubscribed } from "@/lib/notifications/web-push";
+
+/** How often the foreground checks for newly-due reminders (ms). */
+const CHECK_INTERVAL_MS = 60_000;
 
 // ---------------------------------------------------------------------------
 
@@ -48,7 +53,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     const { data: prefsData } = await supabase
       .from("reminder_preferences")
       .select(
-        "eod_review_enabled, eod_review_time, meeting_reminder_minutes_before, morning_summary_enabled, morning_summary_time, birthday_reminder_days_before, travel_reminder_days_before, renewal_reminder_days_before, activity_starting_enabled, activity_reminder_minutes_before, activity_overdue_enabled, event_reminder_minutes_before",
+        "eod_review_enabled, eod_review_time, meeting_reminder_minutes_before, morning_summary_enabled, morning_summary_time, birthday_reminder_days_before, travel_reminder_days_before, renewal_reminder_days_before, activity_starting_enabled, activity_reminder_minutes_before, activity_overdue_enabled, event_reminder_minutes_before, notification_sound, notification_sound_enabled",
       )
       .eq("user_id", user.id)
       .maybeSingle();
@@ -144,11 +149,31 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
 
     const allReminders = computeAllReminders(params);
 
+    const soundEnabled = prefs.notification_sound_enabled ?? true;
+    const soundConfig: SoundConfig = {
+      sound: (prefs.notification_sound as NotificationSound) ?? "chime",
+      enabled: soundEnabled,
+    };
+
+    // Queue upcoming reminders for server-side (closed-app) delivery. The browser
+    // computes fire-times in the user's real local timezone; the Edge Function is
+    // a dumb dispatcher. Upsert on (user_id, dedup_key) makes re-syncing safe.
+    const outboxRows = buildOutboxRows(allReminders, soundEnabled, now).map((r) => ({
+      ...r,
+      user_id: user.id,
+    }));
+    if (outboxRows.length > 0) {
+      await supabase
+        .from("push_outbox")
+        .upsert(outboxRows, { onConflict: "user_id,dedup_key", ignoreDuplicates: true });
+    }
+
     // Filter out already-fired via Supabase (cross-device dedup)
     const unfired = filterUnfiredReminders(allReminders, firedInstances ?? []);
 
-    // Fire browser notifications (localStorage dedup for same-device/refresh)
-    const fired = fireNewOverdueReminders(unfired, now);
+    // Fire browser notifications now for anything already due (localStorage dedup
+    // for same-device/refresh). Future ones are handled by the outbox above.
+    const fired = fireNewOverdueReminders(unfired, now, soundConfig);
 
     if (fired.length === 0) return;
 
@@ -171,18 +196,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   useEffect(() => {
-    // Request permission once on mount
-    requestNotificationPermission().catch(() => {});
+    // If the user already granted permission, make sure this browser is
+    // subscribed for closed-app push (endpoints can rotate). Permission itself is
+    // requested from a user gesture in Settings — Safari/iOS ignore auto-prompts.
+    ensureWebPushSubscribed().catch(() => {});
 
     // Check on mount (slight delay to let auth settle)
     const timer = setTimeout(() => { checkReminders().catch(() => {}); }, 1500);
 
-    // Re-check on tab focus (catches reminders that fired while tab was hidden)
+    // Poll while the tab is open so reminders fire at their scheduled time — not
+    // only on mount/focus (that was the bug: a due reminder never fired live).
+    const interval = setInterval(() => { checkReminders().catch(() => {}); }, CHECK_INTERVAL_MS);
+
+    // Re-check on tab focus (catches reminders that came due while tab was hidden)
     const onFocus = () => { checkReminders().catch(() => {}); };
     window.addEventListener("focus", onFocus);
 
     return () => {
       clearTimeout(timer);
+      clearInterval(interval);
       window.removeEventListener("focus", onFocus);
     };
   }, [checkReminders]);
