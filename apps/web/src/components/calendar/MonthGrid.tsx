@@ -42,26 +42,6 @@ function getEventChipStyle(event: CalendarDayEvent): {
   }
 }
 
-function getEventLabel(event: CalendarDayEvent): string {
-  if (event.kind === "birthday") return `🎂 ${event.data.title}`;
-  if (event.kind === "away") return `✈ ${event.data.title}`;
-  if (event.kind === "orphan_meeting") return event.data.title;
-  return event.data.title;
-}
-
-function getEventTime(event: CalendarDayEvent): string | null {
-  if (event.kind === "birthday" || event.kind === "away") return null;
-  const startAt =
-    event.kind === "orphan_meeting" ? event.data.start_at : event.data.start_at;
-  if (!startAt) return null;
-  const d = new Date(startAt);
-  const h = d.getHours();
-  const m = d.getMinutes();
-  const ampm = h < 12 ? "am" : "pm";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return m === 0 ? `${h12}${ampm}` : `${h12}:${String(m).padStart(2, "0")}${ampm}`;
-}
-
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -73,8 +53,8 @@ interface Props {
   contactMap: Map<string, Contact>;
   todayISO: string;
   selectedDay?: string;
+  // Clicking a day opens the day-events modal (handled by the parent).
   onDayClick: (date: string) => void;
-  onEventClick: (event: CalendarDayEvent) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +68,6 @@ export function MonthGrid({
   todayISO,
   selectedDay,
   onDayClick,
-  onEventClick,
 }: Props) {
   const [year, month] = selectedMonth.split("-").map(Number);
 
@@ -145,8 +124,6 @@ export function MonthGrid({
           const isAway = isDateInAwayPeriod(cell.date, awayEntries);
           const isSelected = selectedDay === cell.date;
           const events = eventsByDate.get(cell.date) ?? [];
-          const visibleEvents = events.slice(0, 3);
-          const overflow = events.length - visibleEvents.length;
 
           return (
             <div
@@ -175,54 +152,29 @@ export function MonthGrid({
                 )}
               </div>
 
-              {/* Dot indicator for xs screens (shows if events exist) */}
+              {/* Dots — mobile (tap the day to see the list below the grid). */}
               {events.length > 0 && (
                 <div className="sm:hidden flex gap-0.5 flex-wrap mt-0.5">
-                  {events.slice(0, 3).map((event, i) => {
+                  {events.slice(0, 4).map((event, i) => {
                     const style = getEventChipStyle(event);
                     return <span key={i} className={`w-1.5 h-1.5 rounded-full ${style.dot}`} />;
                   })}
                 </div>
               )}
 
-              {/* Event chips (hidden on xs, shown sm+) */}
-              <div className="hidden sm:block space-y-0.5">
-                {visibleEvents.map((event, evIdx) => {
-                  const style = getEventChipStyle(event);
-                  const label = getEventLabel(event);
-                  const time = getEventTime(event);
-                  const chipKey = event.kind === "birthday" || event.kind === "away"
-                    ? `${event.kind}-${event.data.id}-${evIdx}`
-                    : `${event.kind}-${event.data.id}`;
+              {/* Dots — desktop (hover the day to reveal the popover below). */}
+              {events.length > 0 && (
+                <div className="hidden sm:flex flex-wrap items-center gap-1 mt-1">
+                  {events.slice(0, 6).map((event, i) => {
+                    const style = getEventChipStyle(event);
+                    return <span key={i} className={`w-2 h-2 rounded-full ${style.dot}`} />;
+                  })}
+                  {events.length > 6 && (
+                    <span className="text-[9px] leading-none text-ink-light">+{events.length - 6}</span>
+                  )}
+                </div>
+              )}
 
-                  return (
-                    <button
-                      key={chipKey}
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEventClick(event);
-                      }}
-                      className={[
-                        "w-full flex items-center gap-1 rounded px-1 py-0.5 border text-left hover:opacity-80 transition",
-                        style.bg,
-                      ].join(" ")}
-                    >
-                      <span className={`flex-shrink-0 w-1.5 h-1.5 rounded-full ${style.dot}`} />
-                      <span className={`text-[10px] truncate leading-none ${style.text}`}>
-                        {time && <span className="mr-0.5 opacity-70">{time}</span>}
-                        {label}
-                      </span>
-                    </button>
-                  );
-                })}
-
-                {overflow > 0 && (
-                  <p className="text-[9px] text-ink-light pl-1">
-                    +{overflow} more
-                  </p>
-                )}
-              </div>
             </div>
           );
         })}

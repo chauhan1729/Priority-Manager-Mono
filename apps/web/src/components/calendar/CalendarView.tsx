@@ -21,6 +21,7 @@ import {
 } from "@/app/(app)/calendar/actions";
 
 import { CalendarEventFormModal } from "./CalendarEventFormModal";
+import { DayEventsModal } from "./DayEventsModal";
 import { EventPopup } from "./EventPopup";
 import { MonthGrid } from "./MonthGrid";
 
@@ -78,6 +79,7 @@ export function CalendarView({
   const [selectedEvent, setSelectedEvent] = useState<CalendarDayEvent | null>(null);
   const [createDate, setCreateDate] = useState<string | null>(null); // day clicked for new event
   const [selectedDay, setSelectedDay] = useState<string>(todayISO);
+  const [modalDay, setModalDay] = useState<string | null>(null); // day whose events modal is open
   const [noteText, setNoteText] = useState(monthNote?.notes ?? "");
   const [noteSaved, setNoteSaved] = useState(false);
 
@@ -105,6 +107,7 @@ export function CalendarView({
 
   function handleDayClick(date: string) {
     setSelectedDay(date);
+    setModalDay(date);
   }
 
   function handleEventClick(event: CalendarDayEvent) {
@@ -226,19 +229,7 @@ export function CalendarView({
           todayISO={todayISO}
           selectedDay={selectedDay}
           onDayClick={handleDayClick}
-          onEventClick={handleEventClick}
         />
-
-        {/* Mobile day events panel: shown below the grid on small screens */}
-        <div className="md:hidden">
-          <DayEventsPanel
-            date={selectedDay}
-            events={eventsByDate.get(selectedDay) ?? []}
-            todayISO={todayISO}
-            onEventClick={handleEventClick}
-            onAddEvent={() => setCreateDate(selectedDay)}
-          />
-        </div>
 
         {/* Monthly notes area — spec §10.2 */}
         <div className="rounded-xl border border-blue-100 bg-white p-4">
@@ -270,6 +261,24 @@ export function CalendarView({
         </div>
       </div>
 
+      {/* Day events modal — opens on day click, lists that day's events */}
+      {modalDay !== null && (
+        <DayEventsModal
+          date={modalDay}
+          events={eventsByDate.get(modalDay) ?? []}
+          contactMap={contactMap}
+          onClose={() => setModalDay(null)}
+          onEventClick={(event) => {
+            setModalDay(null);
+            handleEventClick(event);
+          }}
+          onAddEvent={(date) => {
+            setModalDay(null);
+            setCreateDate(date);
+          }}
+        />
+      )}
+
       {/* Event detail popup */}
       {selectedEvent && (
         <EventPopup
@@ -293,97 +302,6 @@ export function CalendarView({
           onSave={handleCreate}
           onClose={() => setCreateDate(null)}
         />
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Day events panel (shown below the grid on mobile when a day is selected)
-// ---------------------------------------------------------------------------
-
-const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTH_NAMES_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-function parseLocalDate(iso: string): Date {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y!, m! - 1, d!);
-}
-
-function formatDayTitle(iso: string, todayISO: string): string {
-  if (iso === todayISO) return "Today";
-  const d = parseLocalDate(iso);
-  return `${DAY_NAMES[d.getDay()]}, ${MONTH_NAMES_SHORT[d.getMonth()]} ${d.getDate()}`;
-}
-
-function getEventLabel(event: CalendarDayEvent): string {
-  if (event.kind === "birthday") return `🎂 ${event.data.title}`;
-  if (event.kind === "away") return `✈ ${event.data.title}`;
-  return event.data.title;
-}
-
-function getEventTime(event: CalendarDayEvent): string | null {
-  if (event.kind === "birthday" || event.kind === "away") return null;
-  const startAt = event.data.start_at;
-  if (!startAt) return null;
-  const d = new Date(startAt);
-  const h = d.getHours();
-  const min = d.getMinutes();
-  const ampm = h < 12 ? "am" : "pm";
-  const h12 = h % 12 === 0 ? 12 : h % 12;
-  return min === 0 ? `${h12}${ampm}` : `${h12}:${String(min).padStart(2, "0")}${ampm}`;
-}
-
-interface DayEventsPanelProps {
-  date: string;
-  events: CalendarDayEvent[];
-  todayISO: string;
-  onEventClick: (event: CalendarDayEvent) => void;
-  onAddEvent: () => void;
-}
-
-function DayEventsPanel({ date, events, todayISO, onEventClick, onAddEvent }: DayEventsPanelProps) {
-  return (
-    <div className="rounded-xl border border-blue-100 bg-white overflow-hidden">
-      {/* Day header */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-blue-50">
-        <span className="text-sm font-semibold text-ink">{formatDayTitle(date, todayISO)}</span>
-        <button
-          onClick={onAddEvent}
-          className="rounded-lg bg-blue-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-blue-700 transition"
-        >
-          + Add Event
-        </button>
-      </div>
-
-      {/* Events list */}
-      {events.length === 0 ? (
-        <div className="px-4 py-6 text-center text-sm text-ink-light">No events on this day.</div>
-      ) : (
-        <ul className="divide-y divide-blue-50">
-          {events.map((event, evIdx) => {
-            const label = getEventLabel(event);
-            const time = getEventTime(event);
-            const key = event.kind === "birthday" || event.kind === "away"
-              ? `${event.kind}-${event.data.id}-${evIdx}`
-              : `${event.kind}-${event.data.id}`;
-
-            return (
-              <li key={key}>
-                <button
-                  type="button"
-                  onClick={() => onEventClick(event)}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-blue-50 transition"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-ink truncate">{label}</p>
-                    {time && <p className="text-xs text-ink-light mt-0.5">{time}</p>}
-                  </div>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
       )}
     </div>
   );
