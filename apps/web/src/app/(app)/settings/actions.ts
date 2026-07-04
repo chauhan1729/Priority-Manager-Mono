@@ -24,6 +24,14 @@ export interface UpdateReminderPreferencesData {
   currency_code?: string;
   notification_sound?: string;
   notification_sound_enabled?: boolean;
+  // Weekly Someday review
+  someday_review_enabled?: boolean;
+  someday_review_weekday?: number; // 0=Sun … 6=Sat
+  someday_review_time?: string; // "HH:MM"
+  // Activity date-based nudges
+  activity_due_today_enabled?: boolean;
+  activity_past_due_enabled?: boolean;
+  activity_nudge_time?: string; // "HH:MM"
 }
 
 // ---------------------------------------------------------------------------
@@ -69,7 +77,12 @@ export async function updateReminderPreferences(
 
   // Validate time fields format. Postgres `time` columns round-trip as "HH:MM:SS",
   // so accept an optional seconds component and normalize back to "HH:MM" for storage.
-  const timeFields = ["eod_review_time", "morning_summary_time"] as const;
+  const timeFields = [
+    "eod_review_time",
+    "morning_summary_time",
+    "someday_review_time",
+    "activity_nudge_time",
+  ] as const;
   for (const field of timeFields) {
     const val = data[field];
     if (val !== undefined) {
@@ -78,6 +91,14 @@ export async function updateReminderPreferences(
       }
       data[field] = val.slice(0, 5);
     }
+  }
+
+  // Validate the Someday review weekday (0=Sun … 6=Sat).
+  if (
+    data.someday_review_weekday !== undefined &&
+    (data.someday_review_weekday < 0 || data.someday_review_weekday > 6)
+  ) {
+    return { error: "someday_review_weekday must be 0–6" };
   }
 
   // Validate numeric fields

@@ -218,8 +218,11 @@ export function computeMeetingUpcomingReminders(
     if (m.status !== "upcoming") return [];
     const startAt = new Date(m.start_at);
     const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
-    // Reminder window: [reminderTime, startAt)
-    if (now < reminderTime || now >= startAt) return [];
+    // Emit until the meeting starts. scheduled_for = reminderTime works in BOTH
+    // paths: the foreground fires it once due, and the outbox queues it while it's
+    // still in the future (closed-app push). Only the upper bound (now < startAt)
+    // matters — a lower bound would strand the future case out of the outbox.
+    if (now >= startAt) return [];
     return [
       {
         type: "meeting_upcoming" as ReminderType,
@@ -280,7 +283,9 @@ export function computeMeetingPassedReminders(
 ): ReminderSchedule[] {
   return meetings.flatMap((m) => {
     if (m.status !== "upcoming") return [];
-    if (new Date(m.end_at) > now) return [];
+    // No `end_at > now` guard: emit scheduled_for = end_at whether it's past or
+    // future, so it fires in the foreground once the meeting ends AND queues for
+    // closed-app push at end time. Mirrors computeActivityOverdueReminders.
     const needsTakeaway = !m.key_takeaways;
     return [
       {
@@ -424,7 +429,9 @@ export function computeActivityStartingReminders(
     if (i.status_snapshot === "completed" || i.status_snapshot === "missed") return [];
     const startAt = new Date(i.start_at);
     const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
-    if (reminderTime <= now) return [];
+    // Emit until the block starts (not "future-only") so the foreground fires it
+    // once due AND the outbox queues it ahead of time for closed-app push.
+    if (now >= startAt) return [];
     const title = activityTitleById.get(i.source_activity_id);
     if (!title) return [];
     return [
@@ -497,7 +504,9 @@ export function computeEventUpcomingReminders(
     if (!e.start_at) return [];
     const startAt = new Date(e.start_at);
     const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
-    if (reminderTime <= now) return [];
+    // Emit until the event starts so it fires in the foreground once due AND
+    // queues in the outbox while still future (closed-app push).
+    if (now >= startAt) return [];
     return [
       {
         type: "event_upcoming" as ReminderType,
@@ -505,6 +514,87 @@ export function computeEventUpcomingReminders(
         scheduled_for: reminderTime,
         title: e.title,
         body: "Focus and show up fully, or acknowledge, take responsibility, and reschedule.",
+      },
+    ];
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Activity date-based nudges (Group D): due-today + past-due
+// ---------------------------------------------------------------------------
+
+/** Statuses that still need action (not finished / cancelled / handed off). */
+function isActionableStatus(status: Activity["status"]): boolean {
+  return status === "not_started" || status === "working" || status === "postponed";
+}
+
+type ActivityForNudge = Pick<
+  Activity,
+  "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "archived"
+>;
+
+/**
+ * Returns a nudge for each A-priority activity dated today that is still
+ * actionable AND has no schedule block today — i.e. due today but not yet on
+ * the timeline. Fires at `nudgeTime`. Someday/archived items are excluded.
+ */
+export function computeActivityDueTodayReminders(
+  activities: ActivityForNudge[],
+  scheduleInstances: Pick<ScheduleInstance, "source_type" | "source_activity_id" | "schedule_date">[],
+  nudgeTime: string,
+  todayISO: string,
+): ReminderSchedule[] {
+  const scheduledTodayActivityIds = new Set(
+    scheduleInstances
+      .filter(
+        (i) =>
+          i.source_type === "activity" &&
+          i.source_activity_id &&
+          i.schedule_date === todayISO,
+      )
+      .map((i) => i.source_activity_id as string),
+  );
+
+  return activities.flatMap((a) => {
+    if (a.archived || a.is_someday) return [];
+    if (a.priority !== "A") return [];
+    if (!isActionableStatus(a.status)) return [];
+    if (a.activity_date !== todayISO) return [];
+    if (scheduledTodayActivityIds.has(a.id)) return [];
+    return [
+      {
+        type: "activity_due_today" as ReminderType,
+        source_id: a.id,
+        scheduled_for: buildDateTimeFromTime(nudgeTime, todayISO),
+        title: a.title,
+        body: "Due today and not scheduled — put it on the timeline or reschedule and own it.",
+      },
+    ];
+  });
+}
+
+/**
+ * Returns a nudge for each still-actionable activity whose date is in the past —
+ * it slipped without being completed. Fires at `nudgeTime` today. Someday/archived
+ * items are excluded. Repeats daily (localStorage/instance dedup fires it once/day)
+ * until the activity is completed, cancelled, or rescheduled.
+ */
+export function computeActivityPastDueReminders(
+  activities: ActivityForNudge[],
+  nudgeTime: string,
+  todayISO: string,
+): ReminderSchedule[] {
+  return activities.flatMap((a) => {
+    if (a.archived || a.is_someday) return [];
+    if (!isActionableStatus(a.status)) return [];
+    if (a.activity_date >= todayISO) return [];
+    return [
+      {
+        type: "activity_past_due" as ReminderType,
+        source_id: a.id,
+        scheduled_for: buildDateTimeFromTime(nudgeTime, todayISO),
+        title: a.title,
+        body: "Overdue — it slipped past its date. Finish it, reschedule, or cancel and own it.",
       },
     ];
   });
@@ -541,6 +631,9 @@ export interface ComputeRemindersParams {
         | "meeting_prep_days_before"
         | "giving_reminder_enabled"
         | "giving_reminder_time"
+        | "activity_due_today_enabled"
+        | "activity_past_due_enabled"
+        | "activity_nudge_time"
       >
     >;
   meetings: (Pick<
@@ -551,9 +644,18 @@ export interface ComputeRemindersParams {
   yearEntries: Pick<YearEntry, "id" | "title" | "type" | "start_date">[];
   scheduleInstances?: Pick<
     ScheduleInstance,
-    "id" | "source_type" | "source_activity_id" | "start_at" | "end_at" | "status_snapshot"
+    | "id"
+    | "source_type"
+    | "source_activity_id"
+    | "start_at"
+    | "end_at"
+    | "status_snapshot"
+    | "schedule_date"
   >[];
-  activities?: Pick<Activity, "id" | "title">[];
+  activities?: Pick<
+    Activity,
+    "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "archived"
+  >[];
   calendarEvents?: Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at">[];
   // Phase 4: optional so callers that haven't adopted Six-Time (e.g. mobile) still compile.
   sixTimeConfig?: Pick<SixTimeConfig, "enabled" | "slot_times" | "nightly_time"> | null;
@@ -613,6 +715,17 @@ export function computeAllReminders(params: ComputeRemindersParams): ReminderSch
     ...computeSixTimeSlotReminders(sixTimeConfig, sixTimeProblems, todayISO),
     computeSixTimeNightlyReminder(sixTimeConfig, todayISO),
     computeGivingReminder(prefs, hasActiveGivingChallenge, todayISO),
+    ...(prefs.activity_due_today_enabled
+      ? computeActivityDueTodayReminders(
+          activities,
+          scheduleInstances,
+          prefs.activity_nudge_time ?? "09:00",
+          todayISO,
+        )
+      : []),
+    ...(prefs.activity_past_due_enabled
+      ? computeActivityPastDueReminders(activities, prefs.activity_nudge_time ?? "09:00", todayISO)
+      : []),
   ].filter((r): r is ReminderSchedule => r !== null);
 
   return results.sort((a, b) => a.scheduled_for.getTime() - b.scheduled_for.getTime());

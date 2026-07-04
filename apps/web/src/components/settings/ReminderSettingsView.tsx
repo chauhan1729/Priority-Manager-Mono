@@ -111,7 +111,23 @@ interface ReminderPreferenceRow {
   currency_code: string;
   notification_sound: NotificationSound;
   notification_sound_enabled: boolean;
+  someday_review_enabled: boolean;
+  someday_review_weekday: number;
+  someday_review_time: string;
+  activity_due_today_enabled: boolean;
+  activity_past_due_enabled: boolean;
+  activity_nudge_time: string;
 }
+
+const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
+  { value: 0, label: "Sunday" },
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+];
 
 // Defaults shown when no row exists yet
 const DEFAULTS: ReminderPreferenceRow = {
@@ -126,6 +142,12 @@ const DEFAULTS: ReminderPreferenceRow = {
   currency_code: "USD",
   notification_sound: "chime",
   notification_sound_enabled: true,
+  someday_review_enabled: true,
+  someday_review_weekday: 0,
+  someday_review_time: "09:00",
+  activity_due_today_enabled: true,
+  activity_past_due_enabled: true,
+  activity_nudge_time: "09:00",
 };
 
 interface Props {
@@ -154,6 +176,12 @@ export function ReminderSettingsView({ prefs, timezone: initialTimezone }: Props
       currency_code: (prefs.currency_code as string | null) || DEFAULTS.currency_code,
       notification_sound: (prefs.notification_sound as NotificationSound | null) || DEFAULTS.notification_sound,
       notification_sound_enabled: prefs.notification_sound_enabled ?? DEFAULTS.notification_sound_enabled,
+      someday_review_enabled: prefs.someday_review_enabled ?? DEFAULTS.someday_review_enabled,
+      someday_review_weekday: prefs.someday_review_weekday ?? DEFAULTS.someday_review_weekday,
+      someday_review_time: ((prefs.someday_review_time as string | null)?.slice(0, 5)) || DEFAULTS.someday_review_time,
+      activity_due_today_enabled: prefs.activity_due_today_enabled ?? DEFAULTS.activity_due_today_enabled,
+      activity_past_due_enabled: prefs.activity_past_due_enabled ?? DEFAULTS.activity_past_due_enabled,
+      activity_nudge_time: ((prefs.activity_nudge_time as string | null)?.slice(0, 5)) || DEFAULTS.activity_nudge_time,
     };
   });
   const [timezone, setTimezone] = useState(initialTimezone || "UTC");
@@ -458,6 +486,108 @@ export function ReminderSettingsView({ prefs, timezone: initialTimezone }: Props
 
         <p className="text-xs text-ink-light">
           Birthdays and travel driven from Year at a Glance. Renewals driven from recurring expenses.
+        </p>
+      </section>
+
+      {/* Section: Activity nudges */}
+      <section className="rounded-xl border border-blue-100 bg-white shadow-sm px-6 py-5 space-y-4">
+        <h3 className="font-handwriting text-lg text-ink">Activity Reminders</h3>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">Due today, not scheduled</label>
+            <p className="text-xs text-ink-light">
+              Nudge for A-priority activities due today that aren&apos;t on the timeline yet.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.activity_due_today_enabled}
+              onChange={(e) => setField("activity_due_today_enabled", e.target.checked)}
+              className="rounded border-blue-300 text-blue-600 focus:ring-blue-400"
+            />
+            <span className="text-sm text-ink-light">Enabled</span>
+          </label>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-blue-50 pt-4">
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">Overdue activities</label>
+            <p className="text-xs text-ink-light">
+              Nudge when an activity&apos;s date has passed and it&apos;s still not done.
+            </p>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.activity_past_due_enabled}
+              onChange={(e) => setField("activity_past_due_enabled", e.target.checked)}
+              className="rounded border-blue-300 text-blue-600 focus:ring-blue-400"
+            />
+            <span className="text-sm text-ink-light">Enabled</span>
+          </label>
+        </div>
+
+        <div className="border-t border-blue-50 pt-4">
+          <label className="block text-xs font-medium text-ink mb-1">Reminder time</label>
+          <input
+            type="time"
+            value={form.activity_nudge_time}
+            onChange={(e) => setField("activity_nudge_time", e.target.value)}
+            disabled={!form.activity_due_today_enabled && !form.activity_past_due_enabled}
+            className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-40"
+          />
+          <p className="mt-1 text-xs text-ink-light">When the due-today and overdue nudges fire each day.</p>
+        </div>
+      </section>
+
+      {/* Section: Weekly Someday review */}
+      <section className="rounded-xl border border-blue-100 bg-white shadow-sm px-6 py-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-handwriting text-lg text-ink">Weekly Someday Review</h3>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={form.someday_review_enabled}
+              onChange={(e) => setField("someday_review_enabled", e.target.checked)}
+              className="rounded border-blue-300 text-blue-600 focus:ring-blue-400"
+            />
+            <span className="text-sm text-ink-light">Enabled</span>
+          </label>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">Day</label>
+            <select
+              value={form.someday_review_weekday}
+              onChange={(e) => setField("someday_review_weekday", parseInt(e.target.value, 10))}
+              disabled={!form.someday_review_enabled}
+              className="w-full rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-40"
+            >
+              {WEEKDAY_OPTIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-ink mb-1">Time</label>
+            <input
+              type="time"
+              value={form.someday_review_time}
+              onChange={(e) => setField("someday_review_time", e.target.value)}
+              disabled={!form.someday_review_enabled}
+              className="rounded-lg border border-blue-200 px-3 py-1.5 text-sm text-ink focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:opacity-40"
+            />
+          </div>
+        </div>
+
+        <p className="text-xs text-ink-light">
+          A weekly prompt to review your Someday list and pull anything ready into the next 30 days.
         </p>
       </section>
 

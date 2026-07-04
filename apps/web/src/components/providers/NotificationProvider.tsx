@@ -49,12 +49,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Fetch reminder preferences
+    // Fetch reminder preferences. Select "*" so every reminder-gating column is
+    // present — a narrowed list silently disabled someday/meeting-prep/giving
+    // reminders (their prefs came back undefined → gated off).
     const { data: prefsData } = await supabase
       .from("reminder_preferences")
-      .select(
-        "eod_review_enabled, eod_review_time, meeting_reminder_minutes_before, morning_summary_enabled, morning_summary_time, birthday_reminder_days_before, travel_reminder_days_before, renewal_reminder_days_before, activity_starting_enabled, activity_reminder_minutes_before, activity_overdue_enabled, event_reminder_minutes_before, notification_sound, notification_sound_enabled",
-      )
+      .select("*")
       .eq("user_id", user.id)
       .maybeSingle();
 
@@ -95,13 +95,16 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         .select("id, title, type, start_date")
         .eq("user_id", user.id),
       supabase
+        // Widen to today … +2d so a cycle/appointment scheduled ahead gets its
+        // start reminder queued for closed-app push (and covers UTC/local edges).
         .from("schedule_instances")
-        .select("id, source_type, source_activity_id, start_at, end_at, status_snapshot")
+        .select("id, source_type, source_activity_id, start_at, end_at, status_snapshot, schedule_date")
         .eq("user_id", user.id)
-        .eq("schedule_date", todayISO),
+        .gte("schedule_date", todayISO)
+        .lte("schedule_date", addDays(todayISO, 2)),
       supabase
         .from("activities")
-        .select("id, title")
+        .select("id, title, priority, activity_date, status, is_someday, archived")
         .eq("user_id", user.id)
         .in("status", ["not_started", "working", "postponed"]),
       supabase
@@ -109,7 +112,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         .select("id, title, event_type, start_at")
         .eq("user_id", user.id)
         .gte("start_at", `${todayISO}T00:00:00Z`)
-        .lte("start_at", `${todayISO}T23:59:59Z`),
+        .lte("start_at", `${addDays(todayISO, 2)}T23:59:59Z`),
       // Phase 4: Six-Time Book config + active focus problems
       supabase
         .from("six_time_config")

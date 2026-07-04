@@ -13,7 +13,10 @@ export type ReminderType =
   | "meeting_prep"
   | "six_time_slot"
   | "six_time_nightly"
-  | "giving_daily";
+  | "giving_daily"
+  // Activity date-based nudges (not tied to a scheduled block)
+  | "activity_due_today"
+  | "activity_past_due";
 
 export interface ReminderPreference {
   id: string;
@@ -44,6 +47,11 @@ export interface ReminderPreference {
   // Phase 5: daily giving reminder
   giving_reminder_enabled: boolean;
   giving_reminder_time: string; // "HH:MM"
+  // Activity date-based nudges: due-today (unscheduled A-priority) and past-due.
+  // Both fire at activity_nudge_time. Driven from the shared Activity records.
+  activity_due_today_enabled: boolean;
+  activity_past_due_enabled: boolean;
+  activity_nudge_time: string; // "HH:MM"
   currency_code: string; // ISO 4217 code, e.g. "USD" (app-wide display currency)
   // Notification sound (web): foreground tone choice + master on/off.
   // Background push cannot carry a custom sound file (browser limitation); the

@@ -274,10 +274,13 @@ describe("computeMeetingUpcomingReminders", () => {
     expect(result[0]!.source_id).toBe("meet-1");
   });
 
-  it("returns nothing when too early (before reminder window)", () => {
+  it("emits a future-scheduled reminder before the window (queued for closed-app push)", () => {
     const now = new Date("2026-04-05T13:00:00.000Z"); // before 13:45
     const result = computeMeetingUpcomingReminders([makeMeeting()], 15, now);
-    expect(result).toHaveLength(0);
+    expect(result).toHaveLength(1);
+    // scheduled_for = reminderTime (13:45) is still future → the outbox queues it;
+    // the foreground only fires it once due. No lower-bound guard strands it.
+    expect(result[0]!.scheduled_for.toISOString()).toBe("2026-04-05T13:45:00.000Z");
   });
 
   it("returns nothing when meeting has already started", () => {
@@ -326,9 +329,13 @@ describe("computeMeetingPassedReminders", () => {
     expect(result[0]!.body).not.toContain("takeaways");
   });
 
-  it("returns nothing if meeting has not ended yet", () => {
+  it("emits a reminder scheduled at end time even before the meeting ends (closed-app push)", () => {
     const now = new Date("2026-04-05T14:00:00.000Z"); // before 14:30
-    expect(computeMeetingPassedReminders([makeMeeting()], now)).toHaveLength(0);
+    const result = computeMeetingPassedReminders([makeMeeting()], now);
+    // scheduled_for = end_at (14:30) is future → the outbox queues it so the
+    // "update status" prompt pushes at meeting end even when the app is closed.
+    expect(result).toHaveLength(1);
+    expect(result[0]!.scheduled_for.toISOString()).toBe("2026-04-05T14:30:00.000Z");
   });
 
   it("returns nothing if meeting is already completed/cancelled", () => {
