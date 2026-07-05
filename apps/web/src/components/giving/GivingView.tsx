@@ -25,6 +25,7 @@ import {
   startGivingChallenge,
 } from "@/app/(app)/giving/actions";
 import { showToast } from "@/components/ui/Toaster";
+import { GivingReadingsModal } from "./GivingReadingsModal";
 
 const CATEGORY_LABELS: Record<GivingCategory, string> = {
   words: "Words",
@@ -33,13 +34,23 @@ const CATEGORY_LABELS: Record<GivingCategory, string> = {
   things_money: "Things / Money",
 };
 
-function Header() {
+function Header({ onOpenReading }: { onOpenReading: () => void }) {
   return (
     <header className="border-b border-blue-100 px-6 py-5 md:px-8">
-      <h1 className="font-handwriting text-2xl text-ink">Giving</h1>
-      <p className="mt-0.5 text-xs text-ink-light">
-        The secret of living is giving. Give daily, cheerfully and in secret — and keep score.
-      </p>
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h1 className="font-handwriting text-2xl text-ink">Giving</h1>
+          <p className="mt-0.5 text-xs text-ink-light">
+            The secret of living is giving. Give daily, cheerfully and in secret — and keep score.
+          </p>
+        </div>
+        <button
+          onClick={onOpenReading}
+          className="shrink-0 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100"
+        >
+          📖 Giving reading
+        </button>
+      </div>
     </header>
   );
 }
@@ -478,9 +489,10 @@ export function GivingView({
   challenge: GivingChallenge | null;
   logs: GivingLog[];
 }) {
+  const [showReading, setShowReading] = useState(false);
   return (
     <div className="flex h-full flex-col">
-      <Header />
+      <Header onOpenReading={() => setShowReading(true)} />
       <div className="flex-1 overflow-y-auto px-6 py-6 md:px-8">
         {!challenge ? (
           <Onboarding today={today} />
@@ -490,6 +502,7 @@ export function GivingView({
           <DailyBoard today={today} challenge={challenge} logs={logs} />
         )}
       </div>
+      {showReading && <GivingReadingsModal onClose={() => setShowReading(false)} />}
     </div>
   );
 }

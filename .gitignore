@@ -52,3 +52,6 @@ ios/
 # Source reference material (books/notes) — kept locally, not tracked
 /*.pdf
 /fotw.txt
+
+# Local resources folder — not tracked
+/resources/
