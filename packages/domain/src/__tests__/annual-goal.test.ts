@@ -5,7 +5,9 @@ import type { AnnualGoal, AnnualGoalSection, AnnualGoalStatus } from "@pm/types"
 import {
   ANNUAL_GOAL_SECTIONS,
   ANNUAL_GOAL_STATUSES,
+  canAddGoal,
   canLinkProject,
+  countActiveInSection,
   filterActive,
   filterArchived,
   groupGoalsBySection,
@@ -14,6 +16,7 @@ import {
   isValidProgress,
   isValidSection,
   isValidStatus,
+  MAX_GOALS_PER_SECTION,
   SECTION_LABELS,
   STATUS_LABELS,
 } from "../annual-goal";
@@ -170,6 +173,52 @@ describe("archive behavior", () => {
       makeGoal({ status: "dropped" }),
     ];
     expect(filterActive(goals).length + filterArchived(goals).length).toBe(goals.length);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Section capacity (max 3 active per section)
+// ---------------------------------------------------------------------------
+
+describe("section capacity: max 3 active per section", () => {
+  it("MAX_GOALS_PER_SECTION is 3", () => {
+    expect(MAX_GOALS_PER_SECTION).toBe(3);
+  });
+
+  it("countActiveInSection counts only active goals in the section", () => {
+    const goals = [
+      makeGoal({ section: "business", status: "active" }),
+      makeGoal({ section: "business", status: "completed" }), // archived — not counted
+      makeGoal({ section: "business", status: "on_track" }),
+      makeGoal({ section: "career", status: "active" }), // other section
+    ];
+    expect(countActiveInSection(goals, "business")).toBe(2);
+  });
+
+  it("canAddGoal is true when the section has fewer than 3 active", () => {
+    const goals = [
+      makeGoal({ section: "personal", status: "active" }),
+      makeGoal({ section: "personal", status: "on_track" }),
+    ];
+    expect(canAddGoal(goals, "personal")).toBe(true);
+  });
+
+  it("canAddGoal is false when the section has exactly 3 active", () => {
+    const goals = Array.from({ length: 3 }, () =>
+      makeGoal({ section: "personal", status: "active" }),
+    );
+    expect(canAddGoal(goals, "personal")).toBe(false);
+  });
+
+  it("archived goals do not count toward the cap", () => {
+    const goals = [
+      makeGoal({ section: "career", status: "active" }),
+      makeGoal({ section: "career", status: "completed" }),
+      makeGoal({ section: "career", status: "dropped" }),
+      makeGoal({ section: "career", status: "on_track" }),
+    ];
+    // Only 2 active → can still add.
+    expect(canAddGoal(goals, "career")).toBe(true);
   });
 });
 

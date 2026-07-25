@@ -15,6 +15,7 @@ import {
   bulkDeleteActivities,
   bulkMoveActivities,
   bulkUpdateActivityPriority,
+  bulkCarryForwardActivities,
   bulkUpdateActivityStatus,
   carryForwardActivity,
   delegateActivity,
@@ -27,7 +28,7 @@ import { showToast } from "@/components/ui/Toaster";
 import { CompletionCelebrationModal } from "@/components/ui/CompletionCelebrationModal";
 import { ActivitySection as SectionGroup } from "./ActivitySection";
 import { AddActivityForm } from "./AddActivityForm";
-import { CarryForwardPanel } from "./CarryForwardPanel";
+import { PendingModal } from "./PendingModal";
 import { EditActivityModal } from "./EditActivityModal";
 
 const SECTION_ORDER: ActivitySection[] = ["work", "outside", "unplanned", "delegated"];
@@ -66,11 +67,11 @@ function formatHeaderDate(iso: string): string {
 
 interface Props {
   activities: Activity[];
-  carryForwardActivities: Activity[];
+  /** Overdue-but-still-open activities (all past days) — the Pending backlog. */
+  pendingActivities: Activity[];
   projects: Pick<Project, "id" | "name" | "status">[];
   contacts: Pick<Contact, "id" | "full_name">[];
   selectedDate: string;
-  previousDate: string;
   projectPriorityMap?: Map<string, string | null>;
   /** Phase 0A: when set, the view shows only A or only B activities (the two screens). */
   priorityFilter?: "A" | "B";
@@ -78,11 +79,10 @@ interface Props {
 
 export function ActivitiesView({
   activities,
-  carryForwardActivities,
+  pendingActivities,
   projects,
   contacts,
   selectedDate,
-  previousDate,
   projectPriorityMap = new Map(),
   priorityFilter,
 }: Props) {
@@ -90,6 +90,7 @@ export function ActivitiesView({
   const [editActivity, setEditActivity] = useState<Activity | null>(null);
   const [showCelebration, setShowCelebration] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
+  const [pendingOpen, setPendingOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Bulk edit state
@@ -133,6 +134,9 @@ export function ActivitiesView({
 
   const activeActivities = dayActive.filter(matchesFilter);
   const archivedActivities = activities.filter((a) => a.archived && matchesFilter(a));
+
+  // Pending backlog for this screen (overdue + open), only shown on the Today view.
+  const pendingFiltered = pendingActivities.filter(matchesFilter);
 
   const canBulkArchive =
     selectedIds.size > 0 &&
@@ -204,14 +208,26 @@ export function ActivitiesView({
     });
   }
 
-  function handleCarryForward(activityId: string, linkedProjectId: string | null) {
+  function handleBringToToday(activity: Activity) {
     startTransition(async () => {
-      const result = await carryForwardActivity(activityId, previousDate, selectedDate, linkedProjectId);
-      if (result?.error) {
-        showToast(result.error, "error");
-      } else {
-        showToast("Activity moved to today");
-      }
+      const result = await carryForwardActivity(
+        activity.id,
+        activity.activity_date,
+        todayStr,
+        activity.linked_project_id,
+      );
+      if (result?.error) showToast(result.error, "error");
+      else showToast("Brought to today");
+    });
+  }
+
+  function handleBringAllToToday() {
+    const ids = pendingFiltered.map((a) => a.id);
+    if (ids.length === 0) return;
+    startTransition(async () => {
+      const result = await bulkCarryForwardActivities(ids, todayStr);
+      if (result?.error) showToast(result.error, "error");
+      else showToast(`${ids.length} brought to today`);
     });
   }
 
@@ -366,6 +382,20 @@ export function ActivitiesView({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Pending backlog — count-pill opens the modal (Today view only) */}
+            {isToday && pendingFiltered.length > 0 && (
+              <button
+                onClick={() => setPendingOpen(true)}
+                className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm font-medium text-amber-800 transition hover:bg-amber-100"
+                title="Overdue, still-open activities"
+              >
+                <span>⏳</span>
+                <span className="hidden sm:inline">Pending</span>
+                <span className="rounded-full bg-amber-200 px-1.5 text-xs font-semibold">
+                  {pendingFiltered.length}
+                </span>
+              </button>
+            )}
             <button
               onClick={() => {
                 setBulkMode((v) => !v);
@@ -535,18 +565,6 @@ export function ActivitiesView({
           />
         )}
 
-        {/* Carry-forward panel (previous day's incomplete) */}
-        {carryForwardActivities.length > 0 && (
-          <CarryForwardPanel
-            activities={carryForwardActivities}
-            projectMap={projectMap}
-            fromDate={previousDate}
-            toDate={selectedDate}
-            isPending={isPending}
-            onCarryForward={handleCarryForward}
-          />
-        )}
-
         {/* Section groups */}
         {SECTION_ORDER.map((sectionId) => {
           const items = grouped[sectionId];
@@ -617,6 +635,34 @@ export function ActivitiesView({
           </div>
         )}
       </div>
+
+      {/* Pending backlog modal */}
+      {pendingOpen && isToday && (
+        <PendingModal
+          activities={pendingFiltered}
+          today={todayStr}
+          title={screenTitle}
+          projectMap={projectMap}
+          contactMap={contactMap}
+          contacts={contacts}
+          projectPriorityMap={projectPriorityMap}
+          isPending={isPending}
+          onStatusChange={handleStatusChange}
+          onDelegate={handleDelegate}
+          onDelete={handleDelete}
+          onPostpone={handlePostpone}
+          onEdit={(a) => {
+            setPendingOpen(false);
+            setEditActivity(a);
+          }}
+          onArchive={handleArchive}
+          onTogglePriority={handleTogglePriority}
+          onMoveToSomeday={handleMoveToSomeday}
+          onBringToToday={handleBringToToday}
+          onBringAll={handleBringAllToToday}
+          onClose={() => setPendingOpen(false)}
+        />
+      )}
 
       {/* Edit modal */}
       {editActivity && (

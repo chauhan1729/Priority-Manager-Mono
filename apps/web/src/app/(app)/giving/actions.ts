@@ -43,7 +43,11 @@ export async function startGivingChallenge(startDate: string): Promise<{ error?:
   return {};
 }
 
-/** Add one give/receive/cognition log (separate items; many allowed per day). */
+/**
+ * Add one give/receive/cognition log (separate items; many allowed per day).
+ * Past dates are allowed (backfilling missed days); future dates are rejected.
+ * `todayISO` is the caller's local today, used only to reject future entries.
+ */
 export async function addGivingLog(
   challengeId: string,
   entryDate: string,
@@ -51,9 +55,11 @@ export async function addGivingLog(
   content: string,
   categories: GivingCategory[],
   givenInSecret: boolean,
+  todayISO?: string,
 ): Promise<{ error?: string }> {
   if (!content.trim()) return { error: "Write something to log." };
   if (kind === "given" && categories.length === 0) return { error: "Pick at least one category." };
+  if (todayISO && entryDate > todayISO) return { error: "Can't log giving for a future date." };
   const { supabase, user } = await auth();
   if (!user) return { error: "Not authenticated." };
 

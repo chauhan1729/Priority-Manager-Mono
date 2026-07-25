@@ -6,6 +6,9 @@ import type { AnnualGoal, AnnualGoalSection, AnnualGoalStatus } from "@pm/types"
 
 export const ANNUAL_GOAL_SECTIONS: AnnualGoalSection[] = ["business", "career", "personal"];
 
+/** Hard cap of active goals per section. */
+export const MAX_GOALS_PER_SECTION = 3;
+
 export const SECTION_LABELS: Record<AnnualGoalSection, string> = {
   business: "Business",
   career: "Career",
@@ -114,4 +117,26 @@ export function filterActive(goals: AnnualGoal[]): AnnualGoal[] {
 
 export function filterArchived(goals: AnnualGoal[]): AnnualGoal[] {
   return goals.filter(isArchivedGoal);
+}
+
+// ---------------------------------------------------------------------------
+// Section capacity
+// ---------------------------------------------------------------------------
+
+/** Count of active (non-archived) goals in a section. */
+export function countActiveInSection(
+  goals: Pick<AnnualGoal, "section" | "status">[],
+  section: AnnualGoalSection,
+): number {
+  return goals.filter(
+    (g) => g.section === section && g.status !== "completed" && g.status !== "dropped",
+  ).length;
+}
+
+/** Whether another goal can be added to a section (cap on active goals). */
+export function canAddGoal(
+  goals: Pick<AnnualGoal, "section" | "status">[],
+  section: AnnualGoalSection,
+): boolean {
+  return countActiveInSection(goals, section) < MAX_GOALS_PER_SECTION;
 }

@@ -95,8 +95,8 @@ export function ProjectForm({ project, onClose }: Props) {
             </select>
           </div>
 
-          {/* Date row */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Date row — stack on mobile so two native date inputs don't force overflow */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="block text-xs font-medium text-ink-light mb-1" htmlFor="start_date">
                 Start Date

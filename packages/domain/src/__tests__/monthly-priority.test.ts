@@ -117,19 +117,19 @@ describe("status helpers", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3–5 priority per section rule
+// 3 priority per section rule
 // ---------------------------------------------------------------------------
 
-describe("section limit: 3–5 per section per month", () => {
-  it("MAX_PRIORITIES_PER_SECTION is 5", () => {
-    expect(MAX_PRIORITIES_PER_SECTION).toBe(5);
+describe("section limit: 3 per section per month", () => {
+  it("MAX_PRIORITIES_PER_SECTION is 3", () => {
+    expect(MAX_PRIORITIES_PER_SECTION).toBe(3);
   });
 
   it("MIN_PRIORITIES_PER_SECTION is 3", () => {
     expect(MIN_PRIORITIES_PER_SECTION).toBe(3);
   });
 
-  it("canAddPriority returns true when section has fewer than 5", () => {
+  it("canAddPriority returns true when section has fewer than 3", () => {
     const priorities = [
       makePriority({ section: "business_career", month_key: "2026-04" }),
       makePriority({ section: "business_career", month_key: "2026-04" }),
@@ -137,8 +137,8 @@ describe("section limit: 3–5 per section per month", () => {
     expect(canAddPriority(priorities, "business_career", "2026-04")).toBe(true);
   });
 
-  it("canAddPriority returns false when section has exactly 5", () => {
-    const priorities = Array.from({ length: 5 }, () =>
+  it("canAddPriority returns false when section has exactly 3", () => {
+    const priorities = Array.from({ length: 3 }, () =>
       makePriority({ section: "business_career", month_key: "2026-04" }),
     );
     expect(canAddPriority(priorities, "business_career", "2026-04")).toBe(false);

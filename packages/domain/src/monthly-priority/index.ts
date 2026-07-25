@@ -5,10 +5,10 @@ import type {
 } from "@pm/types";
 
 // ---------------------------------------------------------------------------
-// Limits — Spec §10.4: hard block of 3–5 per section per month
+// Limits — hard block of 3 per section per month
 // ---------------------------------------------------------------------------
 
-export const MAX_PRIORITIES_PER_SECTION = 5;
+export const MAX_PRIORITIES_PER_SECTION = 3;
 export const MIN_PRIORITIES_PER_SECTION = 3;
 
 // ---------------------------------------------------------------------------

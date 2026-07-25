@@ -28,15 +28,27 @@ export async function ActivitiesScreen({
     .single();
   const timezone = profile?.timezone ?? "UTC";
 
-  const selectedDate = dateParam ?? localTodayForTimezone(timezone);
+  const today = localTodayForTimezone(timezone);
+  const selectedDate = dateParam ?? today;
+  const isToday = selectedDate === today;
 
-  const parts = selectedDate.split("-");
-  const prevDate = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]) - 1);
-  const previousDate = prevDate.toISOString().slice(0, 10);
+  // Pending backlog: overdue-but-still-open activities across all past days.
+  // Only surfaced on the Today view, so skip the query otherwise.
+  const pendingQuery = isToday
+    ? supabase
+        .from("activities")
+        .select("*")
+        .eq("user_id", user.id)
+        .lt("activity_date", today)
+        .eq("is_someday", false)
+        .eq("archived", false)
+        .in("status", ["not_started", "working", "postponed"])
+        .order("activity_date", { ascending: true })
+    : Promise.resolve({ data: [] });
 
   const [
     { data: activities },
-    { data: prevActivities },
+    { data: pending },
     { data: projects },
     { data: contacts },
     { data: priorities },
@@ -48,13 +60,7 @@ export async function ActivitiesScreen({
       .eq("activity_date", selectedDate)
       .eq("is_someday", false) // Phase 1B: someday items live only on the Someday screen
       .order("created_at", { ascending: true }),
-    supabase
-      .from("activities")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("activity_date", previousDate)
-      .eq("is_someday", false)
-      .in("status", ["not_started", "postponed"]),
+    pendingQuery,
     supabase
       .from("projects")
       .select("id, name, status, linked_monthly_priority_id")
@@ -88,11 +94,10 @@ export async function ActivitiesScreen({
   return (
     <ActivitiesView
       activities={(activities ?? []) as Activity[]}
-      carryForwardActivities={(prevActivities ?? []) as Activity[]}
+      pendingActivities={(pending ?? []) as Activity[]}
       projects={(projects ?? []) as Pick<Project, "id" | "name" | "status">[]}
       contacts={(contacts ?? []) as Pick<Contact, "id" | "full_name">[]}
       selectedDate={selectedDate}
-      previousDate={previousDate}
       projectPriorityMap={projectPriorityMap}
       priorityFilter={priorityFilter}
     />

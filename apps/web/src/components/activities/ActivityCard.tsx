@@ -54,6 +54,10 @@ interface Props {
   onTogglePriority?: ((activity: Activity) => void) | undefined;
   /** Phase 1B: park this activity on the Someday list. */
   onMoveToSomeday?: ((activity: Activity) => void) | undefined;
+  /** Pending backlog: an overdue badge label, e.g. "3 days overdue". */
+  overdueLabel?: string | undefined;
+  /** Pending backlog: re-date this overdue activity to today. */
+  onBringToToday?: ((activity: Activity) => void) | undefined;
 }
 
 export function ActivityCard({
@@ -73,6 +77,8 @@ export function ActivityCard({
   onArchive,
   onTogglePriority,
   onMoveToSomeday,
+  overdueLabel,
+  onBringToToday,
 }: Props) {
   const [delegatePickerOpen, setDelegatePickerOpen] = useState(false);
   const [delegateContactId, setDelegateContactId] = useState("");
@@ -179,6 +185,11 @@ export function ActivityCard({
 
         {/* Secondary row: project/contact name + time */}
         <div className="mt-1 flex flex-wrap items-center gap-2.5 text-xs text-ink-light">
+          {overdueLabel && (
+            <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+              ⏳ {overdueLabel}
+            </span>
+          )}
           {projectName && (
             <Link
               href={`/project-planner/${activity.linked_project_id}`}
@@ -210,6 +221,18 @@ export function ActivityCard({
 
       {/* Right: status + actions */}
       <div className="flex flex-shrink-0 items-center gap-1.5">
+        {/* Bring to today — pending backlog primary action */}
+        {onBringToToday && !isDone && (
+          <button
+            onClick={() => onBringToToday(activity)}
+            disabled={isPending}
+            title="Bring to today"
+            className="whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+          >
+            → Today
+          </button>
+        )}
+
         {/* Status pill (hidden on mobile) */}
         <span
           className={`hidden sm:inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${

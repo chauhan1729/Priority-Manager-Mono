@@ -3,7 +3,15 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { isProjectAtRisk } from "@pm/domain";
-import type { Activity, Contact, Project, ProjectMilestone, ProjectResource } from "@pm/types";
+import type {
+  Activity,
+  AnnualGoal,
+  Contact,
+  MonthlyPriority,
+  Project,
+  ProjectMilestone,
+  ProjectResource,
+} from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { ProjectDetail } from "@/components/project/ProjectDetail";
 
@@ -20,8 +28,16 @@ export default async function ProjectDetailPage({ params }: Props) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const [projectResult, activitiesResult, milestonesResult, resourcesResult, allProjectsResult, contactsResult] =
-    await Promise.all([
+  const [
+    projectResult,
+    activitiesResult,
+    milestonesResult,
+    resourcesResult,
+    allProjectsResult,
+    contactsResult,
+    goalsResult,
+    prioritiesResult,
+  ] = await Promise.all([
       supabase
         .from("projects")
         .select("*")
@@ -56,6 +72,20 @@ export default async function ProjectDetailPage({ params }: Props) {
         .eq("user_id", user!.id)
         .eq("is_deleted", false)
         .order("full_name", { ascending: true }),
+      // Active annual goals + monthly priorities to pick from in the Alignment control
+      supabase
+        .from("annual_goals")
+        .select("id, section, title")
+        .eq("user_id", user!.id)
+        .not("status", "in", "(completed,dropped)")
+        .order("section", { ascending: true })
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("monthly_priorities")
+        .select("id, title, month_key")
+        .eq("user_id", user!.id)
+        .order("month_key", { ascending: false })
+        .order("created_at", { ascending: true }),
     ]);
 
   if (!projectResult.data) notFound();
@@ -91,20 +121,20 @@ export default async function ProjectDetailPage({ params }: Props) {
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-4 border-b border-blue-100 px-8 py-4">
+      <header className="flex items-center gap-3 border-b border-blue-100 px-4 py-4 md:gap-4 md:px-8">
         <Link
           href="/project-planner"
-          className="text-sm text-ink-light transition hover:text-blue-600"
+          className="flex-shrink-0 text-sm text-ink-light transition hover:text-blue-600"
         >
-          ← Projects
+          ← <span className="hidden sm:inline">Projects</span>
         </Link>
-        <h1 className="font-handwriting text-2xl text-ink">{project.name}</h1>
+        <h1 className="min-w-0 flex-1 truncate font-handwriting text-2xl text-ink">{project.name}</h1>
         {atRisk && (
           <span
-            className="ml-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700"
+            className="flex-shrink-0 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700"
             title="Project is at risk"
           >
-            ⚠ At risk
+            ⚠ <span className="hidden sm:inline">At risk</span>
           </span>
         )}
       </header>
@@ -116,6 +146,8 @@ export default async function ProjectDetailPage({ params }: Props) {
           resources={(resourcesResult.data ?? []) as ProjectResource[]}
           allProjects={(allProjectsResult.data ?? []) as Pick<Project, "id" | "name" | "status">[]}
           contacts={(contactsResult.data ?? []) as Pick<Contact, "id" | "full_name">[]}
+          goals={(goalsResult.data ?? []) as Pick<AnnualGoal, "id" | "section" | "title">[]}
+          priorities={(prioritiesResult.data ?? []) as Pick<MonthlyPriority, "id" | "title" | "month_key">[]}
           linkedGoalTitle={
             (annualGoalResult.data as { title?: string } | null)?.title ?? null
           }

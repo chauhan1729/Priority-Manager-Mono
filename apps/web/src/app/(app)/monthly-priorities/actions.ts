@@ -14,6 +14,7 @@ import {
 } from "@pm/domain";
 import type { MonthlyPriority } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { linkPriorityAndProject } from "@/lib/monthly-priority-sync";
 
 export type ActionResult = { error: string } | { success: true } | null;
 
@@ -123,13 +124,16 @@ export async function createMonthlyPriority(
 
   if (error) return { error: error.message };
 
-  // Sync linked_monthly_priority_id on the project
+  // Sync the bidirectional link (reverse pointer + same-month exclusivity).
   if (data.linked_project_id && newPriority?.id) {
-    await supabase
-      .from("projects")
-      .update({ linked_monthly_priority_id: newPriority.id, updated_at: new Date().toISOString() })
-      .eq("id", data.linked_project_id)
-      .eq("user_id", user.id);
+    await linkPriorityAndProject(
+      supabase,
+      user.id,
+      newPriority.id,
+      data.month_key,
+      data.linked_project_id,
+      null,
+    );
   }
 
   revalidateAll(data.linked_project_id);
@@ -164,7 +168,7 @@ export async function updateMonthlyPriority(
   // Verify ownership and fetch current state
   const { data: existing, error: fetchError } = await supabase
     .from("monthly_priorities")
-    .select("id, user_id, linked_project_id, progress_mode")
+    .select("id, user_id, linked_project_id, progress_mode, month_key")
     .eq("id", id)
     .eq("user_id", user.id)
     .single();
@@ -220,46 +224,21 @@ export async function updateMonthlyPriority(
 
   if (error) return { error: error.message };
 
-  // Sync linked_monthly_priority_id on projects when the linked project changes
+  // Sync the bidirectional link when the linked project is part of this update.
   const oldProjectId = existing.linked_project_id as string | null;
-  const newProjectId = ("linked_project_id" in data ? data.linked_project_id : existing.linked_project_id) as string | null | undefined;
+  const newProjectId = ("linked_project_id" in data
+    ? data.linked_project_id
+    : existing.linked_project_id) as string | null;
 
-  // Always sync when linked_project_id is explicitly part of this update (handles relink of same project)
-  if ("linked_project_id" in data) {
-    // Clear the old project's link only if switching to a different project
-    if (oldProjectId && oldProjectId !== newProjectId) {
-      await supabase
-        .from("projects")
-        .update({ linked_monthly_priority_id: null, updated_at: new Date().toISOString() })
-        .eq("id", oldProjectId)
-        .eq("linked_monthly_priority_id", id)
-        .eq("user_id", user.id);
-    }
-    // Always ensure the new project points to this priority
-    if (newProjectId) {
-      await supabase
-        .from("projects")
-        .update({ linked_monthly_priority_id: id, updated_at: new Date().toISOString() })
-        .eq("id", newProjectId)
-        .eq("user_id", user.id);
-    }
-  } else if (oldProjectId !== newProjectId) {
-    // Fallback: handle any other case where project link changed
-    if (oldProjectId) {
-      await supabase
-        .from("projects")
-        .update({ linked_monthly_priority_id: null, updated_at: new Date().toISOString() })
-        .eq("id", oldProjectId)
-        .eq("linked_monthly_priority_id", id)
-        .eq("user_id", user.id);
-    }
-    if (newProjectId) {
-      await supabase
-        .from("projects")
-        .update({ linked_monthly_priority_id: id, updated_at: new Date().toISOString() })
-        .eq("id", newProjectId)
-        .eq("user_id", user.id);
-    }
+  if ("linked_project_id" in data || oldProjectId !== newProjectId) {
+    await linkPriorityAndProject(
+      supabase,
+      user.id,
+      id,
+      existing.month_key as string,
+      newProjectId ?? null,
+      oldProjectId,
+    );
   }
 
   revalidateAll(oldProjectId, newProjectId);
@@ -479,26 +458,40 @@ export async function carryForwardPriority(
   }
 
   // Create new record in target month
-  const { error: insertError } = await supabase.from("monthly_priorities").insert({
-    user_id: user.id,
-    section: priority.section,
-    title: priority.title,
-    month_key: nextKey,
-    category: priority.category,
-    started_date: priority.started_date,
-    assigned_date: priority.assigned_date,
-    target_date: priority.target_date,
-    linked_annual_goal_id: priority.linked_annual_goal_id,
-    linked_project_id: priority.linked_project_id,
-    progress_mode: priority.progress_mode,
-    manual_progress_percent: priority.manual_progress_percent,
-    status: "planned",
-    note: priority.note,
-    pinned: false,
-  });
+  const { data: carried, error: insertError } = await supabase
+    .from("monthly_priorities")
+    .insert({
+      user_id: user.id,
+      section: priority.section,
+      title: priority.title,
+      month_key: nextKey,
+      category: priority.category,
+      started_date: priority.started_date,
+      assigned_date: priority.assigned_date,
+      target_date: priority.target_date,
+      linked_annual_goal_id: priority.linked_annual_goal_id,
+      linked_project_id: priority.linked_project_id,
+      progress_mode: priority.progress_mode,
+      manual_progress_percent: priority.manual_progress_percent,
+      status: "planned",
+      note: priority.note,
+      pinned: false,
+    })
+    .select("id")
+    .single();
 
   if (insertError) return { error: insertError.message };
 
-  revalidateAll();
+  // The project's current owner becomes the carried-forward priority. The source
+  // month keeps its linked_project_id for history (cross-month references are allowed).
+  if (priority.linked_project_id && carried?.id) {
+    await supabase
+      .from("projects")
+      .update({ linked_monthly_priority_id: carried.id, updated_at: new Date().toISOString() })
+      .eq("id", priority.linked_project_id)
+      .eq("user_id", user.id);
+  }
+
+  revalidateAll(priority.linked_project_id);
   return { success: true };
 }

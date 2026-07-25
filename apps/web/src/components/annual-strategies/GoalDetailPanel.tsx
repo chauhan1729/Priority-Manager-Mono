@@ -3,8 +3,8 @@
 import { useState } from "react";
 import Link from "next/link";
 
-import type { AnnualGoal, AnnualGoalSection, AnnualGoalStatus, Project } from "@pm/types";
-import { canLinkProject, isArchivedGoal, SECTION_LABELS, STATUS_LABELS } from "@pm/domain";
+import type { AnnualGoal, AnnualGoalSection, AnnualGoalStatus, MonthlyPriority, Project } from "@pm/types";
+import { canLinkProject, formatMonthLabel, isArchivedGoal, SECTION_LABELS, STATUS_LABELS } from "@pm/domain";
 
 import { SECTION_COLORS } from "./AnnualStrategiesView";
 
@@ -20,10 +20,13 @@ const STATUS_CLASSES: Record<AnnualGoalStatus, string> = {
 };
 
 type ProjectSummary = Pick<Project, "id" | "name" | "status" | "linked_annual_goal_id">;
+type PrioritySummary = Pick<MonthlyPriority, "id" | "title" | "month_key">;
 
 interface Props {
   goal: AnnualGoal;
   linkedProjects: ProjectSummary[];
+  /** Monthly priorities whose linked_annual_goal_id is this goal. */
+  linkedPriorities: PrioritySummary[];
   onClose: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -45,6 +48,7 @@ function formatDate(iso: string | null): string {
 export function GoalDetailPanel({
   goal,
   linkedProjects,
+  linkedPriorities,
   onClose,
   onEdit,
   onDelete,
@@ -191,11 +195,32 @@ export function GoalDetailPanel({
             )}
           </div>
 
-          {/* Future Monthly Priorities note */}
-          <div className="rounded-lg border border-blue-100 bg-blue-50/30 px-4 py-3">
-            <p className="text-xs text-ink-light">
-              Monthly Priorities will link here in a future update, bridging this goal to your monthly focus.
+          {/* Linked monthly priorities — the monthly focus that ladders up to this goal */}
+          <div>
+            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-ink-light">
+              Linked priorities
             </p>
+            {linkedPriorities.length === 0 ? (
+              <p className="text-sm italic text-ink-light">
+                No monthly priorities linked. Link one from the Monthly tab to bridge this goal to
+                your monthly focus.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {linkedPriorities.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={`/annual-strategies?tab=monthly&month=${p.month_key}`}
+                    className="flex items-center justify-between rounded-lg border border-violet-100 bg-violet-50/40 px-3 py-2 transition hover:border-violet-300"
+                  >
+                    <span className="truncate text-sm font-medium text-violet-700">{p.title}</span>
+                    <span className="ml-2 flex-shrink-0 text-xs text-ink-light">
+                      {formatMonthLabel(p.month_key)}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

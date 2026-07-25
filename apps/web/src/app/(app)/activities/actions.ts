@@ -5,6 +5,30 @@ import { redirect } from "next/navigation";
 
 import { buildActivityMove, canCreateActivityOnDate } from "@pm/domain";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { invalidatePendingOutbox } from "@/lib/notifications/invalidate-outbox";
+
+/** Activity statuses that make its reminders obsolete. */
+function isTerminalActivityStatus(status: string): boolean {
+  return status === "completed" || status === "cancelled";
+}
+
+/** Cancel queued reminders for activities being settled (activity + its schedule blocks). */
+async function invalidateActivityReminders(
+  supabase: Awaited<ReturnType<typeof createSupabaseServerClient>>,
+  userId: string,
+  activityIds: string[],
+): Promise<void> {
+  if (activityIds.length === 0) return;
+  const { data: instances } = await supabase
+    .from("schedule_instances")
+    .select("id")
+    .eq("user_id", userId)
+    .in("source_activity_id", activityIds);
+  await invalidatePendingOutbox(supabase, userId, [
+    ...activityIds,
+    ...((instances ?? []) as { id: string }[]).map((i) => i.id),
+  ]);
+}
 
 export type ActionResult = { error: string } | { success: true } | null;
 
@@ -280,11 +304,14 @@ export async function updateActivityStatus(
   status: string,
   linkedProjectId?: string | null,
 ): Promise<void> {
-  const { supabase } = await getAuthenticatedUser();
+  const { supabase, user } = await getAuthenticatedUser();
   await supabase
     .from("activities")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", activityId);
+  if (user && isTerminalActivityStatus(status)) {
+    await invalidateActivityReminders(supabase, user.id, [activityId]);
+  }
   revalidateAll(linkedProjectId);
 }
 
@@ -372,6 +399,48 @@ export async function carryForwardActivity(
   if (error) return { error: error.message };
 
   revalidateAll(linkedProjectId);
+  return {};
+}
+
+/**
+ * Bring several overdue activities to a day at once (the "Bring all to today"
+ * action on the Pending backlog). Each keeps its original date via first-move-wins
+ * moved_from_date and its status is left as-is — unlike bulkMoveActivities, which
+ * marks items "postponed". Reminders for the moved items are re-queued on next sync.
+ */
+export async function bulkCarryForwardActivities(
+  activityIds: string[],
+  toDate: string,
+): Promise<{ error?: string }> {
+  if (activityIds.length === 0) return {};
+  if (!canCreateActivityOnDate(toDate)) {
+    return { error: "Cannot move activities to a past date." };
+  }
+
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { data: existing } = await supabase
+    .from("activities")
+    .select("id, activity_date, moved_from_date")
+    .in("id", activityIds)
+    .eq("user_id", user.id);
+
+  for (const act of existing ?? []) {
+    const movedFromDate = (act.moved_from_date as string | null) ?? (act.activity_date as string);
+    await supabase
+      .from("activities")
+      .update({
+        activity_date: toDate,
+        origin_type: "carry_forward",
+        moved_from_date: movedFromDate,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", act.id)
+      .eq("user_id", user.id);
+  }
+
+  revalidateAll();
   return {};
 }
 
@@ -522,6 +591,10 @@ export async function bulkUpdateActivityStatus(
     .eq("user_id", user.id);
 
   if (error) return { error: error.message };
+
+  if (isTerminalActivityStatus(status)) {
+    await invalidateActivityReminders(supabase, user.id, activityIds);
+  }
 
   revalidateAll();
   return {};

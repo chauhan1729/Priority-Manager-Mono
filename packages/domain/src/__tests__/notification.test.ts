@@ -2,8 +2,10 @@ import { describe, it, expect } from "vitest";
 
 import {
   addDays,
+  computeActivityStartingReminders,
   computeAllReminders,
   computeBirthdayReminders,
+  computeEventUpcomingReminders,
   computeEodReminder,
   computeMeetingPassedReminders,
   computeMeetingUpcomingReminders,
@@ -549,5 +551,60 @@ describe("filterUnfiredReminders", () => {
     const fired = [{ reminder_type: "meeting_passed", source_id: "meet-2" }]; // different meeting
     const result = filterUnfiredReminders(reminders, fired);
     expect(result).toHaveLength(2); // meet-1 still unfired
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Status guards: settled items must not produce reminders
+// ---------------------------------------------------------------------------
+
+describe("activity_starting skips settled schedule blocks", () => {
+  const now = new Date("2026-04-05T09:00:00.000Z");
+  const startAt = "2026-04-05T10:00:00.000Z";
+  const activities = [{ id: "act-1", title: "Deep work" }];
+  const makeInstance = (status: string | null) => ({
+    id: "si-1",
+    source_type: "activity" as const,
+    source_activity_id: "act-1",
+    start_at: startAt,
+    status_snapshot: status as never,
+  });
+
+  it("fires for an upcoming block", () => {
+    expect(computeActivityStartingReminders([makeInstance("upcoming")], activities, 5, now)).toHaveLength(1);
+  });
+
+  it.each(["completed", "missed", "postponed"])("skips a %s block", (status) => {
+    expect(computeActivityStartingReminders([makeInstance(status)], activities, 5, now)).toHaveLength(0);
+  });
+});
+
+describe("event_upcoming skips settled appointments", () => {
+  const now = new Date("2026-04-05T09:00:00.000Z");
+  const startAt = "2026-04-05T10:00:00.000Z";
+  const makeEvent = (status?: string) => ({
+    id: "ev-1",
+    title: "Dentist",
+    event_type: "appointment" as const,
+    start_at: startAt,
+    ...(status ? { status: status as never } : {}),
+  });
+
+  it("fires for an upcoming appointment", () => {
+    expect(computeEventUpcomingReminders([makeEvent("upcoming")], 15, now)).toHaveLength(1);
+  });
+
+  it.each(["completed", "cancelled", "missed"])("skips when the event status is %s", (status) => {
+    expect(computeEventUpcomingReminders([makeEvent(status)], 15, now)).toHaveLength(0);
+  });
+
+  it("skips when the day's schedule instance is settled (per-occurrence completion)", () => {
+    const instances = [{ source_event_id: "ev-1", status_snapshot: "completed" as never }];
+    expect(computeEventUpcomingReminders([makeEvent()], 15, now, instances)).toHaveLength(0);
+  });
+
+  it("still fires when a different event's instance is settled", () => {
+    const instances = [{ source_event_id: "other", status_snapshot: "completed" as never }];
+    expect(computeEventUpcomingReminders([makeEvent()], 15, now, instances)).toHaveLength(1);
   });
 });

@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import {
+  canAddGoal,
   isValidProgress,
   isValidSection,
   isValidStatus,
+  MAX_GOALS_PER_SECTION,
 } from "@pm/domain";
+import type { AnnualGoal } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export type ActionResult = { error: string } | { success: true } | null;
@@ -53,6 +56,17 @@ export async function createAnnualGoal(data: CreateGoalData): Promise<ActionResu
 
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) redirect("/login");
+
+  // Enforce the per-section cap on active goals.
+  const { data: sectionGoals, error: countError } = await supabase
+    .from("annual_goals")
+    .select("section, status")
+    .eq("user_id", user.id)
+    .eq("section", data.section);
+  if (countError) return { error: countError.message };
+  if (!canAddGoal((sectionGoals ?? []) as Pick<AnnualGoal, "section" | "status">[], data.section)) {
+    return { error: `Section is full. Maximum ${MAX_GOALS_PER_SECTION} goals per section.` };
+  }
 
   const { error } = await supabase.from("annual_goals").insert({
     user_id: user.id,

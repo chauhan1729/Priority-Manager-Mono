@@ -3,13 +3,22 @@
 import { useState, useTransition } from "react";
 
 import { getProjectMetrics } from "@pm/domain";
-import type { Activity, Contact, Project, ProjectMilestone, ProjectResource } from "@pm/types";
+import type {
+  Activity,
+  AnnualGoal,
+  Contact,
+  MonthlyPriority,
+  Project,
+  ProjectMilestone,
+  ProjectResource,
+} from "@pm/types";
 import {
   deleteProject,
   updateProjectNotes,
 } from "@/app/(app)/project-planner/actions";
 import { STATUS_CLASSES, STATUS_LABELS } from "./ProjectCard";
 import { ProjectForm } from "./ProjectForm";
+import { ProjectAlignment } from "./ProjectAlignment";
 import { ActivitiesTab } from "./ActivitiesTab";
 import { MilestonesTab } from "./MilestonesTab";
 import { ResourcesTab } from "./ResourcesTab";
@@ -47,6 +56,10 @@ interface Props {
   resources: ProjectResource[];
   allProjects: Pick<Project, "id" | "name" | "status">[];
   contacts: Pick<Contact, "id" | "full_name">[];
+  /** Active annual goals to pick from in the Alignment control. */
+  goals: Pick<AnnualGoal, "id" | "section" | "title">[];
+  /** Monthly priorities to pick from in the Alignment control. */
+  priorities: Pick<MonthlyPriority, "id" | "title" | "month_key">[];
   /** Name of the linked annual goal (if any). */
   linkedGoalTitle: string | null;
   /** Name of the linked monthly priority (if any). */
@@ -64,6 +77,8 @@ export function ProjectDetail({
   resources,
   allProjects,
   contacts,
+  goals,
+  priorities,
   linkedGoalTitle,
   linkedPriorityTitle,
   atRisk,
@@ -246,14 +261,14 @@ export function ProjectDetail({
         )}
       </div>
 
-      {/* Tab navigation */}
+      {/* Tab navigation — horizontally scrollable so 5 tabs never overflow on mobile */}
       <div className="mt-6 border-b border-blue-100">
-        <nav className="flex gap-0" aria-label="Project detail tabs">
+        <nav className="flex gap-0 overflow-x-auto scrollbar-hide" aria-label="Project detail tabs">
           {TABS.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`border-b-2 px-4 py-2.5 text-sm font-medium transition ${
+              className={`flex-shrink-0 whitespace-nowrap border-b-2 px-4 py-2.5 text-sm font-medium transition ${
                 activeTab === tab.id
                   ? "border-blue-600 text-blue-700"
                   : "border-transparent text-ink-light hover:border-blue-200 hover:text-ink"
@@ -315,18 +330,6 @@ export function ProjectDetail({
                     {metrics.completedHours}h / {metrics.totalEstimatedHours}h
                   </dd>
                 </div>
-                {linkedGoalTitle && (
-                  <div className="col-span-2 sm:col-span-3">
-                    <dt className="text-xs font-medium text-ink-light">Annual Strategy</dt>
-                    <dd className="mt-1 text-ink">{linkedGoalTitle}</dd>
-                  </div>
-                )}
-                {linkedPriorityTitle && (
-                  <div className="col-span-2 sm:col-span-3">
-                    <dt className="text-xs font-medium text-ink-light">Monthly Priority</dt>
-                    <dd className="mt-1 text-ink">{linkedPriorityTitle}</dd>
-                  </div>
-                )}
                 {hasResourceBudget && (
                   <div>
                     <dt className="text-xs font-medium text-ink-light">Resource Budget</dt>
@@ -337,6 +340,14 @@ export function ProjectDetail({
                 )}
               </div>
             </dl>
+
+            <ProjectAlignment
+              projectId={project.id}
+              linkedGoalId={project.linked_annual_goal_id}
+              linkedPriorityId={project.linked_monthly_priority_id}
+              goals={goals}
+              priorities={priorities}
+            />
           </div>
         )}
 

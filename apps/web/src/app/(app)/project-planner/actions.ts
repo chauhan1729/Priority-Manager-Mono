@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 
 import { canCreateActivityOnDate } from "@pm/domain";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { linkPriorityAndProject } from "@/lib/monthly-priority-sync";
+import { invalidatePendingOutbox } from "@/lib/notifications/invalidate-outbox";
 
 export type ActionResult = { error: string } | { success: true } | null;
 
@@ -78,6 +80,127 @@ export async function updateProject(
 
   revalidatePath("/project-planner");
   revalidatePath(`/project-planner/${id}`);
+  return { success: true };
+}
+
+// ---------------------------------------------------------------------------
+// Alignment — tag a project to an annual goal / monthly priority from its own
+// screen. Pass null to unlink. (The reverse "priority → project" side is kept in
+// sync via linkPriorityAndProject.)
+// ---------------------------------------------------------------------------
+
+/** Set (or clear, with null) the project's linked annual goal. */
+export async function setProjectAnnualGoal(
+  projectId: string,
+  goalId: string | null,
+): Promise<ActionResult> {
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) redirect("/login");
+
+  // Verify project ownership
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", user.id)
+    .single();
+  if (projectError || !project) return { error: "Project not found." };
+
+  if (goalId) {
+    // Verify goal ownership and that it isn't archived
+    const { data: goal, error: goalError } = await supabase
+      .from("annual_goals")
+      .select("id, status")
+      .eq("id", goalId)
+      .eq("user_id", user.id)
+      .single();
+    if (goalError || !goal) return { error: "Goal not found." };
+    if (goal.status === "completed" || goal.status === "dropped") {
+      return { error: "Cannot link to an archived goal." };
+    }
+  }
+
+  const { error } = await supabase
+    .from("projects")
+    .update({ linked_annual_goal_id: goalId, updated_at: new Date().toISOString() })
+    .eq("id", projectId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+
+  revalidatePath("/project-planner");
+  revalidatePath(`/project-planner/${projectId}`);
+  revalidatePath("/annual-strategies");
+  revalidatePath("/activities");
+  return { success: true };
+}
+
+/** Set (or clear, with null) the project's linked monthly priority — bidirectional. */
+export async function setProjectMonthlyPriority(
+  projectId: string,
+  priorityId: string | null,
+): Promise<ActionResult> {
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) redirect("/login");
+
+  // Verify project ownership + read current owner
+  const { data: project, error: projectError } = await supabase
+    .from("projects")
+    .select("id, linked_monthly_priority_id")
+    .eq("id", projectId)
+    .eq("user_id", user.id)
+    .single();
+  if (projectError || !project) return { error: "Project not found." };
+
+  const currentOwnerId = project.linked_monthly_priority_id as string | null;
+  if (currentOwnerId === priorityId) return { success: true }; // no-op
+
+  if (priorityId === null) {
+    // Unlink: the current owning priority releases this project (reverts to manual).
+    if (currentOwnerId) {
+      await supabase
+        .from("monthly_priorities")
+        .update({ linked_project_id: null, progress_mode: "manual", updated_at: new Date().toISOString() })
+        .eq("id", currentOwnerId)
+        .eq("linked_project_id", projectId)
+        .eq("user_id", user.id);
+    }
+    await supabase
+      .from("projects")
+      .update({ linked_monthly_priority_id: null, updated_at: new Date().toISOString() })
+      .eq("id", projectId)
+      .eq("user_id", user.id);
+  } else {
+    // Link: verify priority ownership, point it at this project, then sync both sides.
+    const { data: priority, error: priorityError } = await supabase
+      .from("monthly_priorities")
+      .select("id, month_key, linked_project_id")
+      .eq("id", priorityId)
+      .eq("user_id", user.id)
+      .single();
+    if (priorityError || !priority) return { error: "Priority not found." };
+
+    const priorityOldProject = priority.linked_project_id as string | null;
+
+    await supabase
+      .from("monthly_priorities")
+      .update({ linked_project_id: projectId, updated_at: new Date().toISOString() })
+      .eq("id", priorityId)
+      .eq("user_id", user.id);
+
+    await linkPriorityAndProject(
+      supabase,
+      user.id,
+      priorityId,
+      priority.month_key as string,
+      projectId,
+      priorityOldProject,
+    );
+  }
+
+  revalidatePath("/project-planner");
+  revalidatePath(`/project-planner/${projectId}`);
+  revalidatePath("/annual-strategies");
+  revalidatePath("/activities");
   return { success: true };
 }
 
@@ -226,11 +349,23 @@ export async function updateActivityStatus(
   projectId: string,
   status: string,
 ): Promise<void> {
-  const { supabase } = await getAuthenticatedUser();
+  const { supabase, user } = await getAuthenticatedUser();
   await supabase
     .from("activities")
     .update({ status, updated_at: new Date().toISOString() })
     .eq("id", activityId);
+  // Completing/cancelling makes queued reminders obsolete (activity + its blocks).
+  if (user && (status === "completed" || status === "cancelled")) {
+    const { data: instances } = await supabase
+      .from("schedule_instances")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("source_activity_id", activityId);
+    await invalidatePendingOutbox(supabase, user.id, [
+      activityId,
+      ...((instances ?? []) as { id: string }[]).map((i) => i.id),
+    ]);
+  }
   revalidatePath(`/project-planner/${projectId}`);
   revalidatePath("/activities");
 }

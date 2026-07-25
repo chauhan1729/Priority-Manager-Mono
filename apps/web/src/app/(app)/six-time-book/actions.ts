@@ -16,12 +16,18 @@ function revalidate() {
   revalidatePath("/six-time-book");
 }
 
-/** Save (upsert) the nightly review for a given day. */
+/**
+ * Save (upsert) the nightly review for a given day. Past days are allowed
+ * (backfilling missed nights); future days are rejected. `todayISO` is the
+ * caller's local today, used only to reject future-dated reviews.
+ */
 export async function saveNightlyReview(
   reviewDate: string,
   best: string[],
   worst: string[],
+  todayISO?: string,
 ): Promise<{ error?: string }> {
+  if (todayISO && reviewDate > todayISO) return { error: "Can't log a review for a future date." };
   const { supabase, user } = await auth();
   if (!user) return { error: "Not authenticated." };
 

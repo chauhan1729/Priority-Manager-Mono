@@ -19,6 +19,7 @@ import {
   getSomedayReviewDue,
   groupActivitiesByPriority,
   groupActivitiesBySection,
+  isPendingActivity,
   isWithinHorizon,
   partitionByHorizon,
   promoteToA,
@@ -54,6 +55,31 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     ...overrides,
   };
 }
+
+// ---------------------------------------------------------------------------
+describe("isPendingActivity (overdue backlog)", () => {
+  const today = "2026-04-05";
+
+  it("is true for an overdue, open activity", () => {
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-03", status: "not_started" }), today)).toBe(true);
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-04", status: "working" }), today)).toBe(true);
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-01", status: "postponed" }), today)).toBe(true);
+  });
+
+  it("is false for today or future activities", () => {
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-05", status: "not_started" }), today)).toBe(false);
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-06", status: "not_started" }), today)).toBe(false);
+  });
+
+  it.each(["completed", "cancelled"] as const)("is false for a %s activity even if overdue", (status) => {
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-01", status }), today)).toBe(false);
+  });
+
+  it("is false for someday or archived items", () => {
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-01", is_someday: true }), today)).toBe(false);
+    expect(isPendingActivity(makeActivity({ activity_date: "2026-04-01", archived: true }), today)).toBe(false);
+  });
+});
 
 // ---------------------------------------------------------------------------
 describe("A-priority cap (spec §10.5)", () => {

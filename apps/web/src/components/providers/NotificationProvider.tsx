@@ -98,7 +98,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         // Widen to today … +2d so a cycle/appointment scheduled ahead gets its
         // start reminder queued for closed-app push (and covers UTC/local edges).
         .from("schedule_instances")
-        .select("id, source_type, source_activity_id, start_at, end_at, status_snapshot, schedule_date")
+        .select("id, source_type, source_activity_id, source_event_id, start_at, end_at, status_snapshot, schedule_date")
         .eq("user_id", user.id)
         .gte("schedule_date", todayISO)
         .lte("schedule_date", addDays(todayISO, 2)),
@@ -109,7 +109,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         .in("status", ["not_started", "working", "postponed"]),
       supabase
         .from("calendar_events")
-        .select("id, title, event_type, start_at")
+        .select("id, title, event_type, start_at, status")
         .eq("user_id", user.id)
         .gte("start_at", `${todayISO}T00:00:00Z`)
         .lte("start_at", `${addDays(todayISO, 2)}T23:59:59Z`),
@@ -169,6 +169,25 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       await supabase
         .from("push_outbox")
         .upsert(outboxRows, { onConflict: "user_id,dedup_key", ignoreDuplicates: true });
+    }
+
+    // Prune stale queued reminders: any unsent, still-future outbox row that is no
+    // longer in the freshly computed set (item completed/cancelled/missed/rescheduled
+    // or its reminder type disabled). Backstops the immediate invalidation on status
+    // change — catches everything on the next sync. Only touches future, unsent rows,
+    // so already-delivered history is preserved.
+    const desiredKeys = new Set(outboxRows.map((r) => r.dedup_key));
+    const { data: pendingRows } = await supabase
+      .from("push_outbox")
+      .select("id, dedup_key")
+      .eq("user_id", user.id)
+      .is("sent_at", null)
+      .gt("scheduled_for", now.toISOString());
+    const staleIds = (pendingRows ?? [])
+      .filter((row: { dedup_key: string }) => !desiredKeys.has(row.dedup_key))
+      .map((row: { id: string }) => row.id);
+    if (staleIds.length > 0) {
+      await supabase.from("push_outbox").delete().in("id", staleIds);
     }
 
     // Filter out already-fired via Supabase (cross-device dedup)

@@ -5,6 +5,10 @@ import { revalidatePath } from "next/cache";
 import { canCreateMeetingAt, isMeetingPast, localTimeToUTC } from "@pm/domain";
 import type { Meeting, MeetingRecurrenceRule, MeetingStatus } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { invalidatePendingOutbox } from "@/lib/notifications/invalidate-outbox";
+
+/** Meeting statuses that make its reminders obsolete. */
+const TERMINAL_MEETING_STATUSES: MeetingStatus[] = ["completed", "cancelled", "missed"];
 
 export type ActionResult = { success: true } | { error: string };
 
@@ -347,6 +351,11 @@ export async function updateMeeting(
         .eq("source_meeting_id", id)
         .eq("user_id", user.id);
     }
+  }
+
+  // Settling a meeting cancels any queued reminders for it.
+  if (data.status && TERMINAL_MEETING_STATUSES.includes(data.status)) {
+    await invalidatePendingOutbox(supabase, user.id, [id]);
   }
 
   revalidateAll();

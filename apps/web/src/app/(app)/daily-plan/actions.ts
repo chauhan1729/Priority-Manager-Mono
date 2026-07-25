@@ -2,9 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 
-import { canScheduleAt, checkScheduleOverlap, validateFocusMinutes, validateLockedMinutes } from "@pm/domain";
+import {
+  canScheduleAt,
+  checkScheduleOverlap,
+  isTerminalScheduleStatus,
+  validateFocusMinutes,
+  validateLockedMinutes,
+} from "@pm/domain";
 import type { ScheduleInstance } from "@pm/types";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { invalidatePendingOutbox } from "@/lib/notifications/invalidate-outbox";
 
 export type ActionResult = { success: true } | { error: string };
 
@@ -361,6 +368,11 @@ export async function setAppointmentOccurrenceStatus(
     if (error) return { error: error.message };
   }
 
+  // Settling an occurrence must cancel its queued reminder (keyed to the event id).
+  if (isTerminalScheduleStatus(status)) {
+    await invalidatePendingOutbox(supabase, user.id, [eventId]);
+  }
+
   revalidatePath("/daily-plan");
   revalidatePath("/calendar");
   return { success: true };
@@ -516,6 +528,12 @@ export async function updateScheduleBlockStatus(
     .eq("user_id", user.id);
 
   if (error) return { error: error.message };
+
+  // Settling the block cancels its queued start/overdue reminders (keyed to the
+  // instance id) and, when the activity itself is done, its activity-level ones.
+  if (isTerminalScheduleStatus(status)) {
+    await invalidatePendingOutbox(supabase, user.id, [instanceId, instance?.source_activity_id]);
+  }
 
   // Sync to activity status — map block status to activity status
   if (instance?.source_type === "activity" && instance.source_activity_id) {

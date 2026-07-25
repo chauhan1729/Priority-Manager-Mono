@@ -3,9 +3,36 @@ import {
   type ActivityMove,
   type ActivityRecurrenceRule,
   type ActivitySection,
+  type ActivityStatus,
 } from "@pm/types";
 
 import { isDateInPast } from "../time-rules";
+
+// ---------------------------------------------------------------------------
+// Pending (overdue) backlog — surfaced on the A/B screens so slipped activities
+// aren't lost. "Pending" = overdue (dated before today) and still open.
+// ---------------------------------------------------------------------------
+
+/** Statuses that still count as open/unfinished for the pending backlog. */
+export const PENDING_ACTIVITY_STATUSES: ActivityStatus[] = [
+  "not_started",
+  "working",
+  "postponed",
+];
+
+/**
+ * True when an activity is overdue and still open — i.e. it was due before today
+ * and is not completed/cancelled, not a someday item, and not archived. These are
+ * the items the Pending section resurfaces.
+ */
+export function isPendingActivity(
+  activity: Pick<Activity, "activity_date" | "status" | "is_someday" | "archived">,
+  todayISO: string,
+): boolean {
+  if (activity.is_someday || activity.archived) return false;
+  if (activity.activity_date >= todayISO) return false;
+  return PENDING_ACTIVITY_STATUSES.includes(activity.status);
+}
 
 /**
  * Phase 0A: the per-day A cap is a *recommended* threshold, not a hard block.

@@ -88,9 +88,9 @@ export function MonthlyPrioritiesView({
 
   const grouped = groupBySection(priorities);
 
-  // Navigation
+  // Navigation — Monthly Priorities lives on the Goals hub's Monthly tab.
   function goToMonth(key: string) {
-    router.push(`/monthly-priorities?month=${key}`);
+    router.push(`/annual-strategies?tab=monthly&month=${key}`);
   }
 
   // Handlers
@@ -185,12 +185,8 @@ export function MonthlyPrioritiesView({
 
   return (
     <div className="relative min-h-full">
-      {/* Header */}
+      {/* Header — the page title lives on the Goals hub; this row is month nav + stats. */}
       <div className="px-4 py-3 md:px-8 md:py-4 border-b border-blue-50">
-        {/* Row 1: Page title */}
-        <h1 className="hidden md:block font-handwriting text-2xl text-ink mb-2">Monthly Priorities</h1>
-
-        {/* Row 2: Month nav + stats */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-1.5">
             <button
@@ -252,7 +248,7 @@ export function MonthlyPrioritiesView({
               {sectionPriorities.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-blue-100 bg-blue-50/30 px-6 py-8 text-center">
                   <p className="text-sm text-ink-light">
-                    No priorities for this section yet. Add 3–5 to get started.
+                    No priorities for this section yet. Add up to 3 to get started.
                   </p>
                 </div>
               ) : (

@@ -1,9 +1,10 @@
 import { redirect } from "next/navigation";
 
 /**
- * Phase 0B/1B (screen rationalization): Monthly Priorities is merged into the 30-day horizon +
- * Someday list. This route now redirects to Someday; the underlying data/tables are unchanged.
+ * Monthly Priorities now lives on the Goals / Ideal Scene hub as the "Monthly" tab.
+ * This legacy route redirects there so any lingering links stay coherent. The
+ * underlying data/tables are unchanged.
  */
 export default function MonthlyPrioritiesPage() {
-  redirect("/someday");
+  redirect("/annual-strategies?tab=monthly");
 }

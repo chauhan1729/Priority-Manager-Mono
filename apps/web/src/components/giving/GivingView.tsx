@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useOptimistic, useRef, useState, useTransition } from "react";
 
 import {
   aggregateScore,
@@ -155,12 +155,13 @@ function LogRow({
   log,
   editable,
   showDate = false,
+  onDelete,
 }: {
   log: GivingLog;
   editable: boolean;
   showDate?: boolean;
+  onDelete: (id: string) => void;
 }) {
-  const [isPending, start] = useTransition();
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-blue-50 bg-white px-3 py-2">
       <div className="min-w-0">
@@ -177,16 +178,10 @@ function LogRow({
       </div>
       {editable && (
         <button
-          onClick={() =>
-            start(async () => {
-              const res = await deleteGivingLog(log.id);
-              if (res?.error) showToast(res.error, "error");
-            })
-          }
-          disabled={isPending}
+          onClick={() => onDelete(log.id)}
           aria-label="Delete"
           title="Delete"
-          className="rounded p-1 text-ink-light hover:bg-red-50 hover:text-red-500 disabled:opacity-50"
+          className="rounded p-1 text-ink-light hover:bg-red-50 hover:text-red-500"
         >
           ×
         </button>
@@ -201,47 +196,46 @@ function KindSection({
   accent,
   placeholder,
   withCategories,
-  today,
-  challengeId,
   editable,
   logs,
+  onAdd,
+  onDelete,
 }: {
   kind: GivingKind;
   title: string;
   accent: string;
   placeholder: string;
   withCategories: boolean;
-  today: string;
-  challengeId: string;
   editable: boolean;
   logs: GivingLog[];
+  onAdd: (kind: GivingKind, content: string, categories: GivingCategory[], secret: boolean) => void;
+  onDelete: (id: string) => void;
 }) {
   const [content, setContent] = useState("");
   const [cats, setCats] = useState<GivingCategory[]>([]);
   const [secret, setSecret] = useState(true);
-  const [isPending, start] = useTransition();
 
   function toggleCat(c: GivingCategory) {
     setCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
   }
 
   function add() {
-    start(async () => {
-      const res = await addGivingLog(challengeId, today, kind, content, cats, secret);
-      if (res?.error) showToast(res.error, "error");
-      else {
-        setContent("");
-        setCats([]);
-        showToast("Added");
-      }
-    });
+    if (!content.trim()) return;
+    // Categories are required for gifts — mirror the server guard before firing.
+    if (kind === "given" && cats.length === 0) {
+      showToast("Pick at least one category.", "error");
+      return;
+    }
+    onAdd(kind, content, cats, secret);
+    setContent("");
+    setCats([]);
   }
 
   return (
     <div className="space-y-2 rounded-xl border border-blue-100 bg-white p-4">
       <h3 className={`text-xs font-semibold uppercase tracking-wide ${accent}`}>{title}</h3>
 
-      {logs.length > 0 && <div className="space-y-1.5">{logs.map((l) => <LogRow key={l.id} log={l} editable={editable} />)}</div>}
+      {logs.length > 0 && <div className="space-y-1.5">{logs.map((l) => <LogRow key={l.id} log={l} editable={editable} onDelete={onDelete} />)}</div>}
 
       {editable && (
         <div className="space-y-2">
@@ -256,7 +250,7 @@ function KindSection({
             />
             <button
               onClick={add}
-              disabled={isPending || !content.trim()}
+              disabled={!content.trim()}
               className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
               Add
@@ -298,7 +292,15 @@ const KIND_META: { kind: GivingKind; title: string; accent: string }[] = [
 ];
 
 /** The full record across every day — separate from the daily add cards. */
-function AllEntries({ logs, editable }: { logs: GivingLog[]; editable: boolean }) {
+function AllEntries({
+  logs,
+  editable,
+  onDelete,
+}: {
+  logs: GivingLog[];
+  editable: boolean;
+  onDelete: (id: string) => void;
+}) {
   return (
     <div className="space-y-4">
       {KIND_META.map(({ kind, title, accent }) => {
@@ -313,7 +315,7 @@ function AllEntries({ logs, editable }: { logs: GivingLog[]; editable: boolean }
             ) : (
               <div className="space-y-1.5">
                 {items.map((l) => (
-                  <LogRow key={l.id} log={l} editable={editable} showDate />
+                  <LogRow key={l.id} log={l} editable={editable} showDate onDelete={onDelete} />
                 ))}
               </div>
             )}
@@ -386,12 +388,55 @@ function DailyBoard({
   logs: GivingLog[];
 }) {
   const [view, setView] = useState<"today" | "all">("today");
+  // Which day new entries are logged against — defaults to today, but can be
+  // set back to any earlier day in the challenge to backfill missed records.
+  const [logDate, setLogDate] = useState(today);
+  const [, start] = useTransition();
+
+  // Optimistic mirror of the logs so add/delete land instantly while the
+  // insert/delete + revalidation run in the background. Re-seeds from props
+  // (server truth) on every render, so it self-heals if a write fails.
+  type Mutation = { kind: "add"; log: GivingLog } | { kind: "delete"; id: string };
+  const [optimisticLogs, applyOptimistic] = useOptimistic(logs, (state: GivingLog[], m: Mutation) =>
+    m.kind === "add" ? [...state, m.log] : state.filter((l) => l.id !== m.id),
+  );
+  const tempId = useRef(0);
+
+  function handleAdd(kind: GivingKind, content: string, categories: GivingCategory[], secret: boolean) {
+    const clean = content.trim().slice(0, 200);
+    const optimisticLog: GivingLog = {
+      id: `tmp-${(tempId.current += 1)}`,
+      user_id: "",
+      challenge_id: challenge.id,
+      entry_date: logDate,
+      kind,
+      content: clean,
+      categories: kind === "given" ? categories : [],
+      given_in_secret: kind === "given" ? secret : false,
+      created_at: "",
+      updated_at: "",
+    };
+    start(async () => {
+      applyOptimistic({ kind: "add", log: optimisticLog });
+      const res = await addGivingLog(challenge.id, logDate, kind, clean, categories, secret, today);
+      if (res?.error) showToast(res.error, "error");
+    });
+  }
+
+  function handleDelete(id: string) {
+    start(async () => {
+      applyOptimistic({ kind: "delete", id });
+      const res = await deleteGivingLog(id);
+      if (res?.error) showToast(res.error, "error");
+    });
+  }
+
   const editable = canEditEntries(challenge, today);
   const dayNum = challengeDayNumber(challenge, today);
-  const score = aggregateScore(logs);
-  const streak = givingStreak(logs, today);
-  const todayLogs = logs.filter((l) => l.entry_date === today);
-  const ofKind = (k: GivingKind) => todayLogs.filter((l) => l.kind === k);
+  const score = aggregateScore(optimisticLogs);
+  const streak = givingStreak(optimisticLogs, today);
+  const dayLogs = optimisticLogs.filter((l) => l.entry_date === logDate);
+  const ofKind = (k: GivingKind) => dayLogs.filter((l) => l.kind === k);
 
   return (
     <div className="space-y-4">
@@ -435,19 +480,45 @@ function DailyBoard({
       </div>
 
       {view === "all" ? (
-        <AllEntries logs={logs} editable={editable} />
+        <AllEntries logs={optimisticLogs} editable={editable} onDelete={handleDelete} />
       ) : (
         <>
+      {/* Log date — defaults to today; pick an earlier day to backfill missed records. */}
+      {editable && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-white px-4 py-3">
+          <label htmlFor="giving-log-date" className="text-xs font-medium text-ink-light">
+            Logging for
+          </label>
+          <input
+            id="giving-log-date"
+            type="date"
+            value={logDate}
+            min={challenge.start_date}
+            max={today}
+            onChange={(e) => setLogDate(e.target.value || today)}
+            className="rounded-lg border border-blue-100 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
+          />
+          {logDate !== today && (
+            <button
+              type="button"
+              onClick={() => setLogDate(today)}
+              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+            >
+              Back to today
+            </button>
+          )}
+        </div>
+      )}
       <KindSection
         kind="given"
         title="What I gave"
         accent="text-green-700"
         placeholder="e.g. Paid for a stranger's coffee"
         withCategories
-        today={today}
-        challengeId={challenge.id}
         editable={editable}
         logs={ofKind("given")}
+        onAdd={handleAdd}
+        onDelete={handleDelete}
       />
       <KindSection
         kind="received"
@@ -455,10 +526,10 @@ function DailyBoard({
         accent="text-blue-700"
         placeholder="unexpected money, a compliment, a lucky break, peace…"
         withCategories={false}
-        today={today}
-        challengeId={challenge.id}
         editable={editable}
         logs={ofKind("received")}
+        onAdd={handleAdd}
+        onDelete={handleDelete}
       />
       <KindSection
         kind="cognition"
@@ -466,10 +537,10 @@ function DailyBoard({
         accent="text-violet-700"
         placeholder="a realization or inner shift you noticed"
         withCategories={false}
-        today={today}
-        challengeId={challenge.id}
         editable={editable}
         logs={ofKind("cognition")}
+        onAdd={handleAdd}
+        onDelete={handleDelete}
       />
         </>
       )}

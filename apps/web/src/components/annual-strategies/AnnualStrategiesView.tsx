@@ -2,12 +2,14 @@
 
 import { useState, useTransition } from "react";
 
-import type { AnnualGoal, AnnualGoalSection, Project } from "@pm/types";
+import type { AnnualGoal, AnnualGoalSection, MonthlyPriority, Project } from "@pm/types";
 import {
   ANNUAL_GOAL_SECTIONS,
+  countActiveInSection,
   filterActive,
   filterArchived,
   groupGoalsBySection,
+  MAX_GOALS_PER_SECTION,
   SECTION_LABELS,
 } from "@pm/domain";
 
@@ -30,10 +32,12 @@ import { ProjectLinkModal } from "./ProjectLinkModal";
 // ---------------------------------------------------------------------------
 
 type ProjectSummary = Pick<Project, "id" | "name" | "status" | "linked_annual_goal_id">;
+type PrioritySummary = Pick<MonthlyPriority, "id" | "title" | "month_key" | "linked_annual_goal_id">;
 
 interface Props {
   goals: AnnualGoal[];
   projects: ProjectSummary[];
+  priorities: PrioritySummary[];
 }
 
 // ---------------------------------------------------------------------------
@@ -62,7 +66,7 @@ export { SECTION_COLORS };
 
 // ---------------------------------------------------------------------------
 
-export function AnnualStrategiesView({ goals, projects }: Props) {
+export function AnnualStrategiesView({ goals, projects, priorities }: Props) {
   const [showArchived, setShowArchived] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<AnnualGoal | null>(null);
   const [formTarget, setFormTarget] = useState<null | "new" | AnnualGoal>(null);
@@ -180,6 +184,8 @@ export function AnnualStrategiesView({ goals, projects }: Props) {
         {ANNUAL_GOAL_SECTIONS.map((section) => {
           const sectionGoals = grouped[section];
           const colors = SECTION_COLORS[section];
+          const activeInSection = countActiveInSection(goals, section);
+          const atCapacity = activeInSection >= MAX_GOALS_PER_SECTION;
           return (
             <section key={section}>
               {/* Section header */}
@@ -187,19 +193,31 @@ export function AnnualStrategiesView({ goals, projects }: Props) {
                 <div className="flex items-center gap-2">
                   <div className={`h-2.5 w-2.5 rounded-full ${colors.dot}`} />
                   <h2 className="font-handwriting text-xl text-ink">{SECTION_LABELS[section]}</h2>
-                  <span className={`ml-1 rounded-full px-2 py-0.5 text-xs font-medium ${colors.badge}`}>
-                    {sectionGoals.length}
+                  <span
+                    className={`ml-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+                      atCapacity ? "bg-amber-50 text-amber-700" : colors.badge
+                    }`}
+                  >
+                    {activeInSection}/{MAX_GOALS_PER_SECTION}
                   </span>
                 </div>
                 {!showArchived && (
                   <button
                     onClick={() => handleAddGoal(section)}
-                    className="flex items-center gap-1 rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition"
+                    disabled={atCapacity}
+                    className="flex items-center gap-1 rounded-full border border-blue-200 px-3 py-1 text-xs font-medium text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     + Add goal
                   </button>
                 )}
               </div>
+
+              {atCapacity && !showArchived && (
+                <p className="-mt-2 mb-4 text-xs text-amber-600">
+                  Section at capacity ({MAX_GOALS_PER_SECTION}/{MAX_GOALS_PER_SECTION}). Complete or
+                  drop a goal to add another.
+                </p>
+              )}
 
               {/* Goal cards */}
               {sectionGoals.length === 0 ? (
@@ -238,6 +256,7 @@ export function AnnualStrategiesView({ goals, projects }: Props) {
         <GoalDetailPanel
           goal={selectedGoal}
           linkedProjects={projects.filter((p) => p.linked_annual_goal_id === selectedGoal.id)}
+          linkedPriorities={priorities.filter((p) => p.linked_annual_goal_id === selectedGoal.id)}
           onClose={() => setSelectedGoal(null)}
           onEdit={() => setFormTarget(selectedGoal)}
           onDelete={() => handleDelete(selectedGoal.id)}

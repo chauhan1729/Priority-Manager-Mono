@@ -119,7 +119,7 @@ const NAV_ITEMS = [
   { href: "/activities/b",          label: "B Activities",           Icon: IconActivities },
   { href: "/someday",               label: "Someday",                Icon: IconMonthlyPriorities },
   { href: "/calendar",              label: "Calendar",               Icon: IconCalendar },
-  { href: "/annual-strategies",     label: "Goals / Ideal Scene",    Icon: IconAnnualStrategies },
+  { href: "/annual-strategies",     label: "Goals",                  Icon: IconAnnualStrategies },
   { href: "/project-planner",       label: "Project Planner",        Icon: IconProjectPlanner },
   { href: "/meeting-planner",       label: "Meeting Planner",        Icon: IconMeetingPlanner },
   { href: "/communication-planner", label: "Communication Planner",  Icon: IconCommunicationPlanner },

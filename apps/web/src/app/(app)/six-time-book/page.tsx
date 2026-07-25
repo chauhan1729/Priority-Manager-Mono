@@ -25,12 +25,13 @@ export default async function SixTimeBookPage() {
     .single();
   const today = localTodayForTimezone(profile?.timezone ?? "UTC");
 
-  const { data: nightly } = await supabase
+  // Load every nightly review (one row per day) so the date picker can backfill
+  // past nights and the History view can show them all — mirrors the Giving screen.
+  const { data: reviews } = await supabase
     .from("six_time_nightly_reviews")
     .select("*")
     .eq("user_id", user.id)
-    .eq("review_date", today)
-    .maybeSingle();
+    .order("review_date", { ascending: false });
 
-  return <SixTimeBookView today={today} nightly={(nightly ?? null) as SixTimeNightlyReview | null} />;
+  return <SixTimeBookView today={today} reviews={(reviews ?? []) as SixTimeNightlyReview[]} />;
 }

@@ -402,9 +402,19 @@ export function computeTravelReminders(
 // ---------------------------------------------------------------------------
 
 /**
+ * A schedule block is "settled" (no longer needs a start/overdue reminder) once it
+ * is completed, missed, or postponed to another time.
+ */
+export function isTerminalScheduleStatus(
+  status: ScheduleInstance["status_snapshot"],
+): boolean {
+  return status === "completed" || status === "missed" || status === "postponed";
+}
+
+/**
  * Returns reminders for activity blocks whose start_at is within `minutesBefore` of `now`.
  * Fires reminderTime = start_at - minutesBefore. Skipped if the block is already
- * completed/cancelled/missed.
+ * completed/missed/postponed.
  */
 export function computeActivityStartingReminders(
   instances: Pick<
@@ -418,7 +428,7 @@ export function computeActivityStartingReminders(
   const activityTitleById = new Map(activities.map((a) => [a.id, a.title]));
   return instances.flatMap((i) => {
     if (i.source_type !== "activity" || !i.source_activity_id) return [];
-    if (i.status_snapshot === "completed" || i.status_snapshot === "missed") return [];
+    if (isTerminalScheduleStatus(i.status_snapshot)) return [];
     const startAt = new Date(i.start_at);
     const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
     // Emit until the block starts (not "future-only") so the foreground fires it
@@ -485,15 +495,32 @@ export function computeActivityOverdueReminders(
  * Returns reminders for calendar events of type 'appointment' or 'other' whose
  * start_at is within `minutesBefore` of `now`.
  * Meeting-type calendar events are handled by computeMeetingUpcomingReminders.
+ *
+ * Skipped when the event is settled — either the event row itself is
+ * completed/cancelled/missed, or its day's schedule instance (where per-occurrence
+ * status is marked from the Daily Plan) is completed/missed/postponed.
  */
 export function computeEventUpcomingReminders(
-  events: Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at">[],
+  events: (Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at"> & {
+    status?: CalendarEvent["status"];
+  })[],
   minutesBefore: number,
   now: Date,
+  scheduleInstances: {
+    source_event_id?: string | null;
+    status_snapshot?: ScheduleInstance["status_snapshot"];
+  }[] = [],
 ): ReminderSchedule[] {
+  const settledEventIds = new Set(
+    scheduleInstances
+      .filter((i) => i.source_event_id && isTerminalScheduleStatus(i.status_snapshot ?? null))
+      .map((i) => i.source_event_id as string),
+  );
   return events.flatMap((e) => {
     if (e.event_type !== "appointment" && e.event_type !== "other") return [];
     if (!e.start_at) return [];
+    if (e.status === "completed" || e.status === "cancelled" || e.status === "missed") return [];
+    if (settledEventIds.has(e.id)) return [];
     const startAt = new Date(e.start_at);
     const reminderTime = new Date(startAt.getTime() - minutesBefore * 60_000);
     // Emit until the event starts so it fires in the foreground once due AND
@@ -634,7 +661,7 @@ export interface ComputeRemindersParams {
   > & { date?: string | null })[];
   expenses: Pick<Expense, "id" | "title" | "amount" | "expense_date" | "recurrence_rule">[];
   yearEntries: Pick<YearEntry, "id" | "title" | "type" | "start_date">[];
-  scheduleInstances?: Pick<
+  scheduleInstances?: (Pick<
     ScheduleInstance,
     | "id"
     | "source_type"
@@ -643,12 +670,14 @@ export interface ComputeRemindersParams {
     | "end_at"
     | "status_snapshot"
     | "schedule_date"
-  >[];
+  > & { source_event_id?: string | null })[];
   activities?: Pick<
     Activity,
     "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "archived"
   >[];
-  calendarEvents?: Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at">[];
+  calendarEvents?: (Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at"> & {
+    status?: CalendarEvent["status"];
+  })[];
   // Phase 4 / 6: optional so callers that haven't adopted Six-Time (e.g. mobile) still compile.
   sixTimeConfig?: Pick<SixTimeConfig, "enabled" | "daily_log_time" | "nightly_time"> | null;
   sixTimeProblems?: Pick<SixTimeProblem, "position" | "status" | "reminder_phrase">[];
@@ -703,7 +732,12 @@ export function computeAllReminders(params: ComputeRemindersParams): ReminderSch
     ...(prefs.activity_overdue_enabled
       ? computeActivityOverdueReminders(scheduleInstances, activities, now)
       : []),
-    ...computeEventUpcomingReminders(calendarEvents, prefs.event_reminder_minutes_before, now),
+    ...computeEventUpcomingReminders(
+      calendarEvents,
+      prefs.event_reminder_minutes_before,
+      now,
+      scheduleInstances,
+    ),
     computeSixTimeDailyReminder(sixTimeConfig, sixTimeProblems, todayISO),
     computeSixTimeNightlyReminder(sixTimeConfig, todayISO),
     computeGivingReminder(prefs, hasActiveGivingChallenge, todayISO),

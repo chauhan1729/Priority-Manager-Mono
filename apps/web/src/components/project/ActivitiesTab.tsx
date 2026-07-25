@@ -515,7 +515,7 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 border-b border-blue-100">
+      <div className="flex items-center gap-1 border-b border-blue-100 overflow-x-auto scrollbar-hide">
         {(
           [
             { key: "active",    label: "Active",    count: active.length },
@@ -526,7 +526,7 @@ export function ActivitiesTab({ projectId, activities, projects, contacts, linke
           <button
             key={key}
             onClick={() => { setActiveTab(key); setShowForm(null); setBulkMode(false); setSelectedIds(new Set()); setConfirmDelete(false); }}
-            className={`px-4 py-2 text-sm font-medium transition border-b-2 -mb-px ${
+            className={`flex-shrink-0 whitespace-nowrap px-4 py-2 text-sm font-medium transition border-b-2 -mb-px ${
               activeTab === key
                 ? "border-blue-600 text-blue-700"
                 : "border-transparent text-ink-light hover:text-ink"
