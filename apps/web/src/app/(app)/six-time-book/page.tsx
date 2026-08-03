@@ -1,37 +1,7 @@
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-import { localTodayForTimezone } from "@pm/domain";
-import type { SixTimeNightlyReview } from "@pm/types";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
-import { SixTimeBookView } from "@/components/six-time/SixTimeBookView";
-
-export const metadata: Metadata = { title: "Nightly Review" };
-
-/**
- * The Six-Time Book, simplified to the nightly review: a guilt-free best-3+/worst-3+
- * log of the day (add as many as you like). The Daily reading modal lives here too.
- */
-export default async function SixTimeBookPage() {
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("timezone")
-    .eq("id", user.id)
-    .single();
-  const today = localTodayForTimezone(profile?.timezone ?? "UTC");
-
-  // Load every nightly review (one row per day) so the date picker can backfill
-  // past nights and the History view can show them all — mirrors the Giving screen.
-  const { data: reviews } = await supabase
-    .from("six_time_nightly_reviews")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("review_date", { ascending: false });
-
-  return <SixTimeBookView today={today} reviews={(reviews ?? []) as SixTimeNightlyReview[]} />;
+/** The Six-Time Book was folded into the Karmic Management hub. Keep the old
+ *  route working (bookmarks, older push notifications) by redirecting. */
+export default function SixTimeBookRedirect() {
+  redirect("/karmic");
 }

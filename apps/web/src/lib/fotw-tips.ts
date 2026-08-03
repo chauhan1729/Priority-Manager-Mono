@@ -96,7 +96,7 @@ export const FOTW_TIPS: FotwTipTheme[] = [
   {
     id: "six-time-book",
     icon: "📓",
-    title: "Six-Time Book — track, don't judge",
+    title: "Karmic Management — track, don't judge",
     tips: [
       "Mental gardening (tundruk): tracking your behavior — without guilt — quietly changes it. It's a cold, calculating adjustment of your upcoming reality, not a confession.",
       "There's no \"guilt\" here — only intelligent regret that decides to do things differently.",

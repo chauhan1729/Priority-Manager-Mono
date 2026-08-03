@@ -17,6 +17,9 @@ const ROUTE_TITLES: Record<string, string> = {
   "/project-planner": "Project Planner",
   "/meeting-planner": "Meeting Planner",
   "/communication-planner": "Communication Planner",
+  "/karmic": "Karmic Management",
+  "/six-time-book": "Karmic Management",
+  "/giving": "Giving",
   "/expense-record": "Expense Record",
   "/settings": "Settings",
 };

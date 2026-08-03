@@ -2,11 +2,24 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import karmicGuide from "@/content/karmic/karmic-management-guide.md";
 import dailyPractice from "@/content/karmic/daily-practice.md";
 import karmicImprint from "@/content/karmic/karmic-imprint.md";
 import { Markdown } from "./Markdown";
 
-type Tab = "daily" | "weekly";
+type Tab = "guide" | "daily" | "weekly";
+
+const TAB_DOCS: Record<Tab, string> = {
+  guide: karmicGuide,
+  daily: dailyPractice,
+  weekly: karmicImprint,
+};
+
+const TAB_FOOTERS: Record<Tab, string> = {
+  guide: "The book in plain words — read a rule a day.",
+  daily: "Read this each morning.",
+  weekly: "Read this once a week.",
+};
 
 interface Section {
   id: string;
@@ -39,12 +52,9 @@ function splitSections(md: string): Section[] {
  * Content renders straight from the markdown files so it never drifts.
  */
 export function ReadingsModal({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>("daily");
+  const [tab, setTab] = useState<Tab>("guide");
 
-  const sections = useMemo(
-    () => splitSections(tab === "daily" ? dailyPractice : karmicImprint),
-    [tab],
-  );
+  const sections = useMemo(() => splitSections(TAB_DOCS[tab]), [tab]);
   // First section starts open; opening another collapses the current one.
   const [openId, setOpenId] = useState<string>("s0");
 
@@ -92,7 +102,8 @@ export function ReadingsModal({ onClose }: { onClose: () => void }) {
             <p className="mt-0.5 text-sm text-ink-light">
               Plant good seeds by how you treat others.
             </p>
-            <div className="mt-2 flex gap-1">
+            <div className="mt-2 flex flex-wrap gap-1">
+              {tabBtn("guide", "The 8 Rules")}
               {tabBtn("daily", "Daily")}
               {tabBtn("weekly", "Weekly concepts")}
             </div>
@@ -145,7 +156,7 @@ export function ReadingsModal({ onClose }: { onClose: () => void }) {
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-blue-50 px-6 py-3">
           <p className="text-xs text-ink-light">
-            {tab === "daily" ? "Read this each morning." : "Read this once a week."}
+            {TAB_FOOTERS[tab]}
           </p>
           <button
             onClick={onClose}

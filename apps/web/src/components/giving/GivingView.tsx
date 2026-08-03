@@ -25,6 +25,7 @@ import {
   startGivingChallenge,
 } from "@/app/(app)/giving/actions";
 import { showToast } from "@/components/ui/Toaster";
+import { DayBackfillModal, isoAddDays } from "@/components/ui/DayBackfillModal";
 import { GivingReadingsModal } from "./GivingReadingsModal";
 
 const CATEGORY_LABELS: Record<GivingCategory, string> = {
@@ -378,6 +379,63 @@ function ResetButton() {
 }
 
 // ---------------------------------------------------------------------------
+// The three add-cards (gave / received / cognition) for a single day. Reused for
+// today (in the board) and any past day (in the backfill modal). The parent owns
+// the optimistic log state, so both stay in sync and the score updates instantly.
+function GiftEditor({
+  date,
+  dayLogs,
+  editable,
+  onAdd,
+  onDelete,
+}: {
+  date: string;
+  dayLogs: GivingLog[];
+  editable: boolean;
+  onAdd: (date: string, kind: GivingKind, content: string, categories: GivingCategory[], secret: boolean) => void;
+  onDelete: (id: string) => void;
+}) {
+  const ofKind = (k: GivingKind) => dayLogs.filter((l) => l.kind === k);
+  return (
+    <div className="space-y-4">
+      <KindSection
+        kind="given"
+        title="What I gave"
+        accent="text-green-700"
+        placeholder="e.g. Paid for a stranger's coffee"
+        withCategories
+        editable={editable}
+        logs={ofKind("given")}
+        onAdd={(kind, content, cats, secret) => onAdd(date, kind, content, cats, secret)}
+        onDelete={onDelete}
+      />
+      <KindSection
+        kind="received"
+        title="What I received"
+        accent="text-blue-700"
+        placeholder="unexpected money, a compliment, a lucky break, peace…"
+        withCategories={false}
+        editable={editable}
+        logs={ofKind("received")}
+        onAdd={(kind, content, cats, secret) => onAdd(date, kind, content, cats, secret)}
+        onDelete={onDelete}
+      />
+      <KindSection
+        kind="cognition"
+        title="Cognitions"
+        accent="text-violet-700"
+        placeholder="a realization or inner shift you noticed"
+        withCategories={false}
+        editable={editable}
+        logs={ofKind("cognition")}
+        onAdd={(kind, content, cats, secret) => onAdd(date, kind, content, cats, secret)}
+        onDelete={onDelete}
+      />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 function DailyBoard({
   today,
   challenge,
@@ -388,9 +446,9 @@ function DailyBoard({
   logs: GivingLog[];
 }) {
   const [view, setView] = useState<"today" | "all">("today");
-  // Which day new entries are logged against — defaults to today, but can be
-  // set back to any earlier day in the challenge to backfill missed records.
-  const [logDate, setLogDate] = useState(today);
+  const yesterday = isoAddDays(today, -1);
+  const [backfillOpen, setBackfillOpen] = useState(false);
+  const [backfillDate, setBackfillDate] = useState(yesterday);
   const [, start] = useTransition();
 
   // Optimistic mirror of the logs so add/delete land instantly while the
@@ -402,13 +460,19 @@ function DailyBoard({
   );
   const tempId = useRef(0);
 
-  function handleAdd(kind: GivingKind, content: string, categories: GivingCategory[], secret: boolean) {
+  function handleAdd(
+    date: string,
+    kind: GivingKind,
+    content: string,
+    categories: GivingCategory[],
+    secret: boolean,
+  ) {
     const clean = content.trim().slice(0, 200);
     const optimisticLog: GivingLog = {
       id: `tmp-${(tempId.current += 1)}`,
       user_id: "",
       challenge_id: challenge.id,
-      entry_date: logDate,
+      entry_date: date,
       kind,
       content: clean,
       categories: kind === "given" ? categories : [],
@@ -418,7 +482,7 @@ function DailyBoard({
     };
     start(async () => {
       applyOptimistic({ kind: "add", log: optimisticLog });
-      const res = await addGivingLog(challenge.id, logDate, kind, clean, categories, secret, today);
+      const res = await addGivingLog(challenge.id, date, kind, clean, categories, secret, today);
       if (res?.error) showToast(res.error, "error");
     });
   }
@@ -435,8 +499,8 @@ function DailyBoard({
   const dayNum = challengeDayNumber(challenge, today);
   const score = aggregateScore(optimisticLogs);
   const streak = givingStreak(optimisticLogs, today);
-  const dayLogs = optimisticLogs.filter((l) => l.entry_date === logDate);
-  const ofKind = (k: GivingKind) => dayLogs.filter((l) => l.kind === k);
+  // A past day can be backfilled only if the challenge started before today.
+  const canBackfill = editable && challenge.start_date <= yesterday;
 
   return (
     <div className="space-y-4">
@@ -465,84 +529,65 @@ function DailyBoard({
       )}
 
       {/* Today (add) vs All entries (full history, separate cards) */}
-      <div className="flex w-fit gap-1 rounded-lg border border-blue-100 bg-white p-0.5 text-sm">
-        {(["today", "all"] as const).map((v) => (
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex w-fit gap-1 rounded-lg border border-blue-100 bg-white p-0.5 text-sm">
+          {(["today", "all"] as const).map((v) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`rounded-md px-3 py-1 font-medium transition ${
+                view === v ? "bg-indigo-600 text-white" : "text-ink-light hover:bg-blue-50"
+              }`}
+            >
+              {v === "today" ? "Today" : "All entries"}
+            </button>
+          ))}
+        </div>
+        {canBackfill && (
           <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`rounded-md px-3 py-1 font-medium transition ${
-              view === v ? "bg-indigo-600 text-white" : "text-ink-light hover:bg-blue-50"
-            }`}
+            onClick={() => {
+              setBackfillDate(yesterday);
+              setBackfillOpen(true);
+            }}
+            className="shrink-0 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-medium text-indigo-700 transition hover:bg-indigo-50"
           >
-            {v === "today" ? "Today" : "All entries"}
+            📅 Log a past day
           </button>
-        ))}
+        )}
       </div>
 
       {view === "all" ? (
         <AllEntries logs={optimisticLogs} editable={editable} onDelete={handleDelete} />
       ) : (
-        <>
-      {/* Log date — defaults to today; pick an earlier day to backfill missed records. */}
-      {editable && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-blue-100 bg-white px-4 py-3">
-          <label htmlFor="giving-log-date" className="text-xs font-medium text-ink-light">
-            Logging for
-          </label>
-          <input
-            id="giving-log-date"
-            type="date"
-            value={logDate}
-            min={challenge.start_date}
-            max={today}
-            onChange={(e) => setLogDate(e.target.value || today)}
-            className="rounded-lg border border-blue-100 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
-          />
-          {logDate !== today && (
-            <button
-              type="button"
-              onClick={() => setLogDate(today)}
-              className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
-            >
-              Back to today
-            </button>
-          )}
-        </div>
+        <GiftEditor
+          key={today}
+          date={today}
+          dayLogs={optimisticLogs.filter((l) => l.entry_date === today)}
+          editable={editable}
+          onAdd={handleAdd}
+          onDelete={handleDelete}
+        />
       )}
-      <KindSection
-        kind="given"
-        title="What I gave"
-        accent="text-green-700"
-        placeholder="e.g. Paid for a stranger's coffee"
-        withCategories
-        editable={editable}
-        logs={ofKind("given")}
-        onAdd={handleAdd}
-        onDelete={handleDelete}
-      />
-      <KindSection
-        kind="received"
-        title="What I received"
-        accent="text-blue-700"
-        placeholder="unexpected money, a compliment, a lucky break, peace…"
-        withCategories={false}
-        editable={editable}
-        logs={ofKind("received")}
-        onAdd={handleAdd}
-        onDelete={handleDelete}
-      />
-      <KindSection
-        kind="cognition"
-        title="Cognitions"
-        accent="text-violet-700"
-        placeholder="a realization or inner shift you noticed"
-        withCategories={false}
-        editable={editable}
-        logs={ofKind("cognition")}
-        onAdd={handleAdd}
-        onDelete={handleDelete}
-      />
-        </>
+
+      {backfillOpen && (
+        <DayBackfillModal
+          title="Log a past day"
+          subtitle="Backfill what you gave and received on a day you missed."
+          date={backfillDate}
+          onDateChange={setBackfillDate}
+          minDate={challenge.start_date}
+          maxDate={yesterday}
+          onClose={() => setBackfillOpen(false)}
+        >
+          <GiftEditor
+            key={backfillDate}
+            date={backfillDate}
+            dayLogs={optimisticLogs.filter((l) => l.entry_date === backfillDate)}
+            editable
+            onAdd={handleAdd}
+            onDelete={handleDelete}
+          />
+        </DayBackfillModal>
       )}
 
       <ResetButton />

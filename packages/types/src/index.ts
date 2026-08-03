@@ -9,6 +9,7 @@ export * from "./entities/activity";
 export * from "./entities/activity-move";
 export * from "./entities/cycle";
 export * from "./entities/six-time";
+export * from "./entities/karmic";
 export * from "./entities/giving";
 export * from "./entities/schedule-instance";
 export * from "./entities/contact";

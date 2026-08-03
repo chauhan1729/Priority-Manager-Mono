@@ -7,6 +7,7 @@ export * from "./sync";
 export * from "./activity";
 export * from "./cycle";
 export * from "./six-time";
+export * from "./karmic";
 export * from "./giving";
 export * from "./calendar";
 export * from "./contact";

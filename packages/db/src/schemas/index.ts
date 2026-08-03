@@ -11,6 +11,7 @@ export * from "./activity.schema";
 export * from "./activity-move.schema";
 export * from "./cycle.schema";
 export * from "./six-time.schema";
+export * from "./karmic.schema";
 export * from "./giving.schema";
 export * from "./schedule-instance.schema";
 export * from "./expense.schema";

@@ -51,7 +51,7 @@ export function notificationRoute(type: ReminderType): string {
       return "/year-at-a-glance";
     case "six_time_daily":
     case "six_time_nightly":
-      return "/six-time-book";
+      return "/karmic";
     case "giving_daily":
       return "/giving";
     case "weekly_someday_review":

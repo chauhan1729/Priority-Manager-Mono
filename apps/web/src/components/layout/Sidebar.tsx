@@ -123,7 +123,7 @@ const NAV_ITEMS = [
   { href: "/project-planner",       label: "Project Planner",        Icon: IconProjectPlanner },
   { href: "/meeting-planner",       label: "Meeting Planner",        Icon: IconMeetingPlanner },
   { href: "/communication-planner", label: "Communication Planner",  Icon: IconCommunicationPlanner },
-  { href: "/six-time-book",         label: "Six-Time Book",          Icon: IconActivities },
+  { href: "/karmic",                label: "Karmic Management",       Icon: IconActivities },
   { href: "/giving",                label: "Giving",                 Icon: IconActivities },
   { href: "/settings",              label: "Settings",               Icon: IconSettings },
 ] as const;
