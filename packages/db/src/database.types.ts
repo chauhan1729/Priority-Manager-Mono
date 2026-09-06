@@ -128,6 +128,7 @@ export interface Database {
           auth_provider: AuthProvider;
           timezone: string;
           eod_review_time: string | null; // "HH:MM"
+          last_weekly_review_date: string | null; // ISO date
           created_at: string;
           updated_at: string;
         };
@@ -138,6 +139,7 @@ export interface Database {
           auth_provider?: AuthProvider;
           timezone?: string;
           eod_review_time?: string | null;
+          last_weekly_review_date?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -475,6 +477,7 @@ export interface Database {
           hours_worked: number;
           archived: boolean;
           is_someday: boolean;
+          is_weekly: boolean;
           recurrence_rule: "daily" | "weekly" | "monthly" | null;
           created_at: string;
           updated_at: string;
@@ -497,6 +500,7 @@ export interface Database {
           hours_worked?: number;
           archived?: boolean;
           is_someday?: boolean;
+          is_weekly?: boolean;
           recurrence_rule?: "daily" | "weekly" | "monthly" | null;
           created_at?: string;
           updated_at?: string;

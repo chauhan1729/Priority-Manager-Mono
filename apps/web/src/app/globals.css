@@ -7,7 +7,7 @@
 @layer base {
   :root {
     --background: 250 250 248; /* paper */
-    --foreground: 26 26 46;    /* ink */
+    --foreground: 26 26 46; /* ink */
   }
 
   /* Prevent iOS auto-zoom on input focus (requires ≥16px font-size) */
@@ -22,23 +22,33 @@
   }
 
   /* Spec §7.3: stronger text contrast */
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     @apply font-handwriting text-ink;
   }
 
-  /* Prevent iOS zoom on inputs — all inputs/textareas/selects ≥16px */
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="number"],
-  input[type="date"],
-  input[type="time"],
-  input[type="search"],
-  input[type="url"],
-  input[type="tel"],
-  textarea,
-  select {
-    font-size: max(16px, 1em);
+  /*
+   * Prevent iOS zoom on inputs: Safari zooms the viewport whenever a focused
+   * control is under 16px.
+   *
+   * Matched by exclusion rather than an allow-list of [type="..."] — an <input>
+   * with no type attribute defaults to text in HTML but matches no attribute
+   * selector, so an allow-list silently misses it.
+   *
+   * Scoped to coarse pointers so mouse/trackpad devices keep the compact sizing
+   * the components actually ask for; only touch needs the 16px floor.
+   */
+  @media (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not(
+        [type="color"]
+      ):not([type="file"]):not([type="submit"]):not([type="button"]):not(
+        [type="reset"]
+      ):not([type="image"]),
+    textarea,
+    select {
+      font-size: max(16px, 1em);
+    }
   }
 }
 

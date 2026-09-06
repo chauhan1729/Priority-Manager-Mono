@@ -588,6 +588,54 @@ export interface GivingEntry {
 
 ---
 
+## PHASE 6 — Weekly pool (the middle horizon tier)  *(closes a Phase 1B gap)*
+
+> *"He looks at this list once a week"* (p.15). *"B priorities reviewed weekly, re-dated
+> intentionally."* Phase 1B shipped the weekly-review **reminder** (`weekly_someday_review`) and the
+> `getSomedayReviewDue` helper, but no screen to land on and nowhere to record that a review happened —
+> the helper had zero callers.
+
+### Concept
+Phase 1B left the horizon with two tiers: Someday (parked) and Daily (committed to a day). Everything
+leaving Someday had to be given a calendar day immediately, forcing a scheduling decision at the moment
+of commitment. Phase 6 adds the missing middle: **Someday → Weekly pool → Daily Plan**. A pool item is
+committed to a week but not yet to a day; the user assigns days from the Weekly screen, which is also
+the destination for the weekly-review ritual. Week starts **Sunday**. **Web only.**
+
+### Data model
+- `activities.is_weekly boolean not null default false` — mirrors `is_someday`. While true,
+  `activity_date` is a soft **week anchor**, not a due date.
+- DB check constraint `not (is_someday and is_weekly)` — exactly one horizon tier.
+- `profiles.last_weekly_review_date date` — feeds `getSomedayReviewDue`.
+- Migration `20260905000001_weekly_pool_and_review.sql`.
+- Work→project rule is skipped while `is_weekly`, and **re-applied on day assignment** (same shape as
+  the someday exemption).
+
+### Domain logic
+- `addDaysISO` / `daysBetweenISO` moved from `activity/` into `time-rules.ts` and exported (the week
+  helpers need them; duplicating date math is how drift bugs start).
+- New `packages/domain/src/week/`: `WEEK_START_DAY` (Sunday), `weekStartISO`, `weekEndISO`,
+  `addWeeksISO`, `weekDayISOs`, `isDateInWeek`, `isInWeeklyPool`, `strandedWeeklyItems`.
+  `weekStartISO`/`weekEndISO` take a `startDay` param so `filterExpensesForWeek`'s Monday-start
+  reporting week can adopt them later without a behaviour change.
+- `isPendingActivity`, `isWithinHorizon`, `partitionByHorizon` (now returns a `weekly` bucket) and both
+  activity nudges exclude pool items — a week anchor in the past does not make an item overdue.
+
+### Web UI
+`/weekly?week=YYYY-MM-DD` + `components/weekly/WeeklyView.tsx`: review-due banner with **Mark review
+done**; the pool with quick-add and **Sun–Sat day chips** per row (past days disabled via
+`canCreateActivityOnDate`, each chip showing that day's A count); **Still open from before** (stranded
+pool items + overdue dated activities → "move to this week"); **Someday — review these** → "pull into
+this week". Past weeks are read-only. Nav entry added after Daily Plan.
+
+### Risks
+- **Deployment ordering is load-bearing.** `/daily-plan` and the A/B Activities screens now filter
+  `.eq("is_weekly", false)`. PostgREST rejects a filter on a column that doesn't exist, so the
+  migration must be applied **before or with** this code — otherwise the home screen breaks. This is
+  unlike earlier phases, where an undeployed migration only hid a new feature.
+- Pool items are excluded at four query sites; missing one would surface an item on a day it was never
+  assigned to.
+
 ## Cross-cutting deliverables (every phase)
 - **Types + Zod + DB migration** updated together (schema-first).
 - **Domain tests** for new rules; extend sync-rule / past-time / recurrence / overlap tests where touched.
@@ -655,7 +703,15 @@ export interface GivingEntry {
    continue→continuous) + actions + nav. 481 domain tests pass; all 5 packages typecheck clean. Needs
    migration `…0010`.
 
-**ALL PLANNED PHASES (0A, 0B, 1A, 1B, 2A, 2B, 3, 4, 5) ARE BUILT.** Remaining: deploy migrations; deferred
+9. **Phase 6 (Weekly pool)** — ✅ **BUILT** (web). `activities.is_weekly` + single-tier check constraint +
+   `profiles.last_weekly_review_date` (migration `20260905000001`, type/Zod/database.types); `addDaysISO`/
+   `daysBetweenISO` promoted into `time-rules`; new domain `week` module (7 helpers) + **22 tests**;
+   horizon/pending/nudge rules taught to exclude pool items; `/weekly` screen + actions (quick-add,
+   pull-into-week, assign-to-day, move-to-pool, park-to-someday, mark-review-done) + nav entry.
+   549 domain tests pass; all 7 workspace targets typecheck clean; web build clean.
+   **Deploy migration `20260905000001` before this code ships** — see the Phase 6 risk note.
+
+**ALL PLANNED PHASES (0A, 0B, 1A, 1B, 2A, 2B, 3, 4, 5, 6) ARE BUILT.** Remaining: deploy migrations; deferred
 polish (settings UIs for the new reminders/slot-times, buffer-warning UI in the schedule modal).
 
 ## Decisions — resolved

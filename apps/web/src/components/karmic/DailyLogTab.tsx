@@ -9,11 +9,22 @@ import { DayBackfillModal, isoAddDays } from "@/components/ui/DayBackfillModal";
 
 type Tone = "best" | "worst";
 
-const TONES: Record<Tone, { panel: string; label: string; field: string; button: string; badge: string; row: string }> = {
+const TONES: Record<
+  Tone,
+  {
+    panel: string;
+    label: string;
+    field: string;
+    button: string;
+    badge: string;
+    row: string;
+  }
+> = {
   best: {
     panel: "border-emerald-200/70 bg-emerald-50/40",
     label: "text-emerald-700",
-    field: "border-emerald-200 bg-white focus:border-emerald-400 focus:ring-emerald-100",
+    field:
+      "border-emerald-200 bg-white focus:border-emerald-400 focus:ring-emerald-100",
     button: "bg-emerald-600 hover:bg-emerald-700",
     badge: "bg-emerald-100 text-emerald-700",
     row: "border-emerald-100",
@@ -28,7 +39,12 @@ const TONES: Record<Tone, { panel: string; label: string; field: string; button:
   },
 };
 
-const TONE_META: { tone: Tone; title: string; hint: string; placeholder: string }[] = [
+const TONE_META: {
+  tone: Tone;
+  title: string;
+  hint: string;
+  placeholder: string;
+}[] = [
   {
     tone: "best",
     title: "✨ Best of the day",
@@ -52,11 +68,23 @@ function prettyDate(iso: string): string {
 }
 
 // One saved reflection — wraps (not truncates) so longer notes stay readable.
-function ItemRow({ text, tone, onDelete }: { text: string; tone: Tone; onDelete?: (() => void) | undefined }) {
+function ItemRow({
+  text,
+  tone,
+  onDelete,
+}: {
+  text: string;
+  tone: Tone;
+  onDelete?: (() => void) | undefined;
+}) {
   const s = TONES[tone];
   return (
-    <div className={`flex items-start justify-between gap-2 rounded-lg border ${s.row} bg-white px-3 py-2`}>
-      <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-ink">{text}</p>
+    <div
+      className={`flex items-start justify-between gap-2 rounded-lg border ${s.row} bg-white px-3 py-2`}
+    >
+      <p className="min-w-0 flex-1 whitespace-pre-wrap break-words text-sm text-ink">
+        {text}
+      </p>
       {onDelete && (
         <button
           onClick={onDelete}
@@ -107,14 +135,23 @@ function ToneSection({
           <p className="text-[11px] text-ink-light">{hint}</p>
         </div>
         {items.length > 0 && (
-          <span className={`rounded-full ${s.badge} px-2 py-0.5 text-[11px] font-semibold`}>{items.length}</span>
+          <span
+            className={`rounded-full ${s.badge} px-2 py-0.5 text-[11px] font-semibold`}
+          >
+            {items.length}
+          </span>
         )}
       </div>
 
       {items.length > 0 && (
         <div className="space-y-1.5">
           {items.map((v, i) => (
-            <ItemRow key={i} text={v} tone={tone} onDelete={() => onDelete(i)} />
+            <ItemRow
+              key={i}
+              text={v}
+              tone={tone}
+              onDelete={() => onDelete(i)}
+            />
           ))}
         </div>
       )}
@@ -126,7 +163,7 @@ function ToneSection({
           maxLength={300}
           placeholder={placeholder}
           onKeyDown={(e) => e.key === "Enter" && text.trim() && add()}
-          className={`flex-1 rounded-lg border ${s.field} px-3 py-2 text-sm text-ink placeholder:text-ink-light/50 focus:outline-none focus:ring-2`}
+          className={`min-w-0 flex-1 rounded-lg border ${s.field} px-3 py-2 text-sm text-ink placeholder:text-ink-light/50 focus:outline-none focus:ring-2`}
         />
         <button
           onClick={add}
@@ -158,14 +195,23 @@ function History({ reviews }: { reviews: SixTimeNightlyReview[] }) {
   return (
     <div className="space-y-4">
       {nights.map((r) => (
-        <div key={r.id} className="space-y-3 rounded-2xl border border-blue-100 bg-white p-4">
-          <p className="text-sm font-medium text-ink">{prettyDate(r.review_date)}</p>
+        <div
+          key={r.id}
+          className="space-y-3 rounded-2xl border border-blue-100 bg-white p-4"
+        >
+          <p className="text-sm font-medium text-ink">
+            {prettyDate(r.review_date)}
+          </p>
           {TONE_META.map(({ tone, title }) => {
             const items = tone === "best" ? r.best : r.worst;
             if (!items || items.length === 0) return null;
             return (
               <div key={tone} className="space-y-1.5">
-                <h4 className={`text-[11px] font-semibold uppercase tracking-wide ${TONES[tone].label}`}>{title}</h4>
+                <h4
+                  className={`text-[11px] font-semibold uppercase tracking-wide ${TONES[tone].label}`}
+                >
+                  {title}
+                </h4>
                 {items.map((v, i) => (
                   <ItemRow key={i} text={v} tone={tone} />
                 ))}
@@ -211,7 +257,11 @@ function BestWorstEditor({
     },
   );
 
-  function persist(mutation: Mutation, nextBest: string[], nextWorst: string[]) {
+  function persist(
+    mutation: Mutation,
+    nextBest: string[],
+    nextWorst: string[],
+  ) {
     start(async () => {
       applyOptimistic(mutation);
       const res = await saveNightlyReview(date, nextBest, nextWorst, today);
@@ -220,13 +270,24 @@ function BestWorstEditor({
   }
 
   function addItem(tone: Tone, text: string) {
-    if (tone === "best") persist({ kind: "add", tone, text }, [...best, text], worst);
+    if (tone === "best")
+      persist({ kind: "add", tone, text }, [...best, text], worst);
     else persist({ kind: "add", tone, text }, best, [...worst, text]);
   }
 
   function deleteItem(tone: Tone, index: number) {
-    if (tone === "best") persist({ kind: "delete", tone, index }, best.filter((_, i) => i !== index), worst);
-    else persist({ kind: "delete", tone, index }, best, worst.filter((_, i) => i !== index));
+    if (tone === "best")
+      persist(
+        { kind: "delete", tone, index },
+        best.filter((_, i) => i !== index),
+        worst,
+      );
+    else
+      persist(
+        { kind: "delete", tone, index },
+        best,
+        worst.filter((_, i) => i !== index),
+      );
   }
 
   return (
@@ -252,7 +313,13 @@ function BestWorstEditor({
   );
 }
 
-export function DailyLogTab({ today, reviews }: { today: string; reviews: SixTimeNightlyReview[] }) {
+export function DailyLogTab({
+  today,
+  reviews,
+}: {
+  today: string;
+  reviews: SixTimeNightlyReview[];
+}) {
   const [view, setView] = useState<"log" | "history">("log");
   const yesterday = isoAddDays(today, -1);
   const [backfillOpen, setBackfillOpen] = useState(false);
@@ -263,13 +330,15 @@ export function DailyLogTab({ today, reviews }: { today: string; reviews: SixTim
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-lg border border-blue-100 bg-white p-0.5 text-sm">
+        <div className="flex w-fit max-w-full gap-1 overflow-x-auto whitespace-nowrap rounded-lg border border-blue-100 bg-white p-0.5 text-sm scrollbar-hide">
           {(["log", "history"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`rounded-md px-3 py-1 font-medium transition ${
-                view === v ? "bg-indigo-600 text-white" : "text-ink-light hover:bg-blue-50"
+                view === v
+                  ? "bg-indigo-600 text-white"
+                  : "text-ink-light hover:bg-blue-50"
               }`}
             >
               {v === "log" ? "Tonight" : "History"}
@@ -290,7 +359,12 @@ export function DailyLogTab({ today, reviews }: { today: string; reviews: SixTim
       {view === "history" ? (
         <History reviews={reviews} />
       ) : (
-        <BestWorstEditor key={today} date={today} review={byDate.get(today) ?? null} today={today} />
+        <BestWorstEditor
+          key={today}
+          date={today}
+          review={byDate.get(today) ?? null}
+          today={today}
+        />
       )}
 
       {backfillOpen && (

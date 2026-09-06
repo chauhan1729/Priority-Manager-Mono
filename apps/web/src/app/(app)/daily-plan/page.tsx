@@ -52,13 +52,15 @@ export default async function DailyPlanPage({ searchParams }: Props) {
     { data: prevActivities },
     { data: projects },
   ] = await Promise.all([
-    // Activities for selected date (exclude Someday — those live only on /someday)
+    // Activities for selected date. Someday items live only on /someday, and weekly-pool items
+    // only on /weekly — their activity_date is a week anchor, not a commitment to this day.
     supabase
       .from("activities")
       .select("*")
       .eq("user_id", user.id)
       .eq("activity_date", selectedDate)
       .eq("is_someday", false)
+      .eq("is_weekly", false)
       .order("created_at", { ascending: true }),
 
     // Schedule instances for selected date (timeline blocks)
@@ -85,13 +87,14 @@ export default async function DailyPlanPage({ searchParams }: Props) {
       .in("event_type", ["appointment", "other"])
       .or(`date.eq.${selectedDate},recurrence_rule.not.is.null`),
 
-    // Previous day's carry-forward eligible activities (exclude Someday)
+    // Previous day's carry-forward eligible activities (exclude Someday + weekly pool)
     supabase
       .from("activities")
       .select("*")
       .eq("user_id", user.id)
       .eq("activity_date", previousDate)
       .eq("is_someday", false)
+      .eq("is_weekly", false)
       .in("status", ["not_started", "postponed"]),
 
     // Active projects for name display

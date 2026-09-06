@@ -18,6 +18,22 @@ function IconDailyPlan() {
   );
 }
 
+function IconWeekly() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5 shrink-0" aria-hidden="true">
+      <rect x="3" y="4.6" width="14" height="12.4" rx="2" stroke="currentColor" strokeWidth="1.5"/>
+      <path d="M7 2.6V6M13 2.6V6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+      <path
+        d="M8.3 9.6H12L9.9 14.2"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function IconActivities() {
   return (
     <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5 shrink-0" aria-hidden="true">
@@ -115,6 +131,7 @@ function IconSettings() {
 
 const NAV_ITEMS = [
   { href: "/daily-plan",            label: "Daily Plan",             Icon: IconDailyPlan },
+  { href: "/weekly",                label: "Weekly",                 Icon: IconWeekly },
   { href: "/activities/a",          label: "A Activities",           Icon: IconActivities },
   { href: "/activities/b",          label: "B Activities",           Icon: IconActivities },
   { href: "/someday",               label: "Someday",                Icon: IconMonthlyPriorities },

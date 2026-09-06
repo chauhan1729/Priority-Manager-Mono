@@ -34,6 +34,7 @@ const activityBaseSchema = z.object({
   origin_type: activityOriginTypeSchema.nullable().default(null),
   moved_from_date: isoDateSchema.nullable(),
   is_someday: z.boolean().default(false),
+  is_weekly: z.boolean().default(false),
   created_at: isoDatetimeSchema,
   updated_at: isoDatetimeSchema,
 });
@@ -48,10 +49,24 @@ export const activitySchema = activityBaseSchema
         path: ["remaining_minutes"],
       });
     }
+    // An activity sits in exactly one horizon tier: someday, weekly pool, or a specific day.
+    if (data.is_someday && data.is_weekly) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "An activity cannot be both someday and weekly",
+        path: ["is_weekly"],
+      });
+    }
     // Work activities must have a linked project (spec §10.5).
     // Phase 1B: someday items are parked / not yet committed, so they're exempt until pulled
-    // into the horizon (at which point the rule re-applies).
-    if (data.section_type === "work" && !data.is_someday && !data.linked_project_id) {
+    // into the horizon (at which point the rule re-applies). Weekly-pool items are exempt on the
+    // same grounds — the rule re-applies when they're assigned to a day.
+    if (
+      data.section_type === "work" &&
+      !data.is_someday &&
+      !data.is_weekly &&
+      !data.linked_project_id
+    ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: "Work activities require a linked_project_id",

@@ -20,7 +20,12 @@ interface Props {
 
 // ---------------------------------------------------------------------------
 
-export function UpcomingRecurringPanel({ recurringExpenses, today, currency, onEdit }: Props) {
+export function UpcomingRecurringPanel({
+  recurringExpenses,
+  today,
+  currency,
+  onEdit,
+}: Props) {
   // For each recurring expense, compute up to 2 upcoming dates
   const items = recurringExpenses
     .map((expense) => ({
@@ -34,7 +39,9 @@ export function UpcomingRecurringPanel({ recurringExpenses, today, currency, onE
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <p className="text-xs font-medium text-ink">Upcoming recurring payments</p>
+        <p className="text-xs font-medium text-ink">
+          Upcoming recurring payments
+        </p>
         <div className="flex-1 h-px bg-blue-50" />
       </div>
 
@@ -46,10 +53,14 @@ export function UpcomingRecurringPanel({ recurringExpenses, today, currency, onE
           >
             {/* Header row */}
             <div className="flex items-start justify-between gap-2 mb-2">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-ink truncate">{expense.title}</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-ink truncate">
+                  {expense.title}
+                </p>
                 {expense.merchant_payee && (
-                  <p className="text-xs text-ink-light">{expense.merchant_payee}</p>
+                  <p className="text-xs text-ink-light">
+                    {expense.merchant_payee}
+                  </p>
                 )}
               </div>
               <button
@@ -68,7 +79,11 @@ export function UpcomingRecurringPanel({ recurringExpenses, today, currency, onE
               </p>
               <span className="rounded-full bg-violet-100 px-2 py-0.5 text-xs text-violet-700">
                 ↻{" "}
-                {EXPENSE_RECURRENCE_LABELS[expense.recurrence_rule as ExpenseRecurrenceRule]}
+                {
+                  EXPENSE_RECURRENCE_LABELS[
+                    expense.recurrence_rule as ExpenseRecurrenceRule
+                  ]
+                }
               </span>
               <span className="rounded-full bg-gray-50 px-2 py-0.5 text-xs text-gray-600">
                 {EXPENSE_CATEGORY_LABELS[expense.category]}

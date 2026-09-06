@@ -48,9 +48,12 @@ function PrincipleRow({ principle }: { principle: KarmicEthicsPrinciple }) {
           value={label}
           onChange={(e) => setLabel(e.target.value)}
           maxLength={300}
-          className="flex-1 rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-amber-400 focus:outline-none"
+          className="min-w-0 flex-1 rounded-md border border-amber-200 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-amber-400 focus:outline-none"
         />
-        <button onClick={save} className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700">
+        <button
+          onClick={save}
+          className="rounded-md bg-amber-600 px-3 py-1 text-xs font-medium text-white hover:bg-amber-700"
+        >
           Save
         </button>
         <button
@@ -89,7 +92,9 @@ function PrincipleRow({ principle }: { principle: KarmicEthicsPrinciple }) {
 }
 
 function CodeEditor({ principles }: { principles: KarmicEthicsPrinciple[] }) {
-  const active = principles.filter((p) => p.active).sort((a, b) => a.sort_order - b.sort_order);
+  const active = principles
+    .filter((p) => p.active)
+    .sort((a, b) => a.sort_order - b.sort_order);
   const [text, setText] = useState("");
   const [, start] = useTransition();
 
@@ -108,7 +113,8 @@ function CodeEditor({ principles }: { principles: KarmicEthicsPrinciple[] }) {
       <div>
         <h3 className="text-sm font-semibold text-amber-800">My code</h3>
         <p className="text-[11px] text-ink-light">
-          The four or five lines you choose to keep — edit them to make them your own.
+          The four or five lines you choose to keep — edit them to make them
+          your own.
         </p>
       </div>
       <ul className="space-y-1.5">
@@ -123,7 +129,7 @@ function CodeEditor({ principles }: { principles: KarmicEthicsPrinciple[] }) {
           maxLength={300}
           placeholder="Add a principle…"
           onKeyDown={(e) => e.key === "Enter" && text.trim() && add()}
-          className="flex-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-sm text-ink placeholder:text-ink-light/50 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
+          className="min-w-0 flex-1 rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-sm text-ink placeholder:text-ink-light/50 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-100"
         />
         <button
           onClick={add}
@@ -156,7 +162,9 @@ function History({
   if (dates.length === 0) {
     return (
       <div className="rounded-2xl border border-blue-100 bg-white p-8 text-center">
-        <p className="text-sm text-ink-light">No nightly checks recorded yet.</p>
+        <p className="text-sm text-ink-light">
+          No nightly checks recorded yet.
+        </p>
       </div>
     );
   }
@@ -164,19 +172,24 @@ function History({
   return (
     <div className="space-y-4">
       {dates.map((d) => (
-        <div key={d} className="space-y-2 rounded-2xl border border-blue-100 bg-white p-4">
+        <div
+          key={d}
+          className="space-y-2 rounded-2xl border border-blue-100 bg-white p-4"
+        >
           <p className="text-sm font-medium text-ink">{prettyDate(d)}</p>
-          {byDate
-            .get(d)!
-            .map((c) => (
-              <div key={c.id} className="flex items-start gap-2 text-sm">
-                <span className={c.kept ? "text-emerald-600" : "text-rose-600"}>{c.kept ? "✓" : "✗"}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="text-ink">{labelById.get(c.principle_id) ?? "—"}</span>
-                  {c.note && <span className="text-ink-light"> — {c.note}</span>}
+          {byDate.get(d)!.map((c) => (
+            <div key={c.id} className="flex items-start gap-2 text-sm">
+              <span className={c.kept ? "text-emerald-600" : "text-rose-600"}>
+                {c.kept ? "✓" : "✗"}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="text-ink">
+                  {labelById.get(c.principle_id) ?? "—"}
                 </span>
-              </div>
-            ))}
+                {c.note && <span className="text-ink-light"> — {c.note}</span>}
+              </span>
+            </div>
+          ))}
         </div>
       ))}
     </div>
@@ -226,10 +239,14 @@ function CheckRow({
       <input
         value={note}
         onChange={(e) => setNote(e.target.value)}
-        onBlur={() => chosen && note !== (checkin?.note ?? "") && onSet(checkin!.kept, note)}
+        onBlur={() =>
+          chosen && note !== (checkin?.note ?? "") && onSet(checkin!.kept, note)
+        }
         disabled={!chosen}
         maxLength={300}
-        placeholder={chosen ? "Add a note (optional)…" : "Choose Kept or Slipped first"}
+        placeholder={
+          chosen ? "Add a note (optional)…" : "Choose Kept or Slipped first"
+        }
         className="w-full rounded-md border border-amber-100 bg-white px-2.5 py-1 text-xs text-ink placeholder:text-ink-light/50 focus:border-amber-300 focus:outline-none disabled:bg-blue-50/40 disabled:placeholder:text-ink-light/40"
       />
     </div>
@@ -259,7 +276,9 @@ function EthicsCheckEditor({
       const existing = state.find((c) => c.principle_id === m.principleId);
       if (existing) {
         return state.map((c) =>
-          c.principle_id === m.principleId ? { ...c, kept: m.kept, note: m.note || null } : c,
+          c.principle_id === m.principleId
+            ? { ...c, kept: m.kept, note: m.note || null }
+            : c,
         );
       }
       const row: KarmicEthicsCheckin = {
@@ -281,7 +300,13 @@ function EthicsCheckEditor({
   function handleSet(principleId: string, kept: boolean, note: string) {
     start(async () => {
       applyOptimistic({ principleId, kept, note });
-      const res = await saveEthicsCheckin(date, principleId, kept, note || null, today);
+      const res = await saveEthicsCheckin(
+        date,
+        principleId,
+        kept,
+        note || null,
+        today,
+      );
       if (res?.error) showToast(res.error, "error");
     });
   }
@@ -289,11 +314,17 @@ function EthicsCheckEditor({
   return (
     <section className="space-y-2 rounded-2xl border border-amber-200/70 bg-amber-50/30 p-4">
       <div>
-        <h3 className="text-sm font-semibold text-amber-800">Tonight's check</h3>
-        <p className="text-[11px] text-ink-light">Kept it or slipped? No guilt — just an honest seed.</p>
+        <h3 className="text-sm font-semibold text-amber-800">
+          Tonight's check
+        </h3>
+        <p className="text-[11px] text-ink-light">
+          Kept it or slipped? No guilt — just an honest seed.
+        </p>
       </div>
       {rows.length === 0 ? (
-        <p className="px-1 py-4 text-center text-sm text-ink-light">Add a principle in your code to check it here.</p>
+        <p className="px-1 py-4 text-center text-sm text-ink-light">
+          Add a principle in your code to check it here.
+        </p>
       ) : (
         <div className="space-y-1.5">
           {rows.map(({ principle, checkin }) => (
@@ -327,13 +358,15 @@ export function EthicsTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-lg border border-blue-100 bg-white p-0.5 text-sm">
+        <div className="flex w-fit max-w-full gap-1 overflow-x-auto whitespace-nowrap rounded-lg border border-blue-100 bg-white p-0.5 text-sm scrollbar-hide">
           {(["today", "history"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`rounded-md px-3 py-1 font-medium transition ${
-                view === v ? "bg-indigo-600 text-white" : "text-ink-light hover:bg-blue-50"
+                view === v
+                  ? "bg-indigo-600 text-white"
+                  : "text-ink-light hover:bg-blue-50"
               }`}
             >
               {v === "today" ? "Tonight" : "History"}
@@ -356,7 +389,13 @@ export function EthicsTab({
       ) : (
         <>
           <CodeEditor principles={principles} />
-          <EthicsCheckEditor key={today} date={today} principles={principles} checkins={checkins} today={today} />
+          <EthicsCheckEditor
+            key={today}
+            date={today}
+            principles={principles}
+            checkins={checkins}
+            today={today}
+          />
         </>
       )}
 

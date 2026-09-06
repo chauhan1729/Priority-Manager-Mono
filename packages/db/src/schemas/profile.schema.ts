@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { isoDatetimeSchema, timeSchema, uuidSchema } from "./common";
+import { isoDateSchema, isoDatetimeSchema, timeSchema, uuidSchema } from "./common";
 
 export const profileSchema = z.object({
   id: uuidSchema,
@@ -9,6 +9,7 @@ export const profileSchema = z.object({
   auth_provider: z.enum(["email", "google", "apple"]),
   timezone: z.string().min(1),
   eod_review_time: timeSchema.nullable(),
+  last_weekly_review_date: isoDateSchema.nullable(),
   created_at: isoDatetimeSchema,
   updated_at: isoDatetimeSchema,
 });
@@ -20,6 +21,7 @@ export const insertProfileSchema = profileSchema
     auth_provider: z.enum(["email", "google", "apple"]).default("email"),
     timezone: z.string().default("UTC"),
     eod_review_time: timeSchema.nullable().default(null),
+    last_weekly_review_date: isoDateSchema.nullable().default(null),
   });
 
 export const updateProfileSchema = insertProfileSchema

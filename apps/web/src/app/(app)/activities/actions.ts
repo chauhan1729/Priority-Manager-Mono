@@ -3,7 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { buildActivityMove, canCreateActivityOnDate } from "@pm/domain";
+import {
+  buildActivityMove,
+  canCreateActivityOnDate,
+  localTodayForTimezone,
+  weekStartISO,
+} from "@pm/domain";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { invalidatePendingOutbox } from "@/lib/notifications/invalidate-outbox";
 
@@ -52,6 +57,7 @@ function revalidateAll(linkedProjectId?: string | null) {
   revalidatePath("/activities/a");
   revalidatePath("/activities/b");
   revalidatePath("/daily-plan");
+  revalidatePath("/weekly");
   revalidatePath("/someday");
   revalidatePath("/project-planner");
   if (linkedProjectId) revalidatePath(`/project-planner/${linkedProjectId}`);
@@ -84,7 +90,9 @@ export async function getActivityCycles(
 
   const { data, error } = await supabase
     .from("schedule_instances")
-    .select("id, schedule_date, start_at, end_at, locked_minutes, status_snapshot, note")
+    .select(
+      "id, schedule_date, start_at, end_at, locked_minutes, status_snapshot, note",
+    )
     .eq("user_id", user.id)
     .eq("source_type", "activity")
     .eq("source_activity_id", activityId)
@@ -114,11 +122,15 @@ export async function createActivity(
   }
 
   const sectionType = (formData.get("section_type") as string) || "work";
-  const delegatedContactId = (formData.get("delegated_contact_id") as string) || null;
+  const delegatedContactId =
+    (formData.get("delegated_contact_id") as string) || null;
 
   // Delegated activities require a contact to be selected
   if (sectionType === "delegated" && !delegatedContactId) {
-    return { error: "Delegated activities require a contact. Select one from the list." };
+    return {
+      error:
+        "Delegated activities require a contact. Select one from the list.",
+    };
   }
 
   const estimatedHoursRaw = formData.get("estimated_hours") as string;
@@ -157,9 +169,10 @@ export async function createActivity(
 
   const recurrenceRule = (formData.get("recurrence_rule") as string) || null;
   const validRecurrence = ["daily", "weekly", "monthly"] as const;
-  type RecurrenceRule = typeof validRecurrence[number];
+  type RecurrenceRule = (typeof validRecurrence)[number];
   const typedRecurrence: RecurrenceRule | null =
-    recurrenceRule && (validRecurrence as readonly string[]).includes(recurrenceRule)
+    recurrenceRule &&
+    (validRecurrence as readonly string[]).includes(recurrenceRule)
       ? (recurrenceRule as RecurrenceRule)
       : null;
 
@@ -172,7 +185,8 @@ export async function createActivity(
     remaining_minutes: estimatedMinutes,
     status: "not_started" as const,
     linked_project_id: linkedProjectId,
-    delegated_contact_id: sectionType === "delegated" ? delegatedContactId : null,
+    delegated_contact_id:
+      sectionType === "delegated" ? delegatedContactId : null,
     note: (formData.get("note") as string) || null,
     origin_type: "manual" as const,
     moved_from_date: null,
@@ -427,7 +441,8 @@ export async function bulkCarryForwardActivities(
     .eq("user_id", user.id);
 
   for (const act of existing ?? []) {
-    const movedFromDate = (act.moved_from_date as string | null) ?? (act.activity_date as string);
+    const movedFromDate =
+      (act.moved_from_date as string | null) ?? (act.activity_date as string);
     await supabase
       .from("activities")
       .update({
@@ -676,16 +691,109 @@ export async function archiveActivity(
 // ---------------------------------------------------------------------------
 
 /** Park an activity on the Someday list (outside the horizon). */
-export async function moveToSomeday(activityId: string): Promise<{ error?: string }> {
+export async function moveToSomeday(
+  activityId: string,
+): Promise<{ error?: string }> {
   const { supabase, user } = await getAuthenticatedUser();
   if (!user) return { error: "Not authenticated." };
   const { error } = await supabase
     .from("activities")
-    .update({ is_someday: true, updated_at: new Date().toISOString() })
+    .update({
+      is_someday: true,
+      is_weekly: false,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", activityId)
     .eq("user_id", user.id);
   if (error) return { error: error.message };
   revalidateAll();
+  return {};
+}
+
+/**
+ * Stage a dated activity in this week's pool — it keeps its commitment to the week but gives up
+ * its day, to be re-assigned from the Weekly screen. Always lands in the current week.
+ */
+export async function moveToWeek(
+  activityId: string,
+): Promise<{ error?: string }> {
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("timezone")
+    .eq("id", user.id)
+    .single();
+  const weekStart = weekStartISO(
+    localTodayForTimezone(profile?.timezone ?? "UTC"),
+  );
+
+  const { error } = await supabase
+    .from("activities")
+    .update({
+      is_weekly: true,
+      is_someday: false,
+      activity_date: weekStart, // soft week anchor, not a commitment to that day
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", activityId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+  revalidateAll();
+  return {};
+}
+
+/**
+ * Set or clear the project on a parked item (Someday or weekly pool). Both lists defer the
+ * work→project requirement, so this is how an item satisfies it before being given a day.
+ * Mirrors the quick-add forms: a project makes it a work activity, clearing one makes it unplanned.
+ */
+export async function setActivityProject(
+  activityId: string,
+  projectId: string | null,
+): Promise<{ error?: string }> {
+  const { supabase, user } = await getAuthenticatedUser();
+  if (!user) return { error: "Not authenticated." };
+
+  const { data: activity } = await supabase
+    .from("activities")
+    .select("id, section_type, is_someday, is_weekly")
+    .eq("id", activityId)
+    .eq("user_id", user.id)
+    .single();
+  if (!activity) return { error: "Activity not found." };
+  if (!activity.is_someday && !activity.is_weekly) {
+    return { error: "Only parked items can have their project changed here." };
+  }
+
+  if (projectId) {
+    const { data: project } = await supabase
+      .from("projects")
+      .select("id")
+      .eq("id", projectId)
+      .eq("user_id", user.id)
+      .single();
+    if (!project) return { error: "Project not found." };
+  }
+
+  // Only flip between work and unplanned; leave outside/delegated items in their section.
+  let sectionType = activity.section_type;
+  if (projectId && sectionType === "unplanned") sectionType = "work";
+  else if (!projectId && sectionType === "work") sectionType = "unplanned";
+
+  const { error } = await supabase
+    .from("activities")
+    .update({
+      linked_project_id: projectId,
+      section_type: sectionType,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", activityId)
+    .eq("user_id", user.id);
+  if (error) return { error: error.message };
+
+  revalidateAll(projectId);
   return {};
 }
 
@@ -704,7 +812,11 @@ export async function pullIntoHorizon(
   if (!user) return { error: "Not authenticated." };
   const { error } = await supabase
     .from("activities")
-    .update({ is_someday: false, activity_date: toDateISO, updated_at: new Date().toISOString() })
+    .update({
+      is_someday: false,
+      activity_date: toDateISO,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", activityId)
     .eq("user_id", user.id);
   if (error) return { error: error.message };

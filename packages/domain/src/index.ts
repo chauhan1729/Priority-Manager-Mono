@@ -5,6 +5,7 @@ export * from "./notification";
 export * from "./notification/outbox";
 export * from "./sync";
 export * from "./activity";
+export * from "./week";
 export * from "./cycle";
 export * from "./six-time";
 export * from "./karmic";

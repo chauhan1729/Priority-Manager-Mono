@@ -22,7 +22,10 @@ interface Props {
 function liveSeconds(cycle: Cycle, nowMs: number): number {
   const banked = cycle.elapsed_focus_minutes * 60;
   if (cycle.phase === "focus" && cycle.segment_started_at) {
-    const seg = Math.max(0, (nowMs - new Date(cycle.segment_started_at).getTime()) / 1000);
+    const seg = Math.max(
+      0,
+      (nowMs - new Date(cycle.segment_started_at).getTime()) / 1000,
+    );
     return banked + seg;
   }
   return banked;
@@ -77,7 +80,9 @@ export function CyclePanel({ activity, onClose }: Props) {
 
   const elapsed = cycle ? liveSeconds(cycle, nowMs) : 0;
   const showEnergy =
-    cycle && !energyDismissed && shouldPromptEnergyChange(cycle, new Date(nowMs).toISOString());
+    cycle &&
+    !energyDismissed &&
+    shouldPromptEnergyChange(cycle, new Date(nowMs).toISOString());
   const isCompleted = cycle?.phase === "completed";
 
   return (
@@ -90,25 +95,44 @@ export function CyclePanel({ activity, onClose }: Props) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-light">Cycle</p>
-            <h3 className="truncate text-sm font-medium text-ink">{activity.title}</h3>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-light">
+              Cycle
+            </p>
+            <h3 className="truncate text-sm font-medium text-ink">
+              {activity.title}
+            </h3>
           </div>
-          <button onClick={onClose} className="text-ink-light hover:text-ink" aria-label="Close">
+          <button
+            onClick={onClose}
+            className="text-ink-light hover:text-ink"
+            aria-label="Close"
+          >
             ✕
           </button>
         </div>
 
         {loading || !cycle ? (
-          <p className="py-10 text-center text-sm text-ink-light">Starting cycle…</p>
+          <p className="py-10 text-center text-sm text-ink-light">
+            Starting cycle…
+          </p>
         ) : isCompleted ? (
           <div className="py-8 text-center">
             {/* Notebook-style completion stamp (handwritten accent) */}
-            <p className="font-handwriting text-2xl text-green-600">Cycle completed ✓</p>
-            <p className="mt-1 text-sm text-ink-light">
-              {cycle.elapsed_focus_minutes} min of focus{cycle.break_count > 0 ? ` · ${cycle.break_count} break${cycle.break_count === 1 ? "" : "s"}` : ""}
+            <p className="font-handwriting text-2xl text-green-600">
+              Cycle completed ✓
             </p>
-            {cycle.note && <p className="mt-2 text-xs italic text-ink-light">“{cycle.note}”</p>}
+            <p className="mt-1 text-sm text-ink-light">
+              {cycle.elapsed_focus_minutes} min of focus
+              {cycle.break_count > 0
+                ? ` · ${cycle.break_count} break${cycle.break_count === 1 ? "" : "s"}`
+                : ""}
+            </p>
+            {cycle.note && (
+              <p className="mt-2 text-xs italic text-ink-light">
+                “{cycle.note}”
+              </p>
+            )}
             <button
               onClick={onClose}
               className="mt-5 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
@@ -120,18 +144,29 @@ export function CyclePanel({ activity, onClose }: Props) {
           <>
             {/* Count-up display */}
             <div className="py-6 text-center">
-              <p className="font-mono text-5xl tabular-nums text-ink">{fmt(elapsed)}</p>
+              <p className="font-mono text-5xl tabular-nums text-ink">
+                {fmt(elapsed)}
+              </p>
               <p className="mt-1 text-xs text-ink-light">
-                {cycle.phase === "break" ? "On a break — resume when ready" : "Focusing"}
-                {cycle.soft_target_minutes ? ` · ~${cycle.soft_target_minutes}m target` : ""}
+                {cycle.phase === "break"
+                  ? "On a break — resume when ready"
+                  : "Focusing"}
+                {cycle.soft_target_minutes
+                  ? ` · ~${cycle.soft_target_minutes}m target`
+                  : ""}
               </p>
             </div>
 
             {/* ~20-min energy-change nudge */}
             {showEnergy && (
               <div className="mb-3 flex items-center justify-between gap-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                <span>Change your energy — stand up, move, or switch tasks.</span>
-                <button onClick={() => setEnergyDismissed(true)} className="text-amber-600 hover:text-amber-800">
+                <span>
+                  Change your energy — stand up, move, or switch tasks.
+                </span>
+                <button
+                  onClick={() => setEnergyDismissed(true)}
+                  className="text-amber-600 hover:text-amber-800"
+                >
                   ✕
                 </button>
               </div>

@@ -21,6 +21,7 @@ import {
   delegateActivity,
   deleteActivity,
   moveToSomeday,
+  moveToWeek,
   postponeActivity,
   updateActivityStatus,
 } from "@/app/(app)/activities/actions";
@@ -31,7 +32,12 @@ import { AddActivityForm } from "./AddActivityForm";
 import { PendingModal } from "./PendingModal";
 import { EditActivityModal } from "./EditActivityModal";
 
-const SECTION_ORDER: ActivitySection[] = ["work", "outside", "unplanned", "delegated"];
+const SECTION_ORDER: ActivitySection[] = [
+  "work",
+  "outside",
+  "unplanned",
+  "delegated",
+];
 
 const SECTION_LABELS: Record<ActivitySection, string> = {
   work: "Work",
@@ -58,7 +64,11 @@ function formatHeaderDate(iso: string): string {
   if (iso === tomorrow) return "Tomorrow";
   if (iso === yesterday) return "Yesterday";
   const p = iso.split("-");
-  return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])).toLocaleDateString("en-US", {
+  return new Date(
+    Number(p[0]),
+    Number(p[1]) - 1,
+    Number(p[2]),
+  ).toLocaleDateString("en-US", {
     weekday: "short",
     month: "short",
     day: "numeric",
@@ -112,7 +122,11 @@ export function ActivitiesView({
 
   // Phase 0A: distinct title + nav path per priority screen.
   const screenTitle =
-    priorityFilter === "A" ? "A Activities" : priorityFilter === "B" ? "B Activities" : "Activities";
+    priorityFilter === "A"
+      ? "A Activities"
+      : priorityFilter === "B"
+        ? "B Activities"
+        : "Activities";
   const screenSubtitle =
     priorityFilter === "A"
       ? "Must do today — the few that matter (typically 1–2)."
@@ -120,7 +134,11 @@ export function ActivitiesView({
         ? "Important, but movable. Choose what you want to do."
         : "";
   const basePath =
-    priorityFilter === "A" ? "/activities/a" : priorityFilter === "B" ? "/activities/b" : "/activities";
+    priorityFilter === "A"
+      ? "/activities/a"
+      : priorityFilter === "B"
+        ? "/activities/b"
+        : "/activities";
 
   // Phase 0A: the soft A-cap warning is computed from the whole day's A's (independent of which
   // priority screen is shown), since all A's live on the A screen.
@@ -130,19 +148,26 @@ export function ActivitiesView({
 
   // Filter to the current screen (A vs B). Legacy null is treated as B.
   const matchesFilter = (a: Activity) =>
-    !priorityFilter ? true : priorityFilter === "A" ? a.priority === "A" : a.priority !== "A";
+    !priorityFilter
+      ? true
+      : priorityFilter === "A"
+        ? a.priority === "A"
+        : a.priority !== "A";
 
   const activeActivities = dayActive.filter(matchesFilter);
-  const archivedActivities = activities.filter((a) => a.archived && matchesFilter(a));
+  const archivedActivities = activities.filter(
+    (a) => a.archived && matchesFilter(a),
+  );
 
   // Pending backlog for this screen (overdue + open), only shown on the Today view.
   const pendingFiltered = pendingActivities.filter(matchesFilter);
 
   const canBulkArchive =
     selectedIds.size > 0 &&
-    [...selectedIds].every(
-      (id) => { const s = activeActivities.find((a) => a.id === id)?.status; return s === "completed" || s === "cancelled"; },
-    );
+    [...selectedIds].every((id) => {
+      const s = activeActivities.find((a) => a.id === id)?.status;
+      return s === "completed" || s === "cancelled";
+    });
 
   const capacityExceeded = exceedsDailyCapacity(dayAPriorities);
   const grouped = groupActivitiesBySection(activeActivities);
@@ -181,7 +206,12 @@ export function ActivitiesView({
   function handlePostpone(activityId: string, linkedProjectId: string | null) {
     const tomorrowStr = addDays(selectedDate, 1);
     startTransition(async () => {
-      const result = await postponeActivity(activityId, tomorrowStr, selectedDate, linkedProjectId);
+      const result = await postponeActivity(
+        activityId,
+        tomorrowStr,
+        selectedDate,
+        linkedProjectId,
+      );
       if (result?.error) {
         showToast(result.error, "error");
       } else {
@@ -197,9 +227,17 @@ export function ActivitiesView({
     });
   }
 
-  function handleDelegate(activityId: string, contactId: string, linkedProjectId: string | null) {
+  function handleDelegate(
+    activityId: string,
+    contactId: string,
+    linkedProjectId: string | null,
+  ) {
     startTransition(async () => {
-      const result = await delegateActivity(activityId, contactId, linkedProjectId);
+      const result = await delegateActivity(
+        activityId,
+        contactId,
+        linkedProjectId,
+      );
       if (result?.error) {
         showToast(result.error, "error");
       } else {
@@ -246,11 +284,17 @@ export function ActivitiesView({
     const targetDate = toDate ?? bulkTargetDate;
     if (!targetDate || selectedIds.size === 0) return;
     startTransition(async () => {
-      const result = await bulkMoveActivities([...selectedIds], targetDate, selectedDate);
+      const result = await bulkMoveActivities(
+        [...selectedIds],
+        targetDate,
+        selectedDate,
+      );
       if (result?.error) {
         showToast(result.error, "error");
       } else {
-        showToast(`${selectedIds.size} ${selectedIds.size === 1 ? "activity" : "activities"} moved`);
+        showToast(
+          `${selectedIds.size} ${selectedIds.size === 1 ? "activity" : "activities"} moved`,
+        );
         setSelectedIds(new Set());
         setBulkMode(false);
         setBulkTargetDate("");
@@ -266,7 +310,9 @@ export function ActivitiesView({
       if (result?.error) {
         showToast(result.error, "error");
       } else {
-        showToast(`${count} ${count === 1 ? "activity" : "activities"} deleted`);
+        showToast(
+          `${count} ${count === 1 ? "activity" : "activities"} deleted`,
+        );
         setSelectedIds(new Set());
         setBulkMode(false);
       }
@@ -277,11 +323,16 @@ export function ActivitiesView({
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
     startTransition(async () => {
-      const result = await bulkUpdateActivityStatus([...selectedIds], bulkStatus);
+      const result = await bulkUpdateActivityStatus(
+        [...selectedIds],
+        bulkStatus,
+      );
       if (result?.error) {
         showToast(result.error, "error");
       } else {
-        showToast(`${count} ${count === 1 ? "activity" : "activities"} updated`);
+        showToast(
+          `${count} ${count === 1 ? "activity" : "activities"} updated`,
+        );
         setSelectedIds(new Set());
         setBulkMode(false);
       }
@@ -292,11 +343,16 @@ export function ActivitiesView({
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
     startTransition(async () => {
-      const result = await bulkUpdateActivityPriority([...selectedIds], bulkPriority);
+      const result = await bulkUpdateActivityPriority(
+        [...selectedIds],
+        bulkPriority,
+      );
       if (result?.error) {
         showToast(result.error, "error");
       } else {
-        showToast(`${count} ${count === 1 ? "activity" : "activities"} updated`);
+        showToast(
+          `${count} ${count === 1 ? "activity" : "activities"} updated`,
+        );
         setSelectedIds(new Set());
         setBulkMode(false);
       }
@@ -309,6 +365,15 @@ export function ActivitiesView({
       const result = await moveToSomeday(activity.id);
       if (result?.error) showToast(result.error, "error");
       else showToast("Moved to Someday");
+    });
+  }
+
+  // Stage an activity in this week's pool — it keeps the week but gives up its day.
+  function handleMoveToWeek(activity: Activity) {
+    startTransition(async () => {
+      const result = await moveToWeek(activity.id);
+      if (result?.error) showToast(result.error, "error");
+      else showToast("Moved to Weekly");
     });
   }
 
@@ -333,7 +398,9 @@ export function ActivitiesView({
       if (result?.error) {
         showToast(result.error, "error");
       } else {
-        showToast(`${count} ${count === 1 ? "activity" : "activities"} archived`);
+        showToast(
+          `${count} ${count === 1 ? "activity" : "activities"} archived`,
+        );
         setSelectedIds(new Set());
         setBulkMode(false);
       }
@@ -345,9 +412,13 @@ export function ActivitiesView({
       {/* Header */}
       <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
         {/* Row 1: Page title */}
-        <h1 className="hidden md:block font-handwriting text-2xl text-ink">{screenTitle}</h1>
+        <h1 className="hidden md:block font-handwriting text-2xl text-ink">
+          {screenTitle}
+        </h1>
         {screenSubtitle && (
-          <p className="hidden md:block text-xs text-ink-light mb-2">{screenSubtitle}</p>
+          <p className="hidden md:block text-xs text-ink-light mb-2">
+            {screenSubtitle}
+          </p>
         )}
 
         {/* Row 2: Date nav + action buttons */}
@@ -375,7 +446,10 @@ export function ActivitiesView({
             </div>
 
             {!isToday && (
-              <Link href={basePath} className="text-xs text-blue-600 hover:underline">
+              <Link
+                href={basePath}
+                className="text-xs text-blue-600 hover:underline"
+              >
                 Today
               </Link>
             )}
@@ -409,14 +483,18 @@ export function ActivitiesView({
                   : "border-blue-100 bg-white text-ink-light hover:bg-blue-50 hover:text-blue-700"
               }`}
             >
-              <span className="hidden sm:inline">{bulkMode ? "✕ Cancel" : "Bulk Edit"}</span>
+              <span className="hidden sm:inline">
+                {bulkMode ? "✕ Cancel" : "Bulk Edit"}
+              </span>
               <span className="sm:hidden">{bulkMode ? "✕" : "Bulk"}</span>
             </button>
             <button
               onClick={() => setShowAddForm(!showAddForm)}
               className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-700 transition"
             >
-              <span className="hidden sm:inline">{showAddForm ? "Cancel" : "+ Activity"}</span>
+              <span className="hidden sm:inline">
+                {showAddForm ? "Cancel" : "+ Activity"}
+              </span>
               <span className="sm:hidden">{showAddForm ? "✕" : "+"}</span>
             </button>
           </div>
@@ -436,8 +514,8 @@ export function ActivitiesView({
         )}
         {aWarningLevel === "warn" && (
           <p className="mt-2 text-xs text-orange-700 bg-orange-50 rounded-lg px-3 py-1.5">
-            ⚠ You have {dayAPriorities.length} A&apos;s today — most days have 1–2. You can still add
-            more, but consider keeping some as B.
+            ⚠ You have {dayAPriorities.length} A&apos;s today — most days have
+            1–2. You can still add more, but consider keeping some as B.
           </p>
         )}
       </header>
@@ -447,11 +525,14 @@ export function ActivitiesView({
         <div className="border-b border-indigo-100 bg-indigo-50 px-4 py-3 md:px-8">
           <div className="space-y-2">
             <span className="text-xs font-medium text-indigo-700">
-              {selectedIds.size} selected — select activities below, then choose an action:
+              {selectedIds.size} selected — select activities below, then choose
+              an action:
             </span>
             {/* Row 1: Move to date */}
             <div className="flex flex-wrap items-center gap-2">
-              <label className="text-xs text-indigo-700 font-medium">Move to:</label>
+              <label className="text-xs text-indigo-700 font-medium">
+                Move to:
+              </label>
               <input
                 type="date"
                 value={bulkTargetDate}
@@ -461,7 +542,9 @@ export function ActivitiesView({
               />
               <button
                 onClick={() => handleBulkMove(bulkTargetDate)}
-                disabled={!bulkTargetDate || selectedIds.size === 0 || isPending}
+                disabled={
+                  !bulkTargetDate || selectedIds.size === 0 || isPending
+                }
                 className="rounded-lg bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-40"
               >
                 Move
@@ -469,7 +552,9 @@ export function ActivitiesView({
             </div>
             {/* Row 2: Set priority */}
             <div className="flex flex-wrap items-center gap-2">
-              <label className="text-xs text-indigo-700 font-medium">Set priority:</label>
+              <label className="text-xs text-indigo-700 font-medium">
+                Set priority:
+              </label>
               <select
                 value={bulkPriority}
                 onChange={(e) => setBulkPriority(e.target.value as "A" | "B")}
@@ -488,7 +573,9 @@ export function ActivitiesView({
             </div>
             {/* Row 3: Set status + Archive + Delete */}
             <div className="flex flex-wrap items-center gap-2">
-              <label className="text-xs text-indigo-700 font-medium">Set status:</label>
+              <label className="text-xs text-indigo-700 font-medium">
+                Set status:
+              </label>
               <select
                 value={bulkStatus}
                 onChange={(e) => setBulkStatus(e.target.value)}
@@ -511,7 +598,11 @@ export function ActivitiesView({
               <button
                 onClick={handleBulkArchive}
                 disabled={!canBulkArchive || isPending}
-                title={!canBulkArchive && selectedIds.size > 0 ? "Only completed or cancelled activities can be archived" : undefined}
+                title={
+                  !canBulkArchive && selectedIds.size > 0
+                    ? "Only completed or cancelled activities can be archived"
+                    : undefined
+                }
                 className="rounded-lg border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
                 Archive
@@ -590,6 +681,7 @@ export function ActivitiesView({
               onArchive={handleArchive}
               onTogglePriority={handleTogglePriority}
               onMoveToSomeday={handleMoveToSomeday}
+              onMoveToWeek={handleMoveToWeek}
             />
           );
         })}
@@ -611,8 +703,12 @@ export function ActivitiesView({
                     className="flex items-center justify-between gap-2 rounded-xl border border-gray-100 bg-white px-3.5 py-2.5 opacity-60"
                   >
                     <div className="flex-1 min-w-0">
-                      <span className="text-sm text-ink-light line-through truncate">{activity.title}</span>
-                      <span className="ml-2 text-xs text-ink-light/60">{activity.status}</span>
+                      <span className="text-sm text-ink-light line-through truncate">
+                        {activity.title}
+                      </span>
+                      <span className="ml-2 text-xs text-ink-light/60">
+                        {activity.status}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -658,6 +754,7 @@ export function ActivitiesView({
           onArchive={handleArchive}
           onTogglePriority={handleTogglePriority}
           onMoveToSomeday={handleMoveToSomeday}
+          onMoveToWeek={handleMoveToWeek}
           onBringToToday={handleBringToToday}
           onBringAll={handleBringAllToToday}
           onClose={() => setPendingOpen(false)}

@@ -41,6 +41,7 @@ export async function ActivitiesScreen({
         .eq("user_id", user.id)
         .lt("activity_date", today)
         .eq("is_someday", false)
+        .eq("is_weekly", false)
         .eq("archived", false)
         .in("status", ["not_started", "working", "postponed"])
         .order("activity_date", { ascending: true })
@@ -59,6 +60,7 @@ export async function ActivitiesScreen({
       .eq("user_id", user.id)
       .eq("activity_date", selectedDate)
       .eq("is_someday", false) // Phase 1B: someday items live only on the Someday screen
+      .eq("is_weekly", false) // weekly-pool items live only on the Weekly screen
       .order("created_at", { ascending: true }),
     pendingQuery,
     supabase
@@ -80,11 +82,17 @@ export async function ActivitiesScreen({
   ]);
 
   const priorityMap = new Map(
-    (priorities ?? []).map((p: { id: string; title: string }) => [p.id, p.title]),
+    (priorities ?? []).map((p: { id: string; title: string }) => [
+      p.id,
+      p.title,
+    ]),
   );
   const projectPriorityMap = new Map(
     (projects ?? [])
-      .filter((p: { linked_monthly_priority_id: string | null }) => p.linked_monthly_priority_id)
+      .filter(
+        (p: { linked_monthly_priority_id: string | null }) =>
+          p.linked_monthly_priority_id,
+      )
       .map((p: { id: string; linked_monthly_priority_id: string }) => [
         p.id,
         priorityMap.get(p.linked_monthly_priority_id) ?? null,

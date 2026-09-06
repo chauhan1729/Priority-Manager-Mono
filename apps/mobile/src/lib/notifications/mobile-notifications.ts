@@ -214,7 +214,7 @@ export async function scheduleAllReminders(
   >[] = [],
   activities: Pick<
     Activity,
-    'id' | 'title' | 'priority' | 'activity_date' | 'status' | 'is_someday' | 'archived'
+    'id' | 'title' | 'priority' | 'activity_date' | 'status' | 'is_someday' | 'is_weekly' | 'archived'
   >[] = [],
   calendarEvents: Pick<CalendarEvent, 'id' | 'title' | 'event_type' | 'start_at'>[] = [],
 ): Promise<void> {

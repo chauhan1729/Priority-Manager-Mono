@@ -63,11 +63,16 @@ export function DayBackfillModal({
     >
       <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-2xl">
         <div className="flex items-start justify-between gap-3 border-b border-indigo-100 bg-indigo-50/40 px-5 py-4">
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <h2 className="font-handwriting text-xl text-ink">{title}</h2>
-            {subtitle && <p className="mt-0.5 text-xs text-ink-light">{subtitle}</p>}
+            {subtitle && (
+              <p className="mt-0.5 text-xs text-ink-light">{subtitle}</p>
+            )}
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <label htmlFor="backfill-date" className="text-xs font-medium text-ink-light">
+              <label
+                htmlFor="backfill-date"
+                className="text-xs font-medium text-ink-light"
+              >
                 Day
               </label>
               <input
@@ -79,7 +84,9 @@ export function DayBackfillModal({
                 onChange={(e) => e.target.value && onDateChange(e.target.value)}
                 className="rounded-lg border border-indigo-200 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-indigo-400 focus:outline-none"
               />
-              <span className="text-xs text-ink-light">· {prettyDate(date)}</span>
+              <span className="text-xs text-ink-light">
+                · {prettyDate(date)}
+              </span>
             </div>
           </div>
           <button

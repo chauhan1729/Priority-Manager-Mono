@@ -39,6 +39,20 @@ export function toMonthKey(date: Date = new Date()): string {
   return `${y}-${m}`;
 }
 
+/** Add `days` to an ISO date (YYYY-MM-DD), noon-anchored to avoid timezone drift. */
+export function addDaysISO(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T12:00:00`);
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+/** Whole days between two ISO dates (b - a). */
+export function daysBetweenISO(aISO: string, bISO: string): number {
+  const a = new Date(`${aISO}T12:00:00`).getTime();
+  const b = new Date(`${bISO}T12:00:00`).getTime();
+  return Math.round((b - a) / 86_400_000);
+}
+
 /** Returns today's ISO date string YYYY-MM-DD (UTC). */
 export function todayISO(): string {
   return new Date().toISOString().slice(0, 10);

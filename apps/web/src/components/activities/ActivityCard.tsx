@@ -44,7 +44,11 @@ interface Props {
   bulkMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: ((id: string) => void) | undefined;
-  onStatusChange: (id: string, status: string, projectId: string | null) => void;
+  onStatusChange: (
+    id: string,
+    status: string,
+    projectId: string | null,
+  ) => void;
   onDelegate: (id: string, contactId: string, projectId: string | null) => void;
   onDelete: (id: string, projectId: string | null) => void;
   onPostpone: (id: string, projectId: string | null) => void;
@@ -54,10 +58,17 @@ interface Props {
   onTogglePriority?: ((activity: Activity) => void) | undefined;
   /** Phase 1B: park this activity on the Someday list. */
   onMoveToSomeday?: ((activity: Activity) => void) | undefined;
+  onMoveToWeek?: ((activity: Activity) => void) | undefined;
   /** Pending backlog: an overdue badge label, e.g. "3 days overdue". */
   overdueLabel?: string | undefined;
   /** Pending backlog: re-date this overdue activity to today. */
   onBringToToday?: ((activity: Activity) => void) | undefined;
+  /**
+   * Trims the action set to the ones that move an activity forward, hiding status,
+   * edit and delete. Used by the Pending backlog, where the only question is when
+   * the activity happens — not how it's worded or whether it survives.
+   */
+  compactActions?: boolean;
 }
 
 export function ActivityCard({
@@ -77,8 +88,10 @@ export function ActivityCard({
   onArchive,
   onTogglePriority,
   onMoveToSomeday,
+  onMoveToWeek,
   overdueLabel,
   onBringToToday,
+  compactActions = false,
 }: Props) {
   const [delegatePickerOpen, setDelegatePickerOpen] = useState(false);
   const [delegateContactId, setDelegateContactId] = useState("");
@@ -112,256 +125,342 @@ export function ActivityCard({
 
   return (
     <div
-      className={`flex flex-col gap-2 rounded-xl border bg-white p-3.5 sm:flex-row sm:items-center sm:justify-between transition ${
-        isDone ? "border-gray-100 opacity-70" : isSelected ? "border-indigo-300 bg-indigo-50/30" : "border-blue-50 hover:border-blue-100"
+      className={`flex flex-col gap-2 rounded-xl border bg-white p-3.5 transition ${
+        isDone
+          ? "border-gray-100 opacity-70"
+          : isSelected
+            ? "border-indigo-300 bg-indigo-50/30"
+            : "border-blue-50 hover:border-blue-100"
       }`}
       onClick={bulkMode ? () => onToggleSelect?.(activity.id) : undefined}
       style={bulkMode ? { cursor: "pointer" } : undefined}
     >
-      {/* Bulk checkbox — all activities selectable */}
-      {bulkMode && (
-        <div className="flex-shrink-0 self-start sm:self-auto">
-          <input
-            type="checkbox"
-            checked={isSelected}
-            onChange={() => onToggleSelect?.(activity.id)}
-            onClick={(e) => e.stopPropagation()}
-            className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
-            aria-label={`Select ${activity.title}`}
-          />
-        </div>
-      )}
+      {/* Top row: content + actions. The expanding panels below must NOT live in
+          this flex row, or they lay out as extra columns beside the card. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        {/* Bulk checkbox — all activities selectable */}
+        {bulkMode && (
+          <div className="flex-shrink-0 self-start sm:self-auto">
+            <input
+              type="checkbox"
+              checked={isSelected}
+              onChange={() => onToggleSelect?.(activity.id)}
+              onClick={(e) => e.stopPropagation()}
+              className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+              aria-label={`Select ${activity.title}`}
+            />
+          </div>
+        )}
 
-      {/* Left: priority + title + meta */}
-      <div className="flex-1 min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Priority badge — one-tap promote/demote (A↔B) */}
-          {onTogglePriority && !isDone && !bulkMode ? (
+        {/* Left: priority + title + meta */}
+        <div className="flex-1 min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Priority badge — one-tap promote/demote (A↔B) */}
+            {onTogglePriority && !isDone && !bulkMode ? (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTogglePriority(activity);
+                }}
+                disabled={isPending}
+                title={
+                  activity.priority === "A"
+                    ? "Make B (demote)"
+                    : "Make A (promote)"
+                }
+                aria-label={
+                  activity.priority === "A" ? "Demote to B" : "Promote to A"
+                }
+                className={`rounded px-1.5 py-0.5 text-xs font-bold transition disabled:opacity-50 ${
+                  activity.priority === "A"
+                    ? "bg-red-100 text-red-600 hover:bg-red-200"
+                    : "bg-blue-100 text-blue-700 hover:bg-blue-200"
+                }`}
+              >
+                {activity.priority}
+              </button>
+            ) : (
+              <span
+                className={`rounded px-1.5 py-0.5 text-xs font-bold ${
+                  activity.priority === "A"
+                    ? "bg-red-100 text-red-600"
+                    : "bg-blue-100 text-blue-700"
+                }`}
+              >
+                {activity.priority}
+              </span>
+            )}
+
+            {/* Title */}
+            <span
+              className={`text-sm font-medium truncate ${
+                isDone ? "line-through text-ink-light" : "text-ink"
+              }`}
+            >
+              {activity.title}
+            </span>
+
+            {/* Moved from indicator */}
+            {activity.moved_from_date && (
+              <span
+                className="text-xs text-amber-600"
+                title={`Originally planned for ${activity.moved_from_date}`}
+              >
+                ↷ moved
+              </span>
+            )}
+          </div>
+
+          {/* Secondary row: project/contact name + time */}
+          <div className="mt-1 flex flex-wrap items-center gap-2.5 text-xs text-ink-light">
+            {overdueLabel && (
+              <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+                ⏳ {overdueLabel}
+              </span>
+            )}
+            {projectName && (
+              <Link
+                href={`/project-planner/${activity.linked_project_id}`}
+                className="text-blue-600 hover:underline truncate"
+              >
+                {projectName}
+              </Link>
+            )}
+            {linkedPriorityTitle && (
+              <span
+                title={`Linked to monthly priority: ${linkedPriorityTitle}`}
+                className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700"
+              >
+                ★ Monthly Priority
+              </span>
+            )}
+            {delegatedContactName && (
+              <span className="text-purple-600 truncate">
+                → {delegatedContactName}
+              </span>
+            )}
+            <span>{formatMinutes(activity.estimated_minutes)}</span>
+            {activity.hours_worked > 0 && (
+              <span className="text-green-600" title="Hours worked">
+                {formatMinutes(activity.hours_worked)} worked
+              </span>
+            )}
+            {activity.note && (
+              <span className="italic truncate max-w-[200px]">
+                "{activity.note}"
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Right: status + actions */}
+        <div className="flex flex-shrink-0 items-center gap-1.5">
+          {/* Bring to today — pending backlog primary action */}
+          {onBringToToday && !isDone && (
             <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onTogglePriority(activity);
+              onClick={() => onBringToToday(activity)}
+              disabled={isPending}
+              title="Bring to today"
+              className="whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+            >
+              → Today
+            </button>
+          )}
+
+          {/* Status pill (hidden on mobile) */}
+          {!compactActions && (
+            <span
+              className={`hidden sm:inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                STATUS_CLASSES[activity.status]
+              }`}
+            >
+              {STATUS_LABELS[activity.status]}
+            </span>
+          )}
+
+          {/* Status select */}
+          {!compactActions && (
+            <select
+              value={activity.status}
+              onChange={(e) => {
+                const newStatus = e.target.value;
+                if (
+                  newStatus === "delegated" &&
+                  activity.status !== "delegated"
+                ) {
+                  setDelegatePickerOpen(true);
+                } else {
+                  onStatusChange(
+                    activity.id,
+                    newStatus,
+                    activity.linked_project_id,
+                  );
+                }
               }}
               disabled={isPending}
-              title={activity.priority === "A" ? "Make B (demote)" : "Make A (promote)"}
-              aria-label={activity.priority === "A" ? "Demote to B" : "Promote to A"}
-              className={`rounded px-1.5 py-0.5 text-xs font-bold transition disabled:opacity-50 ${
-                activity.priority === "A"
-                  ? "bg-red-100 text-red-600 hover:bg-red-200"
-                  : "bg-blue-100 text-blue-700 hover:bg-blue-200"
-              }`}
+              aria-label="Update status"
+              className="rounded-lg border border-blue-100 bg-white px-2 py-1 text-xs text-ink focus:outline-none disabled:opacity-50"
             >
-              {activity.priority}
+              {(Object.keys(STATUS_LABELS) as ActivityStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {STATUS_LABELS[s]}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Quick complete */}
+          {!isDone && (
+            <button
+              onClick={() =>
+                onStatusChange(
+                  activity.id,
+                  "completed",
+                  activity.linked_project_id,
+                )
+              }
+              disabled={isPending}
+              aria-label="Mark complete"
+              title="Mark complete"
+              className="rounded p-1 text-ink-light hover:bg-green-50 hover:text-green-600 disabled:opacity-50 transition"
+            >
+              ✓
             </button>
-          ) : (
-            <span
-              className={`rounded px-1.5 py-0.5 text-xs font-bold ${
-                activity.priority === "A"
-                  ? "bg-red-100 text-red-600"
-                  : "bg-blue-100 text-blue-700"
-              }`}
-            >
-              {activity.priority}
-            </span>
           )}
 
-          {/* Title */}
-          <span
-            className={`text-sm font-medium truncate ${
-              isDone ? "line-through text-ink-light" : "text-ink"
-            }`}
+          {/* Cycle history — opens a popup of every focus block for this activity */}
+          <button
+            onClick={() => setCyclesOpen(true)}
+            aria-label="View cycles"
+            title="Cycles — focus blocks worked on this activity"
+            className="rounded p-1 text-ink-light transition hover:bg-indigo-50 hover:text-indigo-600"
           >
-            {activity.title}
-          </span>
+            ↻
+          </button>
 
-          {/* Moved from indicator */}
-          {activity.moved_from_date && (
-            <span className="text-xs text-amber-600" title={`Originally planned for ${activity.moved_from_date}`}>
-              ↷ moved
-            </span>
+          {/* Reschedule to a chosen day (intentional re-dating) */}
+          {!isDone && (
+            <button
+              onClick={() => {
+                setRescheduleDate(suggestRedate(activity, todayISO()));
+                setRescheduleOpen((s) => !s);
+              }}
+              disabled={isPending || isRescheduling}
+              aria-label="Reschedule to a chosen day"
+              title="Reschedule to a chosen day"
+              className="rounded p-1 text-ink-light hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 transition"
+            >
+              📅
+            </button>
+          )}
+
+          {/* Move to this week's pool — keeps the week, gives up the day */}
+          {!isDone && !activity.is_weekly && onMoveToWeek && (
+            <button
+              onClick={() => onMoveToWeek(activity)}
+              disabled={isPending}
+              aria-label="Move to Weekly"
+              title="Move to Weekly (keep it this week, pick the day later)"
+              className="rounded p-1 text-ink-light hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 transition"
+            >
+              <svg
+                viewBox="0 0 20 20"
+                fill="none"
+                className="h-3.5 w-3.5"
+                aria-hidden="true"
+              >
+                <rect
+                  x="3"
+                  y="4.6"
+                  width="14"
+                  height="12.4"
+                  rx="2"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                />
+                <path
+                  d="M7 2.6V6M13 2.6V6"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                />
+                <path
+                  d="M8.3 9.6H12L9.9 14.2"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
+
+          {/* Move to Someday */}
+          {!isDone && !activity.is_someday && onMoveToSomeday && (
+            <button
+              onClick={() => onMoveToSomeday(activity)}
+              disabled={isPending}
+              aria-label="Move to Someday"
+              title="Move to Someday (park outside the 30-day horizon)"
+              className="rounded p-1 text-ink-light hover:bg-violet-50 hover:text-violet-600 disabled:opacity-50 transition"
+            >
+              ☾
+            </button>
+          )}
+
+          {/* Edit — locked once completed */}
+          {!isDone && !compactActions && (
+            <button
+              onClick={() => onEdit(activity)}
+              disabled={isPending}
+              aria-label="Edit activity"
+              title="Edit"
+              className="rounded p-1 text-ink-light hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 transition"
+            >
+              ✎
+            </button>
+          )}
+
+          {/* Archive (for done activities) */}
+          {isDone && (
+            <button
+              onClick={() => onArchive(activity.id, activity.linked_project_id)}
+              disabled={isPending}
+              aria-label="Archive activity"
+              title="Archive"
+              className="rounded p-1 text-ink-light hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 transition text-xs"
+            >
+              ⊘
+            </button>
+          )}
+
+          {/* Delete */}
+          {!compactActions && (
+            <button
+              onClick={() => onDelete(activity.id, activity.linked_project_id)}
+              disabled={isPending}
+              aria-label="Delete activity"
+              title="Delete"
+              className="rounded p-1 text-ink-light hover:bg-red-50 hover:text-red-500 disabled:opacity-50 transition"
+            >
+              ×
+            </button>
           )}
         </div>
-
-        {/* Secondary row: project/contact name + time */}
-        <div className="mt-1 flex flex-wrap items-center gap-2.5 text-xs text-ink-light">
-          {overdueLabel && (
-            <span className="rounded-full bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
-              ⏳ {overdueLabel}
-            </span>
-          )}
-          {projectName && (
-            <Link
-              href={`/project-planner/${activity.linked_project_id}`}
-              className="text-blue-600 hover:underline truncate"
-            >
-              {projectName}
-            </Link>
-          )}
-          {linkedPriorityTitle && (
-            <span
-              title={`Linked to monthly priority: ${linkedPriorityTitle}`}
-              className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-medium text-violet-700"
-            >
-              ★ Monthly Priority
-            </span>
-          )}
-          {delegatedContactName && (
-            <span className="text-purple-600 truncate">→ {delegatedContactName}</span>
-          )}
-          <span>{formatMinutes(activity.estimated_minutes)}</span>
-          {activity.hours_worked > 0 && (
-            <span className="text-green-600" title="Hours worked">{formatMinutes(activity.hours_worked)} worked</span>
-          )}
-          {activity.note && (
-            <span className="italic truncate max-w-[200px]">"{activity.note}"</span>
-          )}
-        </div>
-      </div>
-
-      {/* Right: status + actions */}
-      <div className="flex flex-shrink-0 items-center gap-1.5">
-        {/* Bring to today — pending backlog primary action */}
-        {onBringToToday && !isDone && (
-          <button
-            onClick={() => onBringToToday(activity)}
-            disabled={isPending}
-            title="Bring to today"
-            className="whitespace-nowrap rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
-          >
-            → Today
-          </button>
-        )}
-
-        {/* Status pill (hidden on mobile) */}
-        <span
-          className={`hidden sm:inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-            STATUS_CLASSES[activity.status]
-          }`}
-        >
-          {STATUS_LABELS[activity.status]}
-        </span>
-
-        {/* Status select */}
-        <select
-          value={activity.status}
-          onChange={(e) => {
-            const newStatus = e.target.value;
-            if (newStatus === "delegated" && activity.status !== "delegated") {
-              setDelegatePickerOpen(true);
-            } else {
-              onStatusChange(activity.id, newStatus, activity.linked_project_id);
-            }
-          }}
-          disabled={isPending}
-          aria-label="Update status"
-          className="rounded-lg border border-blue-100 bg-white px-2 py-1 text-xs text-ink focus:outline-none disabled:opacity-50"
-        >
-          {(Object.keys(STATUS_LABELS) as ActivityStatus[]).map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABELS[s]}
-            </option>
-          ))}
-        </select>
-
-        {/* Quick complete */}
-        {!isDone && (
-          <button
-            onClick={() =>
-              onStatusChange(activity.id, "completed", activity.linked_project_id)
-            }
-            disabled={isPending}
-            aria-label="Mark complete"
-            title="Mark complete"
-            className="rounded p-1 text-ink-light hover:bg-green-50 hover:text-green-600 disabled:opacity-50 transition"
-          >
-            ✓
-          </button>
-        )}
-
-        {/* Cycle history — opens a popup of every focus block for this activity */}
-        <button
-          onClick={() => setCyclesOpen(true)}
-          aria-label="View cycles"
-          title="Cycles — focus blocks worked on this activity"
-          className="rounded p-1 text-ink-light transition hover:bg-indigo-50 hover:text-indigo-600"
-        >
-          ↻
-        </button>
-
-        {/* Reschedule to a chosen day (intentional re-dating) */}
-        {!isDone && (
-          <button
-            onClick={() => {
-              setRescheduleDate(suggestRedate(activity, todayISO()));
-              setRescheduleOpen((s) => !s);
-            }}
-            disabled={isPending || isRescheduling}
-            aria-label="Reschedule to a chosen day"
-            title="Reschedule to a chosen day"
-            className="rounded p-1 text-ink-light hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 transition"
-          >
-            📅
-          </button>
-        )}
-
-        {/* Move to Someday */}
-        {!isDone && !activity.is_someday && onMoveToSomeday && (
-          <button
-            onClick={() => onMoveToSomeday(activity)}
-            disabled={isPending}
-            aria-label="Move to Someday"
-            title="Move to Someday (park outside the 30-day horizon)"
-            className="rounded p-1 text-ink-light hover:bg-violet-50 hover:text-violet-600 disabled:opacity-50 transition"
-          >
-            ☾
-          </button>
-        )}
-
-        {/* Edit — locked once completed */}
-        {!isDone && (
-          <button
-            onClick={() => onEdit(activity)}
-            disabled={isPending}
-            aria-label="Edit activity"
-            title="Edit"
-            className="rounded p-1 text-ink-light hover:bg-blue-50 hover:text-blue-600 disabled:opacity-50 transition"
-          >
-            ✎
-          </button>
-        )}
-
-        {/* Archive (for done activities) */}
-        {isDone && (
-          <button
-            onClick={() => onArchive(activity.id, activity.linked_project_id)}
-            disabled={isPending}
-            aria-label="Archive activity"
-            title="Archive"
-            className="rounded p-1 text-ink-light hover:bg-gray-100 hover:text-gray-600 disabled:opacity-50 transition text-xs"
-          >
-            ⊘
-          </button>
-        )}
-
-        {/* Delete */}
-        <button
-          onClick={() => onDelete(activity.id, activity.linked_project_id)}
-          disabled={isPending}
-          aria-label="Delete activity"
-          title="Delete"
-          className="rounded p-1 text-ink-light hover:bg-red-50 hover:text-red-500 disabled:opacity-50 transition"
-        >
-          ×
-        </button>
       </div>
 
       {/* Inline delegate contact picker */}
       {delegatePickerOpen && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-purple-100 bg-purple-50 px-3 py-2">
-          <span className="text-xs font-medium text-purple-800">Delegate to:</span>
+          <span className="text-xs font-medium text-purple-800">
+            Delegate to:
+          </span>
           {contacts.length === 0 ? (
-            <a href="/communication-planner" className="text-xs text-blue-600 hover:underline">
+            <a
+              href="/communication-planner"
+              className="text-xs text-blue-600 hover:underline"
+            >
               Add a contact first
             </a>
           ) : (
@@ -373,14 +472,20 @@ export function ActivityCard({
             >
               <option value="">Select person…</option>
               {contacts.map((c) => (
-                <option key={c.id} value={c.id}>{c.full_name}</option>
+                <option key={c.id} value={c.id}>
+                  {c.full_name}
+                </option>
               ))}
             </select>
           )}
           <button
             onClick={() => {
               if (!delegateContactId) return;
-              onDelegate(activity.id, delegateContactId, activity.linked_project_id);
+              onDelegate(
+                activity.id,
+                delegateContactId,
+                activity.linked_project_id,
+              );
               setDelegatePickerOpen(false);
               setDelegateContactId("");
             }}
@@ -390,7 +495,10 @@ export function ActivityCard({
             Confirm
           </button>
           <button
-            onClick={() => { setDelegatePickerOpen(false); setDelegateContactId(""); }}
+            onClick={() => {
+              setDelegatePickerOpen(false);
+              setDelegateContactId("");
+            }}
             className="text-xs text-ink-light hover:text-ink"
           >
             Cancel
@@ -401,7 +509,9 @@ export function ActivityCard({
       {/* Inline reschedule picker — intentional re-dating (not a blind "tomorrow") */}
       {rescheduleOpen && (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
-          <span className="text-xs font-medium text-ink-light">Reschedule to:</span>
+          <span className="text-xs font-medium text-ink-light">
+            Reschedule to:
+          </span>
           <button
             onClick={() => doReschedule(addDays(todayISO(), 1))}
             disabled={isRescheduling}
@@ -430,7 +540,10 @@ export function ActivityCard({
           >
             Go
           </button>
-          <button onClick={() => setRescheduleOpen(false)} className="text-xs text-ink-light hover:text-ink">
+          <button
+            onClick={() => setRescheduleOpen(false)}
+            className="text-xs text-ink-light hover:text-ink"
+          >
             Cancel
           </button>
         </div>

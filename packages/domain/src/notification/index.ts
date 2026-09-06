@@ -549,13 +549,13 @@ function isActionableStatus(status: Activity["status"]): boolean {
 
 type ActivityForNudge = Pick<
   Activity,
-  "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "archived"
+  "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "is_weekly" | "archived"
 >;
 
 /**
  * Returns a nudge for each A-priority activity dated today that is still
  * actionable AND has no schedule block today — i.e. due today but not yet on
- * the timeline. Fires at `nudgeTime`. Someday/archived items are excluded.
+ * the timeline. Fires at `nudgeTime`. Someday/weekly-pool/archived items are excluded.
  */
 export function computeActivityDueTodayReminders(
   activities: ActivityForNudge[],
@@ -575,7 +575,7 @@ export function computeActivityDueTodayReminders(
   );
 
   return activities.flatMap((a) => {
-    if (a.archived || a.is_someday) return [];
+    if (a.archived || a.is_someday || a.is_weekly) return [];
     if (a.priority !== "A") return [];
     if (!isActionableStatus(a.status)) return [];
     if (a.activity_date !== todayISO) return [];
@@ -594,8 +594,8 @@ export function computeActivityDueTodayReminders(
 
 /**
  * Returns a nudge for each still-actionable activity whose date is in the past —
- * it slipped without being completed. Fires at `nudgeTime` today. Someday/archived
- * items are excluded. Repeats daily (localStorage/instance dedup fires it once/day)
+ * it slipped without being completed. Fires at `nudgeTime` today. Someday/weekly-pool/archived
+ * items are excluded — a weekly item's date is a week anchor, not a due date. Repeats daily (localStorage/instance dedup fires it once/day)
  * until the activity is completed, cancelled, or rescheduled.
  */
 export function computeActivityPastDueReminders(
@@ -604,7 +604,7 @@ export function computeActivityPastDueReminders(
   todayISO: string,
 ): ReminderSchedule[] {
   return activities.flatMap((a) => {
-    if (a.archived || a.is_someday) return [];
+    if (a.archived || a.is_someday || a.is_weekly) return [];
     if (!isActionableStatus(a.status)) return [];
     if (a.activity_date >= todayISO) return [];
     return [
@@ -673,7 +673,7 @@ export interface ComputeRemindersParams {
   > & { source_event_id?: string | null })[];
   activities?: Pick<
     Activity,
-    "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "archived"
+    "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "is_weekly" | "archived"
   >[];
   calendarEvents?: (Pick<CalendarEvent, "id" | "title" | "event_type" | "start_at"> & {
     status?: CalendarEvent["status"];

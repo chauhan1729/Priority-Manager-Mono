@@ -36,6 +36,10 @@ export interface Activity {
   // Phase 1B: parked outside the 30-day horizon ("someday" list, reviewed weekly). Someday items
   // are exempt from the work→project requirement until pulled into the horizon.
   is_someday: boolean;
+  // Committed to a week but not yet to a day. While true, activity_date is a soft week anchor
+  // rather than a commitment, and the work→project requirement is deferred until day assignment.
+  // Mutually exclusive with is_someday (DB check constraint).
+  is_weekly: boolean;
   recurrence_rule: ActivityRecurrenceRule | null; // optional repeating pattern
   created_at: string;
   updated_at: string;

@@ -25,17 +25,17 @@ import { ContactFormModal } from "./ContactFormModal";
 import { DeleteContactModal } from "./DeleteContactModal";
 
 const CATEGORY_OPTIONS: { value: ContactCategory | "all"; label: string }[] = [
-  { value: "all",          label: "All" },
+  { value: "all", label: "All" },
   { value: "professional", label: "Professional" },
-  { value: "client",       label: "Client" },
-  { value: "vendor",       label: "Vendor" },
-  { value: "personal",     label: "Personal" },
-  { value: "family",       label: "Family" },
-  { value: "other",        label: "Other" },
+  { value: "client", label: "Client" },
+  { value: "vendor", label: "Vendor" },
+  { value: "personal", label: "Personal" },
+  { value: "family", label: "Family" },
+  { value: "other", label: "Other" },
 ];
 
 const SORT_OPTIONS: { value: ContactSortKey; label: string }[] = [
-  { value: "name",    label: "Name" },
+  { value: "name", label: "Name" },
   { value: "category", label: "Category" },
   { value: "updated", label: "Recently updated" },
 ];
@@ -46,12 +46,20 @@ interface Props {
   delegatedActivities: Activity[];
 }
 
-export function CommunicationPlannerView({ contacts, meetings, delegatedActivities }: Props) {
+export function CommunicationPlannerView({
+  contacts,
+  meetings,
+  delegatedActivities,
+}: Props) {
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<ContactCategory | "all">("all");
+  const [categoryFilter, setCategoryFilter] = useState<ContactCategory | "all">(
+    "all",
+  );
   const [sort, setSort] = useState<ContactSortKey>("name");
 
-  const [selectedContactId, setSelectedContactId] = useState<string | null>(null);
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(
+    null,
+  );
   const [showAddForm, setShowAddForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Contact | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
@@ -77,13 +85,21 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
 
   // Derived: filtered + sorted contacts
   const filtered = sortContacts(
-    filterContactsBySearch(filterContactsByCategory(contacts, categoryFilter), query),
+    filterContactsBySearch(
+      filterContactsByCategory(contacts, categoryFilter),
+      query,
+    ),
     sort,
   );
 
-  const selectedContact = contacts.find((c) => c.id === selectedContactId) ?? null;
-  const selectedMeetings = selectedContact ? (meetingsMap.get(selectedContact.id) ?? []) : [];
-  const selectedDelegatedActivities = selectedContact ? (delegatedMap.get(selectedContact.id) ?? []) : [];
+  const selectedContact =
+    contacts.find((c) => c.id === selectedContactId) ?? null;
+  const selectedMeetings = selectedContact
+    ? (meetingsMap.get(selectedContact.id) ?? [])
+    : [];
+  const selectedDelegatedActivities = selectedContact
+    ? (delegatedMap.get(selectedContact.id) ?? [])
+    : [];
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -156,7 +172,9 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
       <header className="border-b border-blue-100 px-4 py-3 md:px-8 md:py-4">
         {/* Row 1: Page title (desktop) + Add Contact button */}
         <div className="hidden md:flex items-center justify-between gap-2 mb-2">
-          <h1 className="font-handwriting text-2xl text-ink">Communication Planner</h1>
+          <h1 className="font-handwriting text-2xl text-ink">
+            Communication Planner
+          </h1>
           <button
             onClick={() => setShowAddForm(true)}
             disabled={isPending}
@@ -188,8 +206,10 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
         <div className="flex md:hidden items-center gap-2">
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as ContactCategory | "all")}
-            className="flex-1 rounded-lg border border-blue-100 px-2.5 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
+            onChange={(e) =>
+              setCategoryFilter(e.target.value as ContactCategory | "all")
+            }
+            className="min-w-0 flex-1 rounded-lg border border-blue-100 px-2.5 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
           >
             {CATEGORY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -222,7 +242,9 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
 
           <select
             value={categoryFilter}
-            onChange={(e) => setCategoryFilter(e.target.value as ContactCategory | "all")}
+            onChange={(e) =>
+              setCategoryFilter(e.target.value as ContactCategory | "all")
+            }
             className="rounded-lg border border-blue-100 px-2.5 py-1.5 text-sm text-ink focus:border-blue-400 focus:outline-none"
           >
             {CATEGORY_OPTIONS.map((opt) => (
@@ -257,10 +279,12 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
         {contacts.length === 0 ? (
           // Empty state
           <div className="flex flex-col items-center justify-center h-full text-center py-20">
-            <p className="font-handwriting text-2xl text-ink-light mb-2">No contacts yet</p>
+            <p className="font-handwriting text-2xl text-ink-light mb-2">
+              No contacts yet
+            </p>
             <p className="text-sm text-ink-light mb-6">
-              Add your first contact to start tracking relationships,
-              delegated work, and meeting history.
+              Add your first contact to start tracking relationships, delegated
+              work, and meeting history.
             </p>
             <button
               onClick={() => setShowAddForm(true)}
@@ -272,9 +296,14 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
         ) : filtered.length === 0 ? (
           // No search results
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <p className="text-sm text-ink-light">No contacts match your search.</p>
+            <p className="text-sm text-ink-light">
+              No contacts match your search.
+            </p>
             <button
-              onClick={() => { setQuery(""); setCategoryFilter("all"); }}
+              onClick={() => {
+                setQuery("");
+                setCategoryFilter("all");
+              }}
               className="mt-2 text-xs text-blue-600 hover:underline"
             >
               Clear filters
@@ -289,7 +318,10 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
                 contact={contact}
                 meetings={meetingsMap.get(contact.id) ?? []}
                 onClick={() => setSelectedContactId(contact.id)}
-                onEdit={() => { setEditTarget(contact); setSelectedContactId(null); }}
+                onEdit={() => {
+                  setEditTarget(contact);
+                  setSelectedContactId(null);
+                }}
               />
             ))}
           </div>
@@ -304,8 +336,14 @@ export function CommunicationPlannerView({ contacts, meetings, delegatedActiviti
           delegatedActivities={selectedDelegatedActivities}
           isPending={isPending}
           onClose={() => setSelectedContactId(null)}
-          onEdit={() => { setEditTarget(selectedContact); setSelectedContactId(null); }}
-          onDelete={() => { setDeleteTarget(selectedContact); setSelectedContactId(null); }}
+          onEdit={() => {
+            setEditTarget(selectedContact);
+            setSelectedContactId(null);
+          }}
+          onDelete={() => {
+            setDeleteTarget(selectedContact);
+            setSelectedContactId(null);
+          }}
           onSaveNote={handleSaveNote}
         />
       )}

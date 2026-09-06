@@ -17,6 +17,7 @@ export type ActionResult = { success: true } | { error: string };
 
 function revalidateAll(linkedProjectId?: string | null) {
   revalidatePath("/daily-plan");
+  revalidatePath("/weekly");
   revalidatePath("/activities");
   revalidatePath("/project-planner");
   if (linkedProjectId) revalidatePath(`/project-planner/${linkedProjectId}`);

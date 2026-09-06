@@ -23,6 +23,7 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     hours_worked: 0,
     archived: false,
     is_someday: false,
+    is_weekly: false,
     recurrence_rule: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),

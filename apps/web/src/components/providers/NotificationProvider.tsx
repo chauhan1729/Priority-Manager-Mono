@@ -104,7 +104,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         .lte("schedule_date", addDays(todayISO, 2)),
       supabase
         .from("activities")
-        .select("id, title, priority, activity_date, status, is_someday, archived")
+        .select("id, title, priority, activity_date, status, is_someday, is_weekly, archived")
         .eq("user_id", user.id)
         .in("status", ["not_started", "working", "postponed"]),
       supabase

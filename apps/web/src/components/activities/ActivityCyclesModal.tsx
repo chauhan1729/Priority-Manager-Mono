@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 
 import type { Activity } from "@pm/types";
-import { getActivityCycles, type ActivityCycle } from "@/app/(app)/activities/actions";
+import {
+  getActivityCycles,
+  type ActivityCycle,
+} from "@/app/(app)/activities/actions";
 import { showToast } from "@/components/ui/Toaster";
 
 function formatMinutes(minutes: number): string {
@@ -16,7 +19,10 @@ function formatMinutes(minutes: number): string {
 /** "Jun 16 · 3:15pm" from a schedule_date + start_at ISO. */
 function formatCycleWhen(scheduleDate: string, startAt: string): string {
   const [y, mo, d] = scheduleDate.split("-").map(Number);
-  const day = new Date(y!, mo! - 1, d!).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const day = new Date(y!, mo! - 1, d!).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
   const t = new Date(startAt);
   const h = t.getHours();
   const ampm = h < 12 ? "am" : "pm";
@@ -69,12 +75,15 @@ export function ActivityCyclesModal({ activity, onClose }: Props) {
     };
   }, [activity.id]);
 
-  const completedCount = cycles?.filter((c) => c.status_snapshot === "completed").length ?? 0;
+  const completedCount =
+    cycles?.filter((c) => c.status_snapshot === "completed").length ?? 0;
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
       role="dialog"
       aria-modal="true"
       aria-label="Cycles"
@@ -82,18 +91,43 @@ export function ActivityCyclesModal({ activity, onClose }: Props) {
       <div className="flex max-h-[80vh] w-full max-w-md flex-col rounded-2xl border border-blue-100 bg-paper shadow-xl">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-blue-50 px-5 py-4">
-          <div className="min-w-0">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-light">Cycles</p>
-            <h3 className="truncate text-sm font-medium text-ink">{activity.title}</h3>
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-ink-light">
+              Cycles
+            </p>
+            <h3 className="truncate text-sm font-medium text-ink">
+              {activity.title}
+            </h3>
           </div>
           <button
             onClick={onClose}
             className="-mr-1.5 shrink-0 rounded-md p-1.5 text-ink-light hover:bg-blue-50"
             aria-label="Close"
           >
-            <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5" aria-hidden="true">
-              <line x1="4" y1="4" x2="16" y2="16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              <line x1="16" y1="4" x2="4" y2="16" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+            <svg
+              viewBox="0 0 20 20"
+              fill="none"
+              className="h-5 w-5"
+              aria-hidden="true"
+            >
+              <line
+                x1="4"
+                y1="4"
+                x2="16"
+                y2="16"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
+              <line
+                x1="16"
+                y1="4"
+                x2="4"
+                y2="16"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              />
             </svg>
           </button>
         </div>
@@ -103,22 +137,36 @@ export function ActivityCyclesModal({ activity, onClose }: Props) {
           {cycles === null ? (
             <p className="py-2 text-sm text-ink-light">Loading…</p>
           ) : cycles.length === 0 ? (
-            <p className="py-2 text-sm text-ink-light">No cycles yet. Start one from the Daily Plan.</p>
+            <p className="py-2 text-sm text-ink-light">
+              No cycles yet. Start one from the Daily Plan.
+            </p>
           ) : (
             <ul className="space-y-2">
               {cycles.map((c) => {
-                const status = CYCLE_STATUS[c.status_snapshot ?? "upcoming"] ?? CYCLE_STATUS.upcoming!;
+                const status =
+                  CYCLE_STATUS[c.status_snapshot ?? "upcoming"] ??
+                  CYCLE_STATUS.upcoming!;
                 return (
                   <li
                     key={c.id}
                     className="flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border border-blue-50 bg-white px-3 py-2 text-xs"
                   >
-                    <span className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${status.cls}`}>
+                    <span
+                      className={`shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${status.cls}`}
+                    >
                       {status.label}
                     </span>
-                    <span className="shrink-0 font-medium text-ink">{formatCycleWhen(c.schedule_date, c.start_at)}</span>
-                    <span className="shrink-0 text-ink-light">· {formatMinutes(c.locked_minutes)}</span>
-                    {c.note && <span className="w-full truncate italic text-ink-light">“{c.note}”</span>}
+                    <span className="shrink-0 font-medium text-ink">
+                      {formatCycleWhen(c.schedule_date, c.start_at)}
+                    </span>
+                    <span className="shrink-0 text-ink-light">
+                      · {formatMinutes(c.locked_minutes)}
+                    </span>
+                    {c.note && (
+                      <span className="w-full truncate italic text-ink-light">
+                        “{c.note}”
+                      </span>
+                    )}
                   </li>
                 );
               })}
@@ -129,7 +177,9 @@ export function ActivityCyclesModal({ activity, onClose }: Props) {
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 border-t border-blue-50 px-5 py-3">
           <span className="text-xs text-ink-light">
-            {cycles && cycles.length > 0 ? `${completedCount} completed · ${cycles.length} total` : " "}
+            {cycles && cycles.length > 0
+              ? `${completedCount} completed · ${cycles.length} total`
+              : " "}
           </span>
           <button
             onClick={onClose}

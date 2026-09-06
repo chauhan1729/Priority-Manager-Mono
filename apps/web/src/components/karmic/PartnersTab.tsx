@@ -2,8 +2,16 @@
 
 import { useOptimistic, useRef, useState, useTransition } from "react";
 
-import { buildPartnerBoard, canAddPartner, KARMIC_PARTNER_GROUP_ORDER } from "@pm/domain";
-import type { KarmicPartner, KarmicPartnerAction, KarmicPartnerGroup } from "@pm/types";
+import {
+  buildPartnerBoard,
+  canAddPartner,
+  KARMIC_PARTNER_GROUP_ORDER,
+} from "@pm/domain";
+import type {
+  KarmicPartner,
+  KarmicPartnerAction,
+  KarmicPartnerGroup,
+} from "@pm/types";
 import {
   addPartner,
   addPartnerAction,
@@ -51,11 +59,17 @@ function PartnerHeader({ partner }: { partner: KarmicPartner }) {
         onClick={() => setEditing(true)}
         className="group/h flex w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 rounded-md px-2 py-1 text-left hover:bg-white/70"
       >
-        <span className="text-sm font-semibold text-ink">{partner.name || "—"}</span>
+        <span className="text-sm font-semibold text-ink">
+          {partner.name || "—"}
+        </span>
         {partner.success_vision && (
-          <span className="text-xs text-ink-light">· success = {partner.success_vision}</span>
+          <span className="text-xs text-ink-light">
+            · success = {partner.success_vision}
+          </span>
         )}
-        <span className="text-[11px] text-indigo-400 opacity-0 transition group-hover/h:opacity-100">✎ edit</span>
+        <span className="text-[11px] text-indigo-400 opacity-0 transition group-hover/h:opacity-100">
+          ✎ edit
+        </span>
       </button>
     );
   }
@@ -77,7 +91,10 @@ function PartnerHeader({ partner }: { partner: KarmicPartner }) {
         className="w-full rounded-md border border-indigo-200 bg-white px-2.5 py-1.5 text-sm text-ink focus:border-indigo-400 focus:outline-none"
       />
       <div className="flex items-center gap-2">
-        <button onClick={save} className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700">
+        <button
+          onClick={save}
+          className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-700"
+        >
           Save
         </button>
         <button
@@ -92,11 +109,19 @@ function PartnerHeader({ partner }: { partner: KarmicPartner }) {
         </button>
         {confirmingDelete ? (
           <span className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-red-700">Delete + all their actions?</span>
-            <button onClick={remove} className="text-xs font-semibold text-red-600 hover:underline">
+            <span className="text-xs text-red-700">
+              Delete + all their actions?
+            </span>
+            <button
+              onClick={remove}
+              className="text-xs font-semibold text-red-600 hover:underline"
+            >
               Yes, delete
             </button>
-            <button onClick={() => setConfirmingDelete(false)} className="text-xs text-ink-light hover:text-ink">
+            <button
+              onClick={() => setConfirmingDelete(false)}
+              className="text-xs text-ink-light hover:text-ink"
+            >
               No
             </button>
           </span>
@@ -137,17 +162,24 @@ function ActionList({
   return (
     <div className="space-y-1.5">
       {actions.map((a) => (
-        <div key={a.id} className="flex items-start gap-2 rounded-lg border border-indigo-100 bg-white px-2.5 py-1.5">
+        <div
+          key={a.id}
+          className="flex items-start gap-2 rounded-lg border border-indigo-100 bg-white px-2.5 py-1.5"
+        >
           <button
             onClick={() => onToggle(a)}
             aria-label={a.done ? "Mark not done" : "Mark done"}
             className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded border text-[10px] ${
-              a.done ? "border-emerald-500 bg-emerald-500 text-white" : "border-ink-light/40 text-transparent"
+              a.done
+                ? "border-emerald-500 bg-emerald-500 text-white"
+                : "border-ink-light/40 text-transparent"
             }`}
           >
             ✓
           </button>
-          <p className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm ${a.done ? "text-ink-light line-through" : "text-ink"}`}>
+          <p
+            className={`min-w-0 flex-1 whitespace-pre-wrap break-words text-sm ${a.done ? "text-ink-light line-through" : "text-ink"}`}
+          >
             {a.text}
           </p>
           <button
@@ -167,7 +199,7 @@ function ActionList({
           maxLength={300}
           placeholder="What will you do to make them successful?"
           onKeyDown={(e) => e.key === "Enter" && text.trim() && add()}
-          className="flex-1 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-sm text-ink placeholder:text-ink-light/50 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
+          className="min-w-0 flex-1 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-sm text-ink placeholder:text-ink-light/50 focus:border-indigo-400 focus:outline-none focus:ring-2 focus:ring-indigo-100"
         />
         <button
           onClick={add}
@@ -182,7 +214,13 @@ function ActionList({
 }
 
 // --- Inline "add a partner" form (manage mode) -----------------------------
-function AddPartnerForm({ group, singular }: { group: KarmicPartnerGroup; singular: string }) {
+function AddPartnerForm({
+  group,
+  singular,
+}: {
+  group: KarmicPartnerGroup;
+  singular: string;
+}) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [vision, setVision] = useState("");
@@ -255,10 +293,21 @@ function AddPartnerForm({ group, singular }: { group: KarmicPartnerGroup; singul
 }
 
 // --- History: past days, grouped by date then partner ----------------------
-function History({ partners, actions }: { partners: KarmicPartner[]; actions: KarmicPartnerAction[] }) {
+function History({
+  partners,
+  actions,
+}: {
+  partners: KarmicPartner[];
+  actions: KarmicPartnerAction[];
+}) {
   const nameById = new Map(partners.map((p) => [p.id, p.name ?? "—"]));
   const groupLabel = (g: KarmicPartnerGroup) =>
-    ({ coworkers: "Co-workers", customers: "Customers", suppliers: "Suppliers", world: "The World" })[g];
+    ({
+      coworkers: "Co-workers",
+      customers: "Customers",
+      suppliers: "Suppliers",
+      world: "The World",
+    })[g];
 
   const byDate = new Map<string, KarmicPartnerAction[]>();
   for (const a of actions) {
@@ -270,7 +319,9 @@ function History({ partners, actions }: { partners: KarmicPartner[]; actions: Ka
   if (dates.length === 0) {
     return (
       <div className="rounded-2xl border border-blue-100 bg-white p-8 text-center">
-        <p className="text-sm text-ink-light">No partner actions recorded yet.</p>
+        <p className="text-sm text-ink-light">
+          No partner actions recorded yet.
+        </p>
       </div>
     );
   }
@@ -278,18 +329,28 @@ function History({ partners, actions }: { partners: KarmicPartner[]; actions: Ka
   return (
     <div className="space-y-4">
       {dates.map((d) => (
-        <div key={d} className="space-y-2 rounded-2xl border border-blue-100 bg-white p-4">
+        <div
+          key={d}
+          className="space-y-2 rounded-2xl border border-blue-100 bg-white p-4"
+        >
           <p className="text-sm font-medium text-ink">{prettyDate(d)}</p>
           {KARMIC_PARTNER_GROUP_ORDER.map((g) => {
             const rows = byDate.get(d)!.filter((a) => a.partner_group === g);
             if (rows.length === 0) return null;
             return (
               <div key={g} className="space-y-1">
-                <h4 className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">{groupLabel(g)}</h4>
+                <h4 className="text-[11px] font-semibold uppercase tracking-wide text-indigo-500">
+                  {groupLabel(g)}
+                </h4>
                 {rows.map((a) => (
-                  <p key={a.id} className={`text-sm ${a.done ? "text-ink-light line-through" : "text-ink"}`}>
+                  <p
+                    key={a.id}
+                    className={`text-sm ${a.done ? "text-ink-light line-through" : "text-ink"}`}
+                  >
                     {a.done ? "✓ " : "○ "}
-                    <span className="font-medium text-ink">{nameById.get(a.partner_id) ?? "—"}</span>
+                    <span className="font-medium text-ink">
+                      {nameById.get(a.partner_id) ?? "—"}
+                    </span>
                     <span className="text-ink-light"> — {a.text}</span>
                   </p>
                 ))}
@@ -322,7 +383,13 @@ function PartnerBoardEditor({
   const dayActions = actions.filter((a) => a.action_date === date);
 
   type Mutation =
-    | { kind: "add"; partnerId: string; group: KarmicPartnerGroup; tempId: string; text: string }
+    | {
+        kind: "add";
+        partnerId: string;
+        group: KarmicPartnerGroup;
+        tempId: string;
+        text: string;
+      }
     | { kind: "toggle"; id: string }
     | { kind: "delete"; id: string };
   const [optimisticActions, applyOptimistic] = useOptimistic(
@@ -342,7 +409,8 @@ function PartnerBoardEditor({
         };
         return [...state, row];
       }
-      if (m.kind === "toggle") return state.map((a) => (a.id === m.id ? { ...a, done: !a.done } : a));
+      if (m.kind === "toggle")
+        return state.map((a) => (a.id === m.id ? { ...a, done: !a.done } : a));
       return state.filter((a) => a.id !== m.id);
     },
   );
@@ -358,7 +426,13 @@ function PartnerBoardEditor({
         tempId: `tmp-${(tempId.current += 1)}`,
         text,
       });
-      const res = await addPartnerAction(partner.id, partner.partner_group, date, text, today);
+      const res = await addPartnerAction(
+        partner.id,
+        partner.partner_group,
+        date,
+        text,
+        today,
+      );
       if (res?.error) showToast(res.error, "error");
     });
   }
@@ -380,8 +454,14 @@ function PartnerBoardEditor({
   return (
     <div className="space-y-3">
       {board.map((bucket) => {
-        const totalActions = bucket.partners.reduce((n, c) => n + c.actions.length, 0);
-        const doneActions = bucket.partners.reduce((n, c) => n + c.actions.filter((a) => a.done).length, 0);
+        const totalActions = bucket.partners.reduce(
+          (n, c) => n + c.actions.length,
+          0,
+        );
+        const doneActions = bucket.partners.reduce(
+          (n, c) => n + c.actions.filter((a) => a.done).length,
+          0,
+        );
         return (
           <section
             key={bucket.group}
@@ -390,7 +470,9 @@ function PartnerBoardEditor({
             <div className="flex items-start gap-2">
               <span className="text-lg leading-none">{bucket.emoji}</span>
               <div className="min-w-0 flex-1">
-                <h3 className="text-sm font-semibold text-indigo-800">{bucket.label}</h3>
+                <h3 className="text-sm font-semibold text-indigo-800">
+                  {bucket.label}
+                </h3>
                 <p className="text-[11px] text-ink-light">{bucket.hint}</p>
               </div>
               {(bucket.partners.length > 0 || totalActions > 0) && (
@@ -402,18 +484,26 @@ function PartnerBoardEditor({
             </div>
 
             {bucket.partners.length === 0 && !manage && (
-              <p className="px-1 py-2 text-xs italic text-ink-light">No {bucket.singular}s in this group.</p>
+              <p className="px-1 py-2 text-xs italic text-ink-light">
+                No {bucket.singular}s in this group.
+              </p>
             )}
 
             {bucket.partners.map(({ partner, actions: partnerActions }) => (
-              <div key={partner.id} className="space-y-2 rounded-xl border border-indigo-100 bg-white/60 p-2.5">
+              <div
+                key={partner.id}
+                className="space-y-2 rounded-xl border border-indigo-100 bg-white/60 p-2.5"
+              >
                 {manage ? (
                   <PartnerHeader partner={partner} />
                 ) : (
                   <p className="px-2 text-sm font-semibold text-ink">
                     {partner.name || "—"}
                     {partner.success_vision && (
-                      <span className="font-normal text-ink-light"> · success = {partner.success_vision}</span>
+                      <span className="font-normal text-ink-light">
+                        {" "}
+                        · success = {partner.success_vision}
+                      </span>
                     )}
                   </p>
                 )}
@@ -428,9 +518,14 @@ function PartnerBoardEditor({
 
             {manage &&
               (canAddPartner(partners, bucket.group) ? (
-                <AddPartnerForm group={bucket.group} singular={bucket.singular} />
+                <AddPartnerForm
+                  group={bucket.group}
+                  singular={bucket.singular}
+                />
               ) : (
-                <p className="px-1 text-[11px] italic text-ink-light">Group full — delete one to add another.</p>
+                <p className="px-1 text-[11px] italic text-ink-light">
+                  Group full — delete one to add another.
+                </p>
               ))}
           </section>
         );
@@ -456,13 +551,15 @@ export function PartnersTab({
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-lg border border-blue-100 bg-white p-0.5 text-sm">
+        <div className="flex w-fit max-w-full gap-1 overflow-x-auto whitespace-nowrap rounded-lg border border-blue-100 bg-white p-0.5 text-sm scrollbar-hide">
           {(["today", "history"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`rounded-md px-3 py-1 font-medium transition ${
-                view === v ? "bg-indigo-600 text-white" : "text-ink-light hover:bg-blue-50"
+                view === v
+                  ? "bg-indigo-600 text-white"
+                  : "text-ink-light hover:bg-blue-50"
               }`}
             >
               {v === "today" ? "Today" : "History"}
@@ -485,9 +582,17 @@ export function PartnersTab({
       ) : (
         <>
           <p className="rounded-lg bg-indigo-50/60 px-3 py-2 text-xs text-ink-light">
-            Make your partners successful first — no strings attached. Your own success is the echo.
+            Make your partners successful first — no strings attached. Your own
+            success is the echo.
           </p>
-          <PartnerBoardEditor key={today} date={today} partners={partners} actions={actions} today={today} manage />
+          <PartnerBoardEditor
+            key={today}
+            date={today}
+            partners={partners}
+            actions={actions}
+            today={today}
+            manage
+          />
         </>
       )}
 

@@ -50,7 +50,13 @@ export function BPriorityBox({
               className={`h-4 w-4 text-ink-light transition-transform ${expanded ? "rotate-180" : ""}`}
               aria-hidden="true"
             >
-              <polyline points="5,7 10,13 15,7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              <polyline
+                points="5,7 10,13 15,7"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </div>
         </div>
@@ -59,22 +65,30 @@ export function BPriorityBox({
       {expanded && (
         <div className="p-3 space-y-1.5">
           {activities.map((a) => {
-            const projectName = a.linked_project_id ? projectMap.get(a.linked_project_id) ?? null : null;
+            const projectName = a.linked_project_id
+              ? (projectMap.get(a.linked_project_id) ?? null)
+              : null;
             const cy = cycleSummary.get(a.id);
             return (
               <div
                 key={a.id}
                 className="flex items-center justify-between gap-2 rounded-lg border border-blue-50 bg-paper p-2.5"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className="flex-shrink-0 rounded bg-blue-100 px-1 py-0.5 text-[10px] font-bold text-blue-700">
                       B
                     </span>
-                    <span className="text-xs font-medium text-ink truncate">{a.title}</span>
+                    <span className="text-xs font-medium text-ink truncate">
+                      {a.title}
+                    </span>
                   </div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-light">
-                    {projectName && <span className="text-blue-600 truncate">{projectName}</span>}
+                    {projectName && (
+                      <span className="text-blue-600 truncate">
+                        {projectName}
+                      </span>
+                    )}
                     {cy && (
                       <span title="Cycles for this activity today">
                         ◷ {cy.count} {cy.count === 1 ? "cycle" : "cycles"}

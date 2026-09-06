@@ -49,6 +49,7 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     hours_worked: 0,
     archived: false,
     is_someday: false,
+    is_weekly: false,
     recurrence_rule: null,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -285,14 +286,14 @@ describe("30-day horizon + Someday (Phase 1B)", () => {
   });
 
   it("isWithinHorizon: today and +30 are in; +31 is out; someday is out", () => {
-    expect(isWithinHorizon({ activity_date: today, is_someday: false }, today)).toBe(true);
-    expect(isWithinHorizon({ activity_date: "2026-07-15", is_someday: false }, today)).toBe(true); // +30
-    expect(isWithinHorizon({ activity_date: "2026-07-16", is_someday: false }, today)).toBe(false); // +31
-    expect(isWithinHorizon({ activity_date: today, is_someday: true }, today)).toBe(false);
+    expect(isWithinHorizon({ activity_date: today, is_someday: false, is_weekly: false }, today)).toBe(true);
+    expect(isWithinHorizon({ activity_date: "2026-07-15", is_someday: false, is_weekly: false }, today)).toBe(true); // +30
+    expect(isWithinHorizon({ activity_date: "2026-07-16", is_someday: false, is_weekly: false }, today)).toBe(false); // +31
+    expect(isWithinHorizon({ activity_date: today, is_someday: true, is_weekly: false }, today)).toBe(false);
   });
 
   it("isWithinHorizon: overdue (past) items still count as near-term", () => {
-    expect(isWithinHorizon({ activity_date: "2026-06-01", is_someday: false }, today)).toBe(true);
+    expect(isWithinHorizon({ activity_date: "2026-06-01", is_someday: false, is_weekly: false }, today)).toBe(true);
   });
 
   it("partitionByHorizon splits into the three buckets", () => {

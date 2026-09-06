@@ -20,7 +20,12 @@ const SECTION_LABELS: Record<ActivitySection, string> = {
   delegated: "Delegated",
 };
 
-const SECTION_ORDER: ActivitySection[] = ["work", "outside", "unplanned", "delegated"];
+const SECTION_ORDER: ActivitySection[] = [
+  "work",
+  "outside",
+  "unplanned",
+  "delegated",
+];
 
 type CycleSummary = { count: number; done: number; focusMin: number };
 
@@ -36,7 +41,11 @@ interface ActivityRowProps {
   onSchedule: (activity: Activity) => void;
   onPromote: (activity: Activity) => void;
   onComplete: (activity: Activity) => void;
-  onMoveToDate: (activityId: string, toDate: string, linkedProjectId: string | null) => void;
+  onMoveToDate: (
+    activityId: string,
+    toDate: string,
+    linkedProjectId: string | null,
+  ) => void;
 }
 
 function ActivityRow({
@@ -83,20 +92,31 @@ function ActivityRow({
                 {activity.priority}
               </span>
             )}
-            <span className="text-xs font-medium text-ink truncate">{activity.title}</span>
+            <span className="text-xs font-medium text-ink truncate">
+              {activity.title}
+            </span>
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] text-ink-light">
-            {projectName && <span className="text-blue-600 truncate">{projectName}</span>}
+            {projectName && (
+              <span className="text-blue-600 truncate">{projectName}</span>
+            )}
             {/* Bug §10: show remaining as estimated - hours_worked, capped at 0 */}
             {(() => {
-              const computed = Math.max(0, activity.estimated_minutes - (activity.hours_worked ?? 0));
+              const computed = Math.max(
+                0,
+                activity.estimated_minutes - (activity.hours_worked ?? 0),
+              );
               return computed === 0 ? (
-                <span className="text-amber-600 font-medium">Extra time (overwork)</span>
+                <span className="text-amber-600 font-medium">
+                  Extra time (overwork)
+                </span>
               ) : (
                 <span>{formatMinutes(computed)} remaining</span>
               );
             })()}
-            {activity.moved_from_date && <span className="text-amber-600">↷ moved</span>}
+            {activity.moved_from_date && (
+              <span className="text-amber-600">↷ moved</span>
+            )}
             {cycle && (
               <span title="Cycles for this activity today">
                 ◷ {cycle.count} {cycle.count === 1 ? "cycle" : "cycles"}
@@ -163,7 +183,7 @@ function ActivityRow({
             value={moveDate}
             min={todayISO()}
             onChange={(e) => setMoveDate(e.target.value)}
-            className="flex-1 rounded-lg border border-blue-100 px-2 py-1 text-xs text-ink focus:border-blue-400 focus:outline-none"
+            className="min-w-0 flex-1 rounded-lg border border-blue-100 px-2 py-1 text-xs text-ink focus:border-blue-400 focus:outline-none"
           />
           <button
             onClick={handleMove}
@@ -190,7 +210,11 @@ interface Props {
   selectedDate: string;
   isPending: boolean;
   onSchedule: (activity: Activity) => void;
-  onMoveToDate: (activityId: string, toDate: string, linkedProjectId: string | null) => void;
+  onMoveToDate: (
+    activityId: string,
+    toDate: string,
+    linkedProjectId: string | null,
+  ) => void;
   /** Phase 4: per-activity cycle summary (its schedule blocks today). */
   cycleSummary?: Map<string, CycleSummary>;
   onComplete: (activity: Activity) => void;
@@ -239,7 +263,9 @@ export function UnscheduledList({
         onClick={() => isCollapsible && setExpanded((v) => !v)}
         className={[
           "w-full px-4 py-3 border-b border-blue-50 text-left",
-          isCollapsible ? "cursor-pointer hover:bg-blue-50/40 transition" : "cursor-default",
+          isCollapsible
+            ? "cursor-pointer hover:bg-blue-50/40 transition"
+            : "cursor-default",
         ].join(" ")}
         aria-expanded={isCollapsible ? expanded : undefined}
       >
@@ -249,7 +275,8 @@ export function UnscheduledList({
           </h3>
           <div className="flex items-center gap-2">
             <span className="text-xs font-medium text-ink-light">
-              {activities.length} {activities.length === 1 ? "activity" : "activities"}
+              {activities.length}{" "}
+              {activities.length === 1 ? "activity" : "activities"}
             </span>
             {isCollapsible && (
               <svg
@@ -258,7 +285,13 @@ export function UnscheduledList({
                 className={`h-4 w-4 text-ink-light transition-transform ${expanded ? "rotate-180" : ""}`}
                 aria-hidden="true"
               >
-                <polyline points="5,7 10,13 15,7" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <polyline
+                  points="5,7 10,13 15,7"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             )}
           </div>
@@ -270,64 +303,66 @@ export function UnscheduledList({
 
       {/* Body — hidden when collapsible and collapsed */}
       {(!isCollapsible || expanded) && (
-      <div className="p-3 space-y-3">
-        {/* A-priority gate banner */}
-        {canSchedule && hasUnscheduledAPriority && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
-            Schedule your <strong>A-priority</strong> activities first before scheduling others.
-          </div>
-        )}
-        {/* Phase 0A: B's aren't schedulable directly — promote to A first. */}
-        {canSchedule && !hasUnscheduledAPriority && hasUnschedulableB && (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
-            Only <strong>A-priority</strong> activities can be scheduled. Promote a B to A (on the
-            B&nbsp;Activities screen) to put it on the timeline.
-          </div>
-        )}
+        <div className="p-3 space-y-3">
+          {/* A-priority gate banner */}
+          {canSchedule && hasUnscheduledAPriority && (
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              Schedule your <strong>A-priority</strong> activities first before
+              scheduling others.
+            </div>
+          )}
+          {/* Phase 0A: B's aren't schedulable directly — promote to A first. */}
+          {canSchedule && !hasUnscheduledAPriority && hasUnschedulableB && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              Only <strong>A-priority</strong> activities can be scheduled.
+              Promote a B to A (on the B&nbsp;Activities screen) to put it on
+              the timeline.
+            </div>
+          )}
 
-        {activities.length === 0 ? (
-          <p className="text-xs text-ink-light text-center py-6">
-            All activities scheduled or complete.
-          </p>
-        ) : (
-          SECTION_ORDER.map((section) => {
-            const items = grouped[section];
-            if (items.length === 0) return null;
+          {activities.length === 0 ? (
+            <p className="text-xs text-ink-light text-center py-6">
+              All activities scheduled or complete.
+            </p>
+          ) : (
+            SECTION_ORDER.map((section) => {
+              const items = grouped[section];
+              if (items.length === 0) return null;
 
-            return (
-              <div key={section}>
-                <p className="text-[10px] font-semibold text-ink-light uppercase tracking-wide mb-1.5">
-                  {SECTION_LABELS[section]}
-                </p>
-                <div className="space-y-1.5">
-                  {items.map((activity) => (
-                    <ActivityRow
-                      key={activity.id}
-                      activity={activity}
-                      projectMap={projectMap}
-                      canSchedule={canSchedule}
-                      aPriorityBlocked={activity.priority !== "A"}
-                      canPromote={canPromoteB}
-                      isPending={isPending}
-                      cycle={cycleSummary?.get(activity.id)}
-                      onSchedule={onSchedule}
-                      onPromote={(a) => onPromote?.(a)}
-                      onComplete={onComplete}
-                      onMoveToDate={onMoveToDate}
-                    />
-                  ))}
+              return (
+                <div key={section}>
+                  <p className="text-[10px] font-semibold text-ink-light uppercase tracking-wide mb-1.5">
+                    {SECTION_LABELS[section]}
+                  </p>
+                  <div className="space-y-1.5">
+                    {items.map((activity) => (
+                      <ActivityRow
+                        key={activity.id}
+                        activity={activity}
+                        projectMap={projectMap}
+                        canSchedule={canSchedule}
+                        aPriorityBlocked={activity.priority !== "A"}
+                        canPromote={canPromoteB}
+                        isPending={isPending}
+                        cycle={cycleSummary?.get(activity.id)}
+                        onSchedule={onSchedule}
+                        onPromote={(a) => onPromote?.(a)}
+                        onComplete={onComplete}
+                        onMoveToDate={onMoveToDate}
+                      />
+                    ))}
+                  </div>
                 </div>
-              </div>
-            );
-          })
-        )}
+              );
+            })
+          )}
 
-        {!canSchedule && activities.length > 0 && (
-          <p className="text-[10px] text-ink-light text-center pt-1">
-            Past date — view only
-          </p>
-        )}
-      </div>
+          {!canSchedule && activities.length > 0 && (
+            <p className="text-[10px] text-ink-light text-center pt-1">
+              Past date — view only
+            </p>
+          )}
+        </div>
       )}
     </div>
   );

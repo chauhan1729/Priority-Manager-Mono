@@ -23,7 +23,11 @@ interface Props {
   contacts: Pick<Contact, "id" | "full_name">[];
   projectPriorityMap?: Map<string, string | null>;
   isPending: boolean;
-  onStatusChange: (id: string, status: string, projectId: string | null) => void;
+  onStatusChange: (
+    id: string,
+    status: string,
+    projectId: string | null,
+  ) => void;
   onDelegate: (id: string, contactId: string, projectId: string | null) => void;
   onDelete: (id: string, projectId: string | null) => void;
   onPostpone: (id: string, projectId: string | null) => void;
@@ -31,6 +35,7 @@ interface Props {
   onArchive: (id: string, projectId: string | null) => void;
   onTogglePriority?: ((activity: Activity) => void) | undefined;
   onMoveToSomeday?: ((activity: Activity) => void) | undefined;
+  onMoveToWeek?: ((activity: Activity) => void) | undefined;
   onBringToToday: (activity: Activity) => void;
   onBringAll: () => void;
   onClose: () => void;
@@ -57,6 +62,7 @@ export function PendingModal({
   onArchive,
   onTogglePriority,
   onMoveToSomeday,
+  onMoveToWeek,
   onBringToToday,
   onBringAll,
   onClose,
@@ -79,7 +85,8 @@ export function PendingModal({
               </span>
             </h2>
             <p className="mt-0.5 text-xs text-ink-light">
-              {title} · overdue and still open — bring them to today or clear them.
+              {title} · overdue and still open — bring them to today or clear
+              them.
             </p>
           </div>
           <button
@@ -109,6 +116,7 @@ export function PendingModal({
                 projectPriorityMap={projectPriorityMap}
                 overdueLabel={overdueLabel(activity.activity_date, today)}
                 onBringToToday={onBringToToday}
+                compactActions
                 onStatusChange={onStatusChange}
                 onDelegate={onDelegate}
                 onDelete={onDelete}
@@ -117,6 +125,7 @@ export function PendingModal({
                 onArchive={onArchive}
                 onTogglePriority={onTogglePriority}
                 onMoveToSomeday={onMoveToSomeday}
+                onMoveToWeek={onMoveToWeek}
               />
             ))
           )}

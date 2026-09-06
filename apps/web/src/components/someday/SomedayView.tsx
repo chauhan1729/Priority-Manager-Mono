@@ -1,6 +1,12 @@
 "use client";
 
-import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 
 import { HORIZON_DAYS, todayISO } from "@pm/domain";
 import type { Activity, Project } from "@pm/types";
@@ -10,9 +16,19 @@ import {
   pullIntoHorizon,
   type ActionResult,
 } from "@/app/(app)/activities/actions";
+import {
+  ParkedProjectPicker,
+  truncateProjectName,
+} from "@/components/activities/ParkedProjectPicker";
 import { showToast } from "@/components/ui/Toaster";
 
-function SomedayRow({ item }: { item: Activity }) {
+function SomedayRow({
+  item,
+  projects,
+}: {
+  item: Activity;
+  projects: Pick<Project, "id" | "name" | "status">[];
+}) {
   const [isPending, startTransition] = useTransition();
   const [date, setDate] = useState(todayISO());
   const [showPull, setShowPull] = useState(false);
@@ -28,9 +44,20 @@ function SomedayRow({ item }: { item: Activity }) {
   return (
     <div className="rounded-xl border border-blue-50 bg-white p-3.5">
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="text-sm font-medium text-ink">{item.title}</p>
-          {item.note && <p className="mt-0.5 text-xs italic text-ink-light">“{item.note}”</p>}
+        <div className="min-w-0 flex-1">
+          <p className="break-words text-sm font-medium text-ink">
+            {item.title}
+          </p>
+          <ParkedProjectPicker
+            activityId={item.id}
+            projectId={item.linked_project_id}
+            projects={projects}
+          />
+          {item.note && (
+            <p className="mt-0.5 break-words text-xs italic text-ink-light">
+              “{item.note}”
+            </p>
+          )}
         </div>
         <div className="flex flex-shrink-0 items-center gap-1.5">
           <button
@@ -85,7 +112,10 @@ export function SomedayView({
   items: Activity[];
   projects: Pick<Project, "id" | "name" | "status">[];
 }) {
-  const [state, formAction] = useActionState<ActionResult, FormData>(createSomedayActivity, null);
+  const [state, formAction] = useActionState<ActionResult, FormData>(
+    createSomedayActivity,
+    null,
+  );
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -100,14 +130,18 @@ export function SomedayView({
       <header className="border-b border-blue-100 px-6 py-5 md:px-8">
         <h1 className="font-handwriting text-2xl text-ink">Someday</h1>
         <p className="mt-0.5 text-xs text-ink-light">
-          Things that don&apos;t fit in the next {HORIZON_DAYS} days. Review weekly; pull anything ready into
-          your horizon.
+          Things that don&apos;t fit in the next {HORIZON_DAYS} days. Review
+          weekly; pull anything ready into your horizon.
         </p>
       </header>
 
       <div className="flex-1 overflow-y-auto px-6 py-5 md:px-8 space-y-4">
         {/* Quick add — title + optional project */}
-        <form ref={formRef} action={formAction} className="flex flex-wrap gap-2">
+        <form
+          ref={formRef}
+          action={formAction}
+          className="flex flex-wrap gap-2"
+        >
           <input
             name="title"
             type="text"
@@ -119,12 +153,13 @@ export function SomedayView({
             <select
               name="linked_project_id"
               defaultValue=""
-              className="rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
+              aria-label="Project"
+              className="min-w-0 flex-1 basis-40 truncate rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink focus:border-blue-400 focus:outline-none"
             >
               <option value="">No project</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name}
+                  {truncateProjectName(p.name)}
                 </option>
               ))}
             </select>
@@ -137,7 +172,9 @@ export function SomedayView({
           </button>
         </form>
         {state && "error" in state && (
-          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">{state.error}</p>
+          <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+            {state.error}
+          </p>
         )}
 
         {/* List */}
@@ -148,7 +185,7 @@ export function SomedayView({
         ) : (
           <div className="space-y-2">
             {items.map((item) => (
-              <SomedayRow key={item.id} item={item} />
+              <SomedayRow key={item.id} item={item} projects={projects} />
             ))}
           </div>
         )}

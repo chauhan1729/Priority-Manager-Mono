@@ -1,6 +1,10 @@
 "use client";
 
-import type { Activity, ActivitySection as SectionType, Contact } from "@pm/types";
+import type {
+  Activity,
+  ActivitySection as SectionType,
+  Contact,
+} from "@pm/types";
 import { ActivityCard } from "./ActivityCard";
 
 function formatMinutes(minutes: number): string {
@@ -23,7 +27,11 @@ interface Props {
   bulkMode?: boolean;
   selectedIds?: Set<string>;
   onToggleSelect?: (id: string) => void;
-  onStatusChange: (id: string, status: string, projectId: string | null) => void;
+  onStatusChange: (
+    id: string,
+    status: string,
+    projectId: string | null,
+  ) => void;
   onDelegate: (id: string, contactId: string, projectId: string | null) => void;
   onDelete: (id: string, projectId: string | null) => void;
   onPostpone: (id: string, projectId: string | null) => void;
@@ -31,6 +39,7 @@ interface Props {
   onArchive: (id: string, projectId: string | null) => void;
   onTogglePriority?: ((activity: Activity) => void) | undefined;
   onMoveToSomeday?: ((activity: Activity) => void) | undefined;
+  onMoveToWeek?: ((activity: Activity) => void) | undefined;
 }
 
 export function ActivitySection({
@@ -53,6 +62,7 @@ export function ActivitySection({
   onArchive,
   onTogglePriority,
   onMoveToSomeday,
+  onMoveToWeek,
 }: Props) {
   if (activities.length === 0) return null;
 
@@ -75,7 +85,9 @@ export function ActivitySection({
           {completed > 0 && (
             <>
               <span className="opacity-40">·</span>
-              <span className="text-green-600 font-medium">{completed} done</span>
+              <span className="text-green-600 font-medium">
+                {completed} done
+              </span>
             </>
           )}
         </div>
@@ -104,6 +116,7 @@ export function ActivitySection({
             onArchive={onArchive}
             onTogglePriority={onTogglePriority}
             onMoveToSomeday={onMoveToSomeday}
+            onMoveToWeek={onMoveToWeek}
           />
         ))}
       </div>

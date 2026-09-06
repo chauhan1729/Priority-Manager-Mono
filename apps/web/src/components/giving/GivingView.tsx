@@ -42,7 +42,8 @@ function Header({ onOpenReading }: { onOpenReading: () => void }) {
         <div>
           <h1 className="font-handwriting text-2xl text-ink">Giving</h1>
           <p className="mt-0.5 text-xs text-ink-light">
-            The secret of living is giving. Give daily, cheerfully and in secret — and keep score.
+            The secret of living is giving. Give daily, cheerfully and in secret
+            — and keep score.
           </p>
         </div>
         <button
@@ -60,7 +61,9 @@ function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="rounded-lg border border-blue-100 bg-white py-3 text-center">
       <p className="text-2xl font-semibold text-ink">{value}</p>
-      <p className="text-[10px] uppercase tracking-wide text-ink-light">{label}</p>
+      <p className="text-[10px] uppercase tracking-wide text-ink-light">
+        {label}
+      </p>
     </div>
   );
 }
@@ -70,10 +73,13 @@ function Onboarding({ today }: { today: string }) {
   const [isPending, start] = useTransition();
   return (
     <div className="mx-auto max-w-md rounded-2xl border border-blue-100 bg-white p-6 text-center">
-      <p className="font-handwriting text-2xl text-ink">The Secret of Living is Giving</p>
+      <p className="font-handwriting text-2xl text-ink">
+        The Secret of Living is Giving
+      </p>
       <p className="mt-2 text-sm text-ink-light">
-        Take the 90-day challenge: give something every day — words, thoughts, deeds, or things/money —
-        and record what you gave and what came back. Give freely, expect nothing.
+        Take the 90-day challenge: give something every day — words, thoughts,
+        deeds, or things/money — and record what you gave and what came back.
+        Give freely, expect nothing.
       </p>
       <button
         onClick={() =>
@@ -116,7 +122,9 @@ function ReviewScreen({
   return (
     <div className="mx-auto max-w-lg rounded-2xl border border-indigo-100 bg-indigo-50/40 p-6 text-center">
       <p className="font-handwriting text-2xl text-ink">90 days complete</p>
-      <p className="mt-1 text-sm text-ink-light">Look at the magic that happened.</p>
+      <p className="mt-1 text-sm text-ink-light">
+        Look at the magic that happened.
+      </p>
       <div className="mt-4 grid grid-cols-3 gap-3">
         <Stat label="Days given" value={score.daysLogged} />
         <Stat label="Received" value={score.receivedCount} />
@@ -149,7 +157,10 @@ function ReviewScreen({
 // ---------------------------------------------------------------------------
 function shortDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y!, m! - 1, d!).toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return new Date(y!, m! - 1, d!).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 function LogRow({
@@ -165,17 +176,22 @@ function LogRow({
 }) {
   return (
     <div className="flex items-center justify-between gap-2 rounded-lg border border-blue-50 bg-white px-3 py-2">
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className="truncate text-sm text-ink">
-          {showDate && <span className="mr-1.5 text-[10px] font-medium text-ink-light">{shortDate(log.entry_date)}</span>}
+          {showDate && (
+            <span className="mr-1.5 text-[10px] font-medium text-ink-light">
+              {shortDate(log.entry_date)}
+            </span>
+          )}
           {log.content}
         </p>
-        {log.kind === "given" && (log.categories.length > 0 || log.given_in_secret) && (
-          <p className="mt-0.5 truncate text-[10px] text-ink-light">
-            {log.categories.map((c) => CATEGORY_LABELS[c]).join(" · ")}
-            {log.given_in_secret ? " · in secret" : ""}
-          </p>
-        )}
+        {log.kind === "given" &&
+          (log.categories.length > 0 || log.given_in_secret) && (
+            <p className="mt-0.5 truncate text-[10px] text-ink-light">
+              {log.categories.map((c) => CATEGORY_LABELS[c]).join(" · ")}
+              {log.given_in_secret ? " · in secret" : ""}
+            </p>
+          )}
       </div>
       {editable && (
         <button
@@ -209,7 +225,12 @@ function KindSection({
   withCategories: boolean;
   editable: boolean;
   logs: GivingLog[];
-  onAdd: (kind: GivingKind, content: string, categories: GivingCategory[], secret: boolean) => void;
+  onAdd: (
+    kind: GivingKind,
+    content: string,
+    categories: GivingCategory[],
+    secret: boolean,
+  ) => void;
   onDelete: (id: string) => void;
 }) {
   const [content, setContent] = useState("");
@@ -217,7 +238,9 @@ function KindSection({
   const [secret, setSecret] = useState(true);
 
   function toggleCat(c: GivingCategory) {
-    setCats((prev) => (prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c]));
+    setCats((prev) =>
+      prev.includes(c) ? prev.filter((x) => x !== c) : [...prev, c],
+    );
   }
 
   function add() {
@@ -234,9 +257,22 @@ function KindSection({
 
   return (
     <div className="space-y-2 rounded-xl border border-blue-100 bg-white p-4">
-      <h3 className={`text-xs font-semibold uppercase tracking-wide ${accent}`}>{title}</h3>
+      <h3 className={`text-xs font-semibold uppercase tracking-wide ${accent}`}>
+        {title}
+      </h3>
 
-      {logs.length > 0 && <div className="space-y-1.5">{logs.map((l) => <LogRow key={l.id} log={l} editable={editable} onDelete={onDelete} />)}</div>}
+      {logs.length > 0 && (
+        <div className="space-y-1.5">
+          {logs.map((l) => (
+            <LogRow
+              key={l.id}
+              log={l}
+              editable={editable}
+              onDelete={onDelete}
+            />
+          ))}
+        </div>
+      )}
 
       {editable && (
         <div className="space-y-2">
@@ -247,7 +283,7 @@ function KindSection({
               maxLength={200}
               placeholder={placeholder}
               onKeyDown={(e) => e.key === "Enter" && content.trim() && add()}
-              className="flex-1 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink placeholder:text-ink-light/50 focus:border-blue-400 focus:outline-none"
+              className="min-w-0 flex-1 rounded-lg border border-blue-100 bg-white px-3 py-2 text-sm text-ink placeholder:text-ink-light/50 focus:border-blue-400 focus:outline-none"
             />
             <button
               onClick={add}
@@ -274,7 +310,12 @@ function KindSection({
                 </button>
               ))}
               <label className="ml-2 flex items-center gap-1 text-[11px] text-ink-light">
-                <input type="checkbox" checked={secret} onChange={(e) => setSecret(e.target.checked)} className="h-3.5 w-3.5" />
+                <input
+                  type="checkbox"
+                  checked={secret}
+                  onChange={(e) => setSecret(e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
                 cheerfully &amp; in secret
               </label>
             </div>
@@ -305,18 +346,34 @@ function AllEntries({
   return (
     <div className="space-y-4">
       {KIND_META.map(({ kind, title, accent }) => {
-        const items = logs.filter((l) => l.kind === kind).slice().reverse(); // most recent first
+        const items = logs
+          .filter((l) => l.kind === kind)
+          .slice()
+          .reverse(); // most recent first
         return (
-          <div key={kind} className="space-y-2 rounded-xl border border-blue-100 bg-white p-4">
-            <h3 className={`text-xs font-semibold uppercase tracking-wide ${accent}`}>
+          <div
+            key={kind}
+            className="space-y-2 rounded-xl border border-blue-100 bg-white p-4"
+          >
+            <h3
+              className={`text-xs font-semibold uppercase tracking-wide ${accent}`}
+            >
               {title} ({items.length})
             </h3>
             {items.length === 0 ? (
-              <p className="py-3 text-center text-xs text-ink-light">Nothing yet.</p>
+              <p className="py-3 text-center text-xs text-ink-light">
+                Nothing yet.
+              </p>
             ) : (
               <div className="space-y-1.5">
                 {items.map((l) => (
-                  <LogRow key={l.id} log={l} editable={editable} showDate onDelete={onDelete} />
+                  <LogRow
+                    key={l.id}
+                    log={l}
+                    editable={editable}
+                    showDate
+                    onDelete={onDelete}
+                  />
                 ))}
               </div>
             )}
@@ -359,7 +416,9 @@ function ResetButton() {
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2 rounded-lg border border-red-100 bg-red-50 px-3 py-2.5">
-      <span className="text-xs text-red-800">Delete all giving records? This can&apos;t be undone.</span>
+      <span className="text-xs text-red-800">
+        Delete all giving records? This can&apos;t be undone.
+      </span>
       <button
         onClick={reset}
         disabled={isPending}
@@ -392,7 +451,13 @@ function GiftEditor({
   date: string;
   dayLogs: GivingLog[];
   editable: boolean;
-  onAdd: (date: string, kind: GivingKind, content: string, categories: GivingCategory[], secret: boolean) => void;
+  onAdd: (
+    date: string,
+    kind: GivingKind,
+    content: string,
+    categories: GivingCategory[],
+    secret: boolean,
+  ) => void;
   onDelete: (id: string) => void;
 }) {
   const ofKind = (k: GivingKind) => dayLogs.filter((l) => l.kind === k);
@@ -406,7 +471,9 @@ function GiftEditor({
         withCategories
         editable={editable}
         logs={ofKind("given")}
-        onAdd={(kind, content, cats, secret) => onAdd(date, kind, content, cats, secret)}
+        onAdd={(kind, content, cats, secret) =>
+          onAdd(date, kind, content, cats, secret)
+        }
         onDelete={onDelete}
       />
       <KindSection
@@ -417,7 +484,9 @@ function GiftEditor({
         withCategories={false}
         editable={editable}
         logs={ofKind("received")}
-        onAdd={(kind, content, cats, secret) => onAdd(date, kind, content, cats, secret)}
+        onAdd={(kind, content, cats, secret) =>
+          onAdd(date, kind, content, cats, secret)
+        }
         onDelete={onDelete}
       />
       <KindSection
@@ -428,7 +497,9 @@ function GiftEditor({
         withCategories={false}
         editable={editable}
         logs={ofKind("cognition")}
-        onAdd={(kind, content, cats, secret) => onAdd(date, kind, content, cats, secret)}
+        onAdd={(kind, content, cats, secret) =>
+          onAdd(date, kind, content, cats, secret)
+        }
         onDelete={onDelete}
       />
     </div>
@@ -454,9 +525,13 @@ function DailyBoard({
   // Optimistic mirror of the logs so add/delete land instantly while the
   // insert/delete + revalidation run in the background. Re-seeds from props
   // (server truth) on every render, so it self-heals if a write fails.
-  type Mutation = { kind: "add"; log: GivingLog } | { kind: "delete"; id: string };
-  const [optimisticLogs, applyOptimistic] = useOptimistic(logs, (state: GivingLog[], m: Mutation) =>
-    m.kind === "add" ? [...state, m.log] : state.filter((l) => l.id !== m.id),
+  type Mutation =
+    | { kind: "add"; log: GivingLog }
+    | { kind: "delete"; id: string };
+  const [optimisticLogs, applyOptimistic] = useOptimistic(
+    logs,
+    (state: GivingLog[], m: Mutation) =>
+      m.kind === "add" ? [...state, m.log] : state.filter((l) => l.id !== m.id),
   );
   const tempId = useRef(0);
 
@@ -482,7 +557,15 @@ function DailyBoard({
     };
     start(async () => {
       applyOptimistic({ kind: "add", log: optimisticLog });
-      const res = await addGivingLog(challenge.id, date, kind, clean, categories, secret, today);
+      const res = await addGivingLog(
+        challenge.id,
+        date,
+        kind,
+        clean,
+        categories,
+        secret,
+        today,
+      );
       if (res?.error) showToast(res.error, "error");
     });
   }
@@ -508,7 +591,9 @@ function DailyBoard({
       <div className="flex items-center justify-between rounded-xl border border-blue-100 bg-white px-4 py-3">
         <div>
           <p className="text-lg font-semibold text-ink">
-            {challenge.mode === "continuous" ? `Day ${dayNum}` : `Day ${dayNum} of ${GIVING_CHALLENGE_DAYS}`}
+            {challenge.mode === "continuous"
+              ? `Day ${dayNum}`
+              : `Day ${dayNum} of ${GIVING_CHALLENGE_DAYS}`}
           </p>
           <p className="text-xs text-ink-light">
             {streak > 0 ? `${streak}-day streak` : "Give something today"}
@@ -516,9 +601,24 @@ function DailyBoard({
           </p>
         </div>
         <div className="flex gap-3 text-center text-xs text-ink-light">
-          <div><span className="block text-base font-semibold text-ink">{score.givenCount}</span>given</div>
-          <div><span className="block text-base font-semibold text-ink">{score.receivedCount}</span>received</div>
-          <div><span className="block text-base font-semibold text-ink">{score.cognitionsCount}</span>cognitions</div>
+          <div>
+            <span className="block text-base font-semibold text-ink">
+              {score.givenCount}
+            </span>
+            given
+          </div>
+          <div>
+            <span className="block text-base font-semibold text-ink">
+              {score.receivedCount}
+            </span>
+            received
+          </div>
+          <div>
+            <span className="block text-base font-semibold text-ink">
+              {score.cognitionsCount}
+            </span>
+            cognitions
+          </div>
         </div>
       </div>
 
@@ -530,13 +630,15 @@ function DailyBoard({
 
       {/* Today (add) vs All entries (full history, separate cards) */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex w-fit gap-1 rounded-lg border border-blue-100 bg-white p-0.5 text-sm">
+        <div className="flex w-fit max-w-full gap-1 overflow-x-auto whitespace-nowrap rounded-lg border border-blue-100 bg-white p-0.5 text-sm scrollbar-hide">
           {(["today", "all"] as const).map((v) => (
             <button
               key={v}
               onClick={() => setView(v)}
               className={`rounded-md px-3 py-1 font-medium transition ${
-                view === v ? "bg-indigo-600 text-white" : "text-ink-light hover:bg-blue-50"
+                view === v
+                  ? "bg-indigo-600 text-white"
+                  : "text-ink-light hover:bg-blue-50"
               }`}
             >
               {v === "today" ? "Today" : "All entries"}
@@ -557,7 +659,11 @@ function DailyBoard({
       </div>
 
       {view === "all" ? (
-        <AllEntries logs={optimisticLogs} editable={editable} onDelete={handleDelete} />
+        <AllEntries
+          logs={optimisticLogs}
+          editable={editable}
+          onDelete={handleDelete}
+        />
       ) : (
         <GiftEditor
           key={today}
@@ -582,7 +688,9 @@ function DailyBoard({
           <GiftEditor
             key={backfillDate}
             date={backfillDate}
-            dayLogs={optimisticLogs.filter((l) => l.entry_date === backfillDate)}
+            dayLogs={optimisticLogs.filter(
+              (l) => l.entry_date === backfillDate,
+            )}
             editable
             onAdd={handleAdd}
             onDelete={handleDelete}
@@ -618,7 +726,9 @@ export function GivingView({
           <DailyBoard today={today} challenge={challenge} logs={logs} />
         )}
       </div>
-      {showReading && <GivingReadingsModal onClose={() => setShowReading(false)} />}
+      {showReading && (
+        <GivingReadingsModal onClose={() => setShowReading(false)} />
+      )}
     </div>
   );
 }

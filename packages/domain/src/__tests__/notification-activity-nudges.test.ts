@@ -15,7 +15,7 @@ const TODAY = "2026-07-04";
 
 function activity(overrides: Partial<Activity> = {}): Pick<
   Activity,
-  "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "archived"
+  "id" | "title" | "priority" | "activity_date" | "status" | "is_someday" | "is_weekly" | "archived"
 > {
   return {
     id: "act-1",
@@ -24,6 +24,7 @@ function activity(overrides: Partial<Activity> = {}): Pick<
     activity_date: TODAY,
     status: "not_started",
     is_someday: false,
+    is_weekly: false,
     archived: false,
     ...overrides,
   };

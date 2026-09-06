@@ -41,6 +41,7 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     hours_worked: 0,
     archived: false,
     is_someday: false,
+    is_weekly: false,
     recurrence_rule: null,
     created_at: T0,
     updated_at: T0,

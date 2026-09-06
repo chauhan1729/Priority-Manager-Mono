@@ -6,7 +6,7 @@ import {
   type ActivityStatus,
 } from "@pm/types";
 
-import { isDateInPast } from "../time-rules";
+import { addDaysISO, daysBetweenISO, isDateInPast } from "../time-rules";
 
 // ---------------------------------------------------------------------------
 // Pending (overdue) backlog — surfaced on the A/B screens so slipped activities
@@ -24,12 +24,15 @@ export const PENDING_ACTIVITY_STATUSES: ActivityStatus[] = [
  * True when an activity is overdue and still open — i.e. it was due before today
  * and is not completed/cancelled, not a someday item, and not archived. These are
  * the items the Pending section resurfaces.
+ *
+ * Weekly-pool items are excluded: their activity_date is a week anchor, not a due date,
+ * so an anchor in the past does not make the item overdue.
  */
 export function isPendingActivity(
-  activity: Pick<Activity, "activity_date" | "status" | "is_someday" | "archived">,
+  activity: Pick<Activity, "activity_date" | "status" | "is_someday" | "is_weekly" | "archived">,
   todayISO: string,
 ): boolean {
-  if (activity.is_someday || activity.archived) return false;
+  if (activity.is_someday || activity.is_weekly || activity.archived) return false;
   if (activity.activity_date >= todayISO) return false;
   return PENDING_ACTIVITY_STATUSES.includes(activity.status);
 }
@@ -138,47 +141,42 @@ export const HORIZON_DAYS = 30;
 /** Days since the weekly Someday review should trigger again. */
 export const SOMEDAY_REVIEW_INTERVAL_DAYS = 7;
 
-/** Add `days` to an ISO date (YYYY-MM-DD), noon-anchored to avoid timezone drift. */
-function addDaysISO(isoDate: string, days: number): string {
-  const d = new Date(`${isoDate}T12:00:00`);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Whole days between two ISO dates (b - a). */
-function daysBetweenISO(aISO: string, bISO: string): number {
-  const a = new Date(`${aISO}T12:00:00`).getTime();
-  const b = new Date(`${bISO}T12:00:00`).getTime();
-  return Math.round((b - a) / 86_400_000);
-}
-
 /**
  * Within the rolling horizon = not someday AND dated on/before today+HORIZON_DAYS.
  * Past/overdue items count as within-horizon (still near-term); far-future items don't.
+ * Weekly-pool items are always within the horizon — a week is well inside 30 days.
  */
 export function isWithinHorizon(
-  activity: Pick<Activity, "activity_date" | "is_someday">,
+  activity: Pick<Activity, "activity_date" | "is_someday" | "is_weekly">,
   todayISO: string,
 ): boolean {
   if (activity.is_someday) return false;
+  if (activity.is_weekly) return true;
   return activity.activity_date <= addDaysISO(todayISO, HORIZON_DAYS);
 }
 
-/** Split activities into the within-horizon / beyond-horizon / someday buckets. */
+/** Split activities into the within-horizon / beyond-horizon / someday / weekly-pool buckets. */
 export function partitionByHorizon(
   activities: Activity[],
   todayISO: string,
-): { withinHorizon: Activity[]; beyondHorizon: Activity[]; someday: Activity[] } {
+): {
+  withinHorizon: Activity[];
+  beyondHorizon: Activity[];
+  someday: Activity[];
+  weekly: Activity[];
+} {
   const horizonEnd = addDaysISO(todayISO, HORIZON_DAYS);
   const withinHorizon: Activity[] = [];
   const beyondHorizon: Activity[] = [];
   const someday: Activity[] = [];
+  const weekly: Activity[] = [];
   for (const a of activities) {
     if (a.is_someday) someday.push(a);
+    else if (a.is_weekly) weekly.push(a);
     else if (a.activity_date <= horizonEnd) withinHorizon.push(a);
     else beyondHorizon.push(a);
   }
-  return { withinHorizon, beyondHorizon, someday };
+  return { withinHorizon, beyondHorizon, someday, weekly };
 }
 
 /** True when the weekly Someday review is due (never reviewed, or ≥7 days since). */
